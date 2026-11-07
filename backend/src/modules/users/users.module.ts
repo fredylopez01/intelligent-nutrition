@@ -5,9 +5,10 @@ import { UsersService } from "./users.service.js";
 import { EmailModule } from "../../modules/email/email.module.js";
 import { PersonsModule } from "../persons/persons.module.js";
 import { AuditModule } from "../audit/audit.module.js";
+import { StorageModule } from "../storage/storage.module.js";
 
 @Module({
-  imports: [PrismaModule, EmailModule, PersonsModule, AuditModule],
+  imports: [PrismaModule, EmailModule, PersonsModule, AuditModule, StorageModule],
   controllers: [UsersController],
   providers: [UsersService],
 })

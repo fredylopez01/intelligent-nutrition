@@ -65,4 +65,9 @@ export class UpdatePersonProfileDto {
   @IsNotEmpty()
   @MaxLength(255)
   address?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(500)
+  profilePhotoUrl?: string;
 }

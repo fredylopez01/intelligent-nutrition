@@ -20,6 +20,8 @@ import { UpdateUserStatusDto } from "./dto/update-user-status.dto.js";
 import { AssignUserBranchDto } from "./dto/assign-user-branch.dto.js";
 import { UpdateUserBranchDto } from "./dto/update-user-branch.dto.js";
 import { ChangeUserRoleDto } from "./dto/change-user-role.dto.js";
+import { UpdateOwnProfileDto } from "./dto/update-own-profile.dto.js";
+import { ProfilePhotoUploadUrlDto } from "./dto/profile-photo-upload-url.dto.js";
 
 @Controller("users")
 export class UsersController {
@@ -39,6 +41,28 @@ export class UsersController {
   @Roles("SUPERADMIN", "DEV")
   findAll(@Query() query: ListUsersQueryDto) {
     return this.usersService.findAll(query);
+  }
+
+  @Get("me")
+  getOwnProfile(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.usersService.getOwnProfile(currentUser.id);
+  }
+
+  @Patch("me")
+  updateOwnProfile(
+    @Body() dto: UpdateOwnProfileDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Ip() ipAddress: string,
+  ) {
+    return this.usersService.updateOwnProfile(currentUser, dto, ipAddress);
+  }
+
+  @Post("me/photo-upload-url")
+  createProfilePhotoUploadUrl(
+    @Body() dto: ProfilePhotoUploadUrlDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return this.usersService.createProfilePhotoUploadUrl(currentUser.id, dto);
   }
 
   @Get(":id")

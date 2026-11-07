@@ -1,6 +1,8 @@
 export class UserResponseDto {
   id!: string;
   personId!: string;
+  email!: string | null;
+  fullName!: string | null;
   person!: {
     id: string;
     firstName: string | null;
@@ -8,6 +10,7 @@ export class UserResponseDto {
     email: string | null;
     phone: string | null;
     address: string | null;
+    profilePhotoUrl: string | null;
   };
   role!: {
     id: string;

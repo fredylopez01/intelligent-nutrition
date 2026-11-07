@@ -43,6 +43,7 @@ const { PrismaService } =
 const { EmailService } = await import("../email/email.service.js");
 const { PersonsService } = await import("../persons/persons.service.js");
 const { AuditService } = await import("../audit/audit.service.js");
+const { StorageService } = await import("../storage/storage.service.js");
 
 const configMock = {
   get: jest.fn((key: string, defaultValue?: unknown) =>
@@ -59,6 +60,10 @@ const personsMock = {
 };
 const auditMock = {
   createAuditLog: jest.fn<(...args: any[]) => Promise<any>>(),
+};
+const storageMock = {
+  generateUploadUrl: jest.fn<(...args: any[]) => Promise<string>>(),
+  buildPublicUrl: jest.fn<(storageKey: string) => string>(),
 };
 const currentAdmin = {
   id: "admin-person-id",
@@ -125,6 +130,7 @@ describe("UsersService contract", () => {
         { provide: EmailService, useValue: emailMock },
         { provide: PersonsService, useValue: personsMock },
         { provide: AuditService, useValue: auditMock },
+        { provide: StorageService, useValue: storageMock },
       ],
     }).compile();
     service = module.get(UsersService);
