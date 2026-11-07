@@ -2,7 +2,6 @@ export class UserResponseDto {
   id!: string;
   personId!: string;
   email!: string | null;
-  fullName!: string | null;
   person!: {
     id: string;
     firstName: string | null;
