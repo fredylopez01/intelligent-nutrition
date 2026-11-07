@@ -23,6 +23,16 @@ import {
   type AuditLogTransaction,
   type CreateAuditLogInput,
 } from "../audit/audit.service.js";
+import { StorageService } from "../storage/storage.service.js";
+import { UpdateOwnProfileDto } from "./dto/update-own-profile.dto.js";
+import { ProfilePhotoUploadUrlDto } from "./dto/profile-photo-upload-url.dto.js";
+import { randomUUID } from "node:crypto";
+import { positiveIntFromEnv } from "../../common/utils/env.util.js";
+
+const UPLOAD_URL_EXPIRES_IN = positiveIntFromEnv(
+  process.env.STORAGE_UPLOAD_URL_EXPIRES_IN,
+  300,
+);
 
 const userSelect = {
   personId: true,
@@ -42,6 +52,7 @@ const userSelect = {
       email: true,
       phone: true,
       address: true,
+      profilePhotoUrl: true,
       documentType: { select: { code: true, name: true } },
     },
   },
@@ -58,6 +69,7 @@ function toUserResponse(user: any) {
     id: personId,
     personId,
     ...userFields,
+    email: user.person?.email ?? null,
     branches: branchAssignments.map(({ branch }: any) => branch),
   };
 }
@@ -72,6 +84,7 @@ export class UsersService {
     private readonly emailService: EmailService,
     private readonly personsService: PersonsService,
     private readonly auditService: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   private recordUserAudit(
@@ -655,6 +668,7 @@ export class UsersService {
           email: true,
           phone: true,
           address: true,
+          profilePhotoUrl: true,
           documentType: { select: { code: true, name: true } },
         },
       });
@@ -693,5 +707,63 @@ export class UsersService {
 
     this.logger.log(`User ${userId} updated`);
     return toUserResponse(updatedUser);
+  }
+
+  getOwnProfile(userId: string) {
+    return this.findUserById(userId);
+  }
+
+  async updateOwnProfile(
+    currentUser: AuthenticatedUser,
+    dto: UpdateOwnProfileDto,
+    ipAddress?: string,
+  ) {
+    const { profilePhotoUrl } = dto;
+    if (
+      profilePhotoUrl !== undefined &&
+      !profilePhotoUrl.startsWith(this.storage.buildPublicUrl(""))
+    ) {
+      throw new BadRequestException(
+        "profilePhotoUrl must be an uploaded storage URL",
+      );
+    }
+
+    return this.update(
+      currentUser.id,
+      {
+        person: {
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          businessName: dto.businessName,
+          phone: dto.phone,
+          address: dto.address,
+          profilePhotoUrl,
+        },
+      },
+      currentUser,
+      ipAddress,
+    );
+  }
+
+  async createProfilePhotoUploadUrl(
+    personId: string,
+    dto: ProfilePhotoUploadUrlDto,
+  ) {
+    const extension = dto.mimeType.split("/")[1];
+    const storageKey = `users/${personId}/${randomUUID()}.${extension}`;
+
+    const uploadUrl = await this.storage.generateUploadUrl({
+      storageKey,
+      mimeType: dto.mimeType,
+      sizeBytes: dto.sizeBytes,
+      expiresIn: UPLOAD_URL_EXPIRES_IN,
+    });
+
+    return {
+      uploadUrl,
+      storageKey,
+      publicUrl: this.storage.buildPublicUrl(storageKey),
+      expiresIn: UPLOAD_URL_EXPIRES_IN,
+    };
   }
 }

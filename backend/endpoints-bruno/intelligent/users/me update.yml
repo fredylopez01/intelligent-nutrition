@@ -1,0 +1,25 @@
+info:
+  name: me update
+  type: http
+  seq: 18
+
+http:
+  method: PATCH
+  url: "{{url-back}}/users/me"
+  body:
+    type: json
+    data: |-
+      {
+        "firstName": "Fabian",
+        "lastName": "Correa"
+      }
+  auth:
+    type: bearer
+    token: "{{json_web_token_15kq}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

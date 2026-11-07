@@ -26,6 +26,7 @@ const { PrismaService } =
   await import("../../database/prisma/prisma.service.js");
 const { EmailService } = await import("../email/email.service.js");
 const { AuditService } = await import("../audit/audit.service.js");
+const { StorageService } = await import("../storage/storage.service.js");
 const { Reflector } = await import("@nestjs/core");
 const { JwtStrategy } = await import("../auth/strategies/jwt.strategy.js");
 const { JwtAuthGuard } = await import("../../common/guards/jwt-auth.guard.js");
@@ -35,6 +36,10 @@ const request = (await import("supertest")).default;
 const mockAuditService = {
   createAuditLog: jest.fn().mockResolvedValue({}),
   findAll: jest.fn(),
+};
+const mockStorageService = {
+  generateUploadUrl: jest.fn(),
+  buildPublicUrl: jest.fn(),
 };
 
 const mockPrisma = {
@@ -92,6 +97,7 @@ mockPrisma.$transaction.mockImplementation((operation: any) =>
       },
     },
     { provide: AuditService, useValue: mockAuditService },
+    { provide: StorageService, useValue: mockStorageService },
   ],
 })
 class TestUsersModule {}
