@@ -70,10 +70,6 @@ function toUserResponse(user: any) {
     personId,
     ...userFields,
     email: user.person?.email ?? null,
-    fullName:
-      [user.person?.firstName, user.person?.lastName]
-        .filter(Boolean)
-        .join(" ") || null,
     branches: branchAssignments.map(({ branch }: any) => branch),
   };
 }
