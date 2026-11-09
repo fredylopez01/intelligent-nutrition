@@ -12,6 +12,12 @@ export function startOfBusinessDay(now = new Date()): Date {
   return new Date(midnight + BOGOTA_OFFSET_MS);
 }
 
+export function startOfBusinessMonth(now = new Date()): Date {
+  const local = new Date(now.getTime() - BOGOTA_OFFSET_MS);
+  const firstDay = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1);
+  return new Date(firstDay + BOGOTA_OFFSET_MS);
+}
+
 export function businessDate(now = new Date()): Date {
   const local = new Date(now.getTime() - BOGOTA_OFFSET_MS);
   return new Date(
