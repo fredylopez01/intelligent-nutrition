@@ -3,6 +3,7 @@ import {
   businessDate,
   businessDayBounds,
   startOfBusinessDay,
+  startOfBusinessMonth,
 } from "./business-day.util.js";
 
 describe("startOfBusinessDay", () => {
@@ -22,6 +23,20 @@ describe("startOfBusinessDay", () => {
     expect(
       startOfBusinessDay(new Date("2026-10-27T05:00:00.000Z")).toISOString(),
     ).toBe("2026-10-27T05:00:00.000Z");
+  });
+});
+
+describe("startOfBusinessMonth", () => {
+  it("returns the first day of the current Bogota month", () => {
+    expect(
+      startOfBusinessMonth(new Date("2026-10-27T14:30:00.000Z")).toISOString(),
+    ).toBe("2026-10-01T05:00:00.000Z");
+  });
+
+  it("uses the previous month before Bogota midnight on the first day", () => {
+    expect(
+      startOfBusinessMonth(new Date("2026-10-01T03:00:00.000Z")).toISOString(),
+    ).toBe("2026-09-01T05:00:00.000Z");
   });
 });
 

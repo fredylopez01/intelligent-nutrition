@@ -25,6 +25,7 @@ import { SalesModule } from "./modules/sales/sales.module.js";
 import { GeneralStockModule } from "./modules/general-stock/general-stock.module.js";
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
 import { NightlyJobsModule } from "./modules/nightly-jobs/nightly-jobs.module.js";
+import { DashboardModule } from "./modules/dashboard/dashboard.module.js";
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { NightlyJobsModule } from "./modules/nightly-jobs/nightly-jobs.module.js
     GeneralStockModule,
     NotificationsModule,
     NightlyJobsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
