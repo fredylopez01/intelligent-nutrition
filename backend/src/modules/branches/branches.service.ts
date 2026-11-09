@@ -8,6 +8,7 @@ import {
 import { Prisma } from "../../../generated/prisma/client.js";
 import { PrismaService } from "../../database/prisma/prisma.service.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
+import { normalizeSearchTerm } from "../../common/utils/search.util.js";
 import { AuditService } from "../audit/audit.service.js";
 import { CreateBranchDto } from "./dto/create-branch.dto.js";
 import { ListBranchesQueryDto } from "./dto/list-branches-query.dto.js";
@@ -356,12 +357,7 @@ export class BranchesService {
       active: true,
       ...(categoryId ? { categoryId } : {}),
       ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { referenceCode: { contains: search, mode: "insensitive" } },
-            ],
-          }
+        ? { searchText: { contains: normalizeSearchTerm(search) } }
         : {}),
     };
 

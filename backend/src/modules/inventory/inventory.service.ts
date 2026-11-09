@@ -9,6 +9,7 @@ import {
 import { PrismaService } from "../../database/prisma/prisma.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
+import { normalizeSearchTerm } from "../../common/utils/search.util.js";
 import { AssignProductDto } from "./dto/assign-product.dto.js";
 import {
   BranchInventorySortBy,
@@ -276,12 +277,7 @@ export class InventoryService {
       ...(productActive === undefined ? {} : { active: productActive }),
       ...(categoryId ? { categoryId } : {}),
       ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { referenceCode: { contains: search, mode: "insensitive" } },
-            ],
-          }
+        ? { searchText: { contains: normalizeSearchTerm(search) } }
         : {}),
     };
 
@@ -664,12 +660,7 @@ export class InventoryService {
       id: { in: productIdsWithStock.map((x) => x.productId) },
       ...(categoryId ? { categoryId } : {}),
       ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { referenceCode: { contains: search, mode: "insensitive" } },
-            ],
-          }
+        ? { searchText: { contains: normalizeSearchTerm(search) } }
         : {}),
     };
 

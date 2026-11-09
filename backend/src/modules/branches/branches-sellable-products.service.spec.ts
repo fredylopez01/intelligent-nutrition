@@ -215,10 +215,7 @@ describe("BranchesService.findSellableProducts", () => {
 
     const callArg = (prisma.product.count.mock.calls[0] as [{ where: Record<string, unknown> }])[0];
     expect(callArg.where).toMatchObject({
-      OR: [
-        { name: { contains: "whey", mode: "insensitive" } },
-        { referenceCode: { contains: "whey", mode: "insensitive" } },
-      ],
+      searchText: { contains: "whey" },
     });
   });
 
