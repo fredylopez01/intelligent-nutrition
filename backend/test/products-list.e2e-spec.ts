@@ -338,6 +338,7 @@ describe("GET /api/v1/products (e2e)", () => {
         updatedAt: expect.any(String),
       });
       expect(page.data[0]).not.toHaveProperty("images");
+      expect(page.data[0]).not.toHaveProperty("searchText");
     });
   });
 
@@ -352,6 +353,42 @@ describe("GET /api/v1/products (e2e)", () => {
       const page = await listProducts({ search: "delta-code" });
 
       expect(referenceCodesFor(page)).toEqual(referenceCodesForKeys(["delta"]));
+    });
+
+    describe("accent-insensitive search", () => {
+      const ACCENT_CODE = `${PRODUCT_CODE_PREFIX}ACCENT`;
+      const ACCENT_NAME = "Proteína Ñandú Única";
+
+      beforeAll(async () => {
+        await prisma!.product.create({
+          data: {
+            name: ACCENT_NAME,
+            referenceCode: ACCENT_CODE,
+            categoryId: categoryAId,
+            unitOfMeasureId: unitAId,
+            price: "10000.00",
+            active: true,
+          },
+        });
+      });
+
+      afterAll(async () => {
+        await prisma!.product.deleteMany({
+          where: { referenceCode: ACCENT_CODE },
+        });
+      });
+
+      it("finds an accented product searched without accents", async () => {
+        const page = await listProducts({ search: "proteina nandu unica" });
+
+        expect(referenceCodesFor(page)).toEqual([ACCENT_CODE]);
+      });
+
+      it("finds the same product searched with accents", async () => {
+        const page = await listProducts({ search: ACCENT_NAME });
+
+        expect(referenceCodesFor(page)).toEqual([ACCENT_CODE]);
+      });
     });
 
     it("filters by categoryId", async () => {

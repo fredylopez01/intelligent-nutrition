@@ -12,7 +12,10 @@ export class PrismaService
       connectionString: process.env.DATABASE_URL,
     });
 
-    super({ adapter });
+    super({
+      adapter,
+      omit: { product: { searchText: true } },
+    });
   }
 
   async onModuleInit() {
