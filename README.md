@@ -185,6 +185,7 @@ Variables requeridas:
 | `SEED_ADMIN_PASSWORD`                                 | Contraseña para crear/actualizar el usuario inicial del seed | Contraseña local de desarrollo                                                                    |
 | `JWT_SECRET`                                          | Secreto para firmar JWT                                      | Cadena larga y aleatoria                                                                          |
 | `JWT_EXPIRES_IN`                                      | Expiración del token                                         | `15m`                                                                                             |
+| `API_BASE_URL`                                        | URL base del servidor API en Swagger                        | `http://localhost:3000`                                                                           |
 | `RESEND_API_KEY`                                      | API key de Resend                                            | `re_xxxxxxxx`                                                                                     |
 | `RESEND_FROM_EMAIL`                                   | Remitente de emails                                          | `noreply@tudominio.com`                                                                           |
 | `RESEND_REPLY_TO_EMAIL`                               | Reply-to de emails                                           | `soporte@tudominio.com`                                                                           |
