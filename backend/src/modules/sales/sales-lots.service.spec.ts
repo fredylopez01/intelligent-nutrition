@@ -32,6 +32,8 @@ const storedSale = {
   discountAmount: "0.00",
   taxAmount: "0.00",
   total: "30000.00",
+  promotionId: null,
+  promotionDiscount: null,
   reversalReason: null,
   reversedAt: null,
   branch: { id: branchId, name: "Centro" },
@@ -128,6 +130,7 @@ describe("SalesService lots", () => {
       prisma as never,
       audit as never,
       lowStock as never,
+      { findActive: () => Promise.resolve(null) } as never,
     );
   });
 

@@ -43,6 +43,9 @@ const prismaMock = {
 const auditMock = {
   createAuditLog: jest.fn<AsyncMock>(),
 };
+const promotionsMock = {
+  findActive: jest.fn<AsyncMock>(),
+};
 
 jest.unstable_mockModule("../../database/prisma/prisma.service.js", () => ({
   PrismaService: jest.fn().mockImplementation(() => prismaMock),
@@ -54,6 +57,8 @@ const { PrismaService } =
 const { AuditService } = await import("../audit/audit.service.js");
 const { LowStockService } =
   await import("../notifications/low-stock.service.js");
+const { PromotionsService } =
+  await import("../promotions/promotions.service.js");
 const { SalesService } = await import("./sales.service.js");
 const { SalesController } = await import("./sales.controller.js");
 const { Reflector } = await import("@nestjs/core");
@@ -83,6 +88,8 @@ const listSaleRecord = {
   discountAmount: "0.00",
   taxAmount: "0.00",
   total: "24.70",
+  promotionId: null,
+  promotionDiscount: null,
   reversalReason: null,
   reversedAt: null,
   branch: { id: branchId, name: "Sede Centro" },
@@ -103,6 +110,8 @@ const detailSaleRecord = {
   discountAmount: "1.20",
   taxAmount: "0.00",
   total: "23.50",
+  promotionId: null,
+  promotionDiscount: null,
   reversalReason: null,
   reversedAt: null,
   branch: { id: branchId, name: "Sede Centro" },
@@ -167,6 +176,7 @@ describe("SalesService read operations (GET /sales)", () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: AuditService, useValue: auditMock },
         { provide: LowStockService, useValue: lowStockMock },
+        { provide: PromotionsService, useValue: promotionsMock },
       ],
     }).compile();
     service = testingModule.get(SalesService);
@@ -399,6 +409,8 @@ describe("SalesService read operations (GET /sales)", () => {
         discountAmount: "1.20",
         taxAmount: "0.00",
         total: "23.50",
+        promotionId: null,
+        promotionDiscount: null,
         items: [
           {
             productId,

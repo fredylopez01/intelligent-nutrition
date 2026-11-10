@@ -49,6 +49,9 @@ const prismaMock = {
 const auditMock = {
   createAuditLog: jest.fn<AsyncMock>(),
 };
+const promotionsMock = {
+  findActive: jest.fn<AsyncMock>(),
+};
 
 jest.unstable_mockModule("../../database/prisma/prisma.service.js", () => ({
   PrismaService: jest.fn().mockImplementation(() => prismaMock),
@@ -60,6 +63,8 @@ const { PrismaService } =
 const { AuditService } = await import("../audit/audit.service.js");
 const { LowStockService } =
   await import("../notifications/low-stock.service.js");
+const { PromotionsService } =
+  await import("../promotions/promotions.service.js");
 const { SalesService } = await import("./sales.service.js");
 const { Reflector } = await import("@nestjs/core");
 const { RolesGuard } = await import("../../common/guards/roles.guard.js");
@@ -92,6 +97,8 @@ const buildUpdatedSale = () => ({
   discountAmount: "0.00",
   taxAmount: "0.00",
   total: "24.70",
+  promotionId: null,
+  promotionDiscount: null,
   reversalReason,
   reversedAt: new Date("2026-10-26T16:00:00.000Z"),
   branch: { id: branchId, name: "Sede Centro" },
@@ -146,6 +153,7 @@ describe("SalesService.reverse", () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: AuditService, useValue: auditMock },
         { provide: LowStockService, useValue: lowStockMock },
+        { provide: PromotionsService, useValue: promotionsMock },
       ],
     }).compile();
     service = module.get(SalesService);

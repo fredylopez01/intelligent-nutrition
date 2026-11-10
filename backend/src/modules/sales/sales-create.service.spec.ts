@@ -92,6 +92,9 @@ const prismaMock = {
 const auditMock = {
   createAuditLog: jest.fn<AsyncMock>(),
 };
+const promotionsMock = {
+  findActive: jest.fn<AsyncMock>(),
+};
 
 jest.unstable_mockModule("../../database/prisma/prisma.service.js", () => ({
   PrismaService: jest.fn().mockImplementation(() => prismaMock),
@@ -103,6 +106,8 @@ const { PrismaService } =
 const { AuditService } = await import("../audit/audit.service.js");
 const { LowStockService } =
   await import("../notifications/low-stock.service.js");
+const { PromotionsService } =
+  await import("../promotions/promotions.service.js");
 const { SalesService } = await import("./sales.service.js");
 
 type SaleCreateData = {
@@ -114,6 +119,8 @@ type SaleCreateData = {
   discountAmount: string;
   taxAmount: string;
   total: string;
+  promotionId: string | null;
+  promotionDiscount: string | null;
   status: string;
   details: { create: Array<Record<string, unknown>> };
   payments: { create: Array<Record<string, unknown>> };
@@ -144,6 +151,8 @@ const buildSaleRecord = (overrides: Record<string, unknown> = {}) => ({
   discountAmount: "0.00",
   taxAmount: "0.00",
   total: "24.70",
+  promotionId: null,
+  promotionDiscount: null,
   reversalReason: null,
   reversedAt: null,
   branch: { id: branchId, name: "Sede Centro" },
@@ -231,6 +240,7 @@ describe("SalesService.create", () => {
     transactionMock.sale.findFirst.mockResolvedValue(null);
     transactionMock.sale.create.mockResolvedValue(buildSaleRecord());
     auditMock.createAuditLog.mockResolvedValue({});
+    promotionsMock.findActive.mockResolvedValue(null);
 
     testingModule = await Test.createTestingModule({
       providers: [
@@ -238,6 +248,7 @@ describe("SalesService.create", () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: AuditService, useValue: auditMock },
         { provide: LowStockService, useValue: lowStockMock },
+        { provide: PromotionsService, useValue: promotionsMock },
       ],
     }).compile();
     service = testingModule.get(SalesService);
@@ -583,6 +594,52 @@ describe("SalesService.create", () => {
       expect(data.discountAmount).toBe("0.00");
       expect(data.taxAmount).toBe("0.00");
       expect(data.total).toBe("24.70");
+      expect(data.promotionId).toBeNull();
+      expect(data.promotionDiscount).toBeNull();
+    });
+
+    it("applies the active promotion to the sale subtotal and records it", async () => {
+      promotionsMock.findActive.mockResolvedValue({
+        id: "promotion-id",
+        discountPercentage: "15.00",
+      });
+      transactionMock.sale.create.mockResolvedValue(
+        buildSaleRecord({
+          total: "20.99",
+          promotionId: "promotion-id",
+          promotionDiscount: "3.71",
+          payments: [
+            {
+              amount: "20.99",
+              reference: null,
+              paidAt: saleDate,
+              paymentMethod: {
+                id: cashMethodId,
+                code: "CASH",
+                name: "Efectivo",
+              },
+            },
+          ],
+        }),
+      );
+      const dto = {
+        ...baseDto,
+        payments: [{ paymentMethodId: cashMethodId, amount: "20.99" }],
+      };
+
+      const result = await service.create(dto, superadmin);
+
+      expect(promotionsMock.findActive).toHaveBeenCalledTimes(1);
+      expect(createdSaleData()).toMatchObject({
+        subtotal: "24.70",
+        promotionId: "promotion-id",
+        promotionDiscount: "3.71",
+        total: "20.99",
+      });
+      expect(result).toMatchObject({
+        promotionId: "promotion-id",
+        promotionDiscount: "3.71",
+      });
     });
   });
 
@@ -950,6 +1007,8 @@ describe("SalesService.create", () => {
         discountAmount: "2.00",
         taxAmount: "1.00",
         total: "23.70",
+        promotionId: null,
+        promotionDiscount: null,
         items: [
           {
             productId: productAId,
