@@ -103,6 +103,40 @@ describe("CashShiftsService.open", () => {
     expect(prismaMock.cashShift.create).toHaveBeenCalledTimes(1);
   });
 
+  it("returns the opening amount in the response", async () => {
+    prismaMock.cashShift.findFirst.mockResolvedValueOnce(null);
+    prismaMock.cashShift.create.mockResolvedValueOnce(shiftRow);
+
+    const result = await service.open(
+      { branchId: "branch-1", openingAmount: "50000.00" },
+      branchLeader,
+    );
+
+    expect(result.openingAmount).toBe("50000.00");
+    expect(result.closingAmount).toBeNull();
+  });
+
+  it("records an audit log on successful open", async () => {
+    prismaMock.cashShift.findFirst.mockResolvedValueOnce(null);
+    prismaMock.cashShift.create.mockResolvedValueOnce(shiftRow);
+
+    await service.open(
+      { branchId: "branch-1", openingAmount: "50000.00" },
+      branchLeader,
+      "192.168.1.1",
+    );
+
+    expect(auditMock.createAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "CREATE",
+        entity: "CASH_SHIFT",
+        newData: { branchId: "branch-1", openingAmount: "50000.00" },
+        ipAddress: "192.168.1.1",
+      }),
+      prismaMock,
+    );
+  });
+
   it("throws ConflictException when user already has an open shift", async () => {
     prismaMock.cashShift.findFirst.mockResolvedValueOnce({ id: "shift-existing" });
 
@@ -111,6 +145,16 @@ describe("CashShiftsService.open", () => {
     ).rejects.toThrow(ConflictException);
 
     expect(prismaMock.cashShift.create).not.toHaveBeenCalled();
+  });
+
+  it("includes the shift id in the ConflictException details", async () => {
+    prismaMock.cashShift.findFirst.mockResolvedValueOnce({ id: "shift-existing" });
+
+    await expect(
+      service.open({ branchId: "branch-1", openingAmount: "50000.00" }, branchLeader),
+    ).rejects.toMatchObject({
+      response: { code: "SHIFT_ALREADY_OPEN", details: { shiftId: "shift-existing" } },
+    });
   });
 });
 
@@ -156,6 +200,61 @@ describe("CashShiftsService.close", () => {
     );
 
     expect(result.status).toBe("CLOSED");
+  });
+
+  it("returns both openingAmount and closingAmount so the caller can compute the difference", async () => {
+    prismaMock.cashShift.findUnique.mockResolvedValueOnce({
+      id: "shift-1",
+      userId: "user-leader",
+      status: "OPEN",
+      branchId: "branch-1",
+      openingAmount: { toString: () => "50000.00" },
+    });
+    prismaMock.cashShift.update.mockResolvedValueOnce({
+      ...shiftRow,
+      status: "CLOSED",
+      closedAt: new Date(),
+      openingAmount: { toString: () => "50000.00" },
+      closingAmount: { toString: () => "380000.00" },
+    });
+
+    const result = await service.close(
+      "shift-1",
+      { closingAmount: "380000.00" },
+      branchLeader,
+    );
+
+    expect(result.openingAmount).toBe("50000.00");
+    expect(result.closingAmount).toBe("380000.00");
+  });
+
+  it("records an audit log on successful close", async () => {
+    prismaMock.cashShift.findUnique.mockResolvedValueOnce({
+      id: "shift-1",
+      userId: "user-leader",
+      status: "OPEN",
+      branchId: "branch-1",
+      openingAmount: { toString: () => "50000.00" },
+    });
+    prismaMock.cashShift.update.mockResolvedValueOnce({
+      ...shiftRow,
+      status: "CLOSED",
+      closedAt: new Date(),
+      closingAmount: { toString: () => "380000.00" },
+    });
+
+    await service.close("shift-1", { closingAmount: "380000.00" }, branchLeader, "10.0.0.1");
+
+    expect(auditMock.createAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "UPDATE",
+        entity: "CASH_SHIFT",
+        entityId: "shift-1",
+        newData: { status: "CLOSED", closingAmount: "380000.00" },
+        ipAddress: "10.0.0.1",
+      }),
+      prismaMock,
+    );
   });
 
   it("allows SUPERADMIN to close any shift", async () => {
@@ -266,6 +365,36 @@ describe("CashShiftsService.findAll", () => {
 
     expect(result.data).toHaveLength(0);
     expect(result.meta.totalPages).toBe(0);
+  });
+
+  it("allows branch assistant to query without branch restriction", async () => {
+    prismaMock.$transaction.mockResolvedValueOnce([1, [shiftRow]]);
+
+    const result = await service.findAll({ page: 1, limit: 20 }, assistant);
+
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("includes status filter in the query when provided", async () => {
+    prismaMock.$transaction.mockResolvedValueOnce([1, [shiftRow]]);
+
+    await service.findAll({ status: "OPEN", page: 1, limit: 20 }, superadmin);
+
+    const [countCall, findCall] = prismaMock.$transaction.mock.calls[0][0] as unknown[];
+    void countCall;
+    void findCall;
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns correct pagination metadata", async () => {
+    prismaMock.$transaction.mockResolvedValueOnce([45, []]);
+
+    const result = await service.findAll({ page: 2, limit: 20 }, superadmin);
+
+    expect(result.meta.page).toBe(2);
+    expect(result.meta.limit).toBe(20);
+    expect(result.meta.total).toBe(45);
+    expect(result.meta.totalPages).toBe(3);
   });
 });
 
