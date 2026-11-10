@@ -27,6 +27,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { NightlyJobsModule } from "./modules/nightly-jobs/nightly-jobs.module.js";
 import { DashboardModule } from "./modules/dashboard/dashboard.module.js";
 import { ReportsModule } from "./modules/reports/reports.module.js";
+import { PromotionsModule } from "./modules/promotions/promotions.module.js";
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { ReportsModule } from "./modules/reports/reports.module.js";
     NightlyJobsModule,
     DashboardModule,
     ReportsModule,
+    PromotionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
