@@ -338,6 +338,39 @@ export class PurchasesService {
   ) {
     const { items } = dto;
 
+    const branchIds = new Set(
+      items.filter((i) => i.branchId !== undefined).map((i) => i.branchId as string),
+    );
+
+    if (branchIds.size > 0) {
+      const branches: { id: string; active: boolean }[] = await (
+        this.prisma as any
+      ).branch.findMany({
+        where: { id: { in: [...branchIds] } },
+        select: { id: true, active: true },
+      });
+
+      const branchMap = new Map<string, { id: string; active: boolean }>(
+        branches.map((b) => [b.id, b]),
+      );
+
+      for (const branchId of branchIds) {
+        const branch = branchMap.get(branchId);
+        if (!branch) {
+          throw new NotFoundException({
+            code: "BRANCH_NOT_FOUND",
+            message: `Branch ${branchId} not found.`,
+          });
+        }
+        if (!branch.active) {
+          throw new UnprocessableEntityException({
+            code: "BRANCH_INACTIVE",
+            message: "The destination branch is inactive.",
+          });
+        }
+      }
+    }
+
     const lotKeys = items.map(
       (i) => `${i.purchaseDetailId}:${i.expirationDate.slice(0, 10)}`,
     );

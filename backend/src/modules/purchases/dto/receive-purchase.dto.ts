@@ -29,6 +29,10 @@ export class ReceivePurchaseItemDto {
   expirationDate!: string;
 
   @IsOptional()
+  @IsUUID("4")
+  branchId?: string;
+
+  @IsOptional()
   @Transform(({ value }): unknown =>
     typeof value === "string" ? value.trim() : value,
   )
