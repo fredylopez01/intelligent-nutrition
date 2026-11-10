@@ -86,6 +86,7 @@ model UserAccount {
   sales                Sale[]
   notifications        Notification[]
   supplyStockMovements SupplyStockMovement[]
+  cashShifts           CashShift[]
 
   @@map("user_account")
 }
@@ -135,6 +136,7 @@ model Branch {
   notifications         Notification[]
   supplyStocks          SupplyStock[]
   supplyStockMovements  SupplyStockMovement[]
+  cashShifts            CashShift[]
 
   @@map("branch")
 }
@@ -585,4 +587,28 @@ model SupplyStockMovement {
   @@index([branchId, supplyId])
   @@index([movementAt])
   @@map("supply_stock_movement")
+}
+
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+}
+
+model CashShift {
+  id             String          @id @default(uuid()) @db.Uuid
+  branchId       String          @map("branch_id") @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  openedAt       DateTime        @default(now()) @map("opened_at") @db.Timestamp(6)
+  closedAt       DateTime?       @map("closed_at") @db.Timestamp(6)
+  openingAmount  Decimal         @map("opening_amount") @db.Decimal(12, 2)
+  closingAmount  Decimal?        @map("closing_amount") @db.Decimal(12, 2)
+  status         CashShiftStatus @default(OPEN)
+  observation    String?         @db.Text
+
+  branch Branch      @relation(fields: [branchId], references: [id])
+  user   UserAccount @relation(fields: [userId], references: [personId])
+
+  @@index([branchId, status])
+  @@index([userId, status])
+  @@map("cash_shift")
 }
