@@ -93,7 +93,7 @@ export function PurchasesPage() {
     setViewing(null)
     setFeedback(
       purchase.status === 'FULLY_RECEIVED'
-        ? `La compra ${purchase.purchaseNumber} quedó recibida completa y sus unidades entraron al stock general.`
+        ? `La compra ${purchase.purchaseNumber} quedó recibida completa y sus unidades entraron al inventario.`
         : `Recepción registrada: la compra ${purchase.purchaseNumber} sigue pendiente de las unidades que faltan.`,
     )
     refetch()
