@@ -8,5 +8,6 @@ import { PromotionsService } from "./promotions.service.js";
   imports: [PrismaModule, AuditModule],
   controllers: [PromotionsController],
   providers: [PromotionsService],
+  exports: [PromotionsService],
 })
 export class PromotionsModule {}

@@ -20,6 +20,7 @@ import {
   businessDate,
   businessDayBounds,
 } from "../../common/utils/business-day.util.js";
+import { PromotionsService } from "../promotions/promotions.service.js";
 
 const saleSelect = {
   id: true,
@@ -30,6 +31,8 @@ const saleSelect = {
   discountAmount: true,
   taxAmount: true,
   total: true,
+  promotionId: true,
+  promotionDiscount: true,
   reversalReason: true,
   reversedAt: true,
   branch: {
@@ -106,6 +109,11 @@ function formatSaleResponse(sale: SaleWithRelations) {
     discountAmount: Number(sale.discountAmount).toFixed(2),
     taxAmount: Number(sale.taxAmount).toFixed(2),
     total: Number(sale.total).toFixed(2),
+    promotionId: sale.promotionId ?? null,
+    promotionDiscount:
+      sale.promotionDiscount === null || sale.promotionDiscount === undefined
+        ? null
+        : Number(sale.promotionDiscount).toFixed(2),
     items: sale.details.map((detail) => ({
       productId: detail.productId,
       productName: detail.product.name,
@@ -138,6 +146,7 @@ export class SalesService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly lowStockService: LowStockService,
+    private readonly promotionsService: PromotionsService,
   ) {}
 
   async create(dto: CreateSaleDto, currentUser: AuthenticatedUser) {
@@ -311,7 +320,17 @@ export class SalesService {
       const generalTaxCents = toCents(dto.taxAmount ?? "0.00");
       const discountAmountCents = itemsDiscountCents + generalDiscountCents;
       const taxAmountCents = itemsTaxCents + generalTaxCents;
-      const totalCents = subtotalCents - discountAmountCents + taxAmountCents;
+      const activePromotion = await this.promotionsService.findActive();
+      const promotionDiscountCents = activePromotion
+        ? Math.round(
+            (subtotalCents * Number(activePromotion.discountPercentage)) / 100,
+          )
+        : 0;
+      const totalCents =
+        subtotalCents -
+        discountAmountCents +
+        taxAmountCents -
+        promotionDiscountCents;
 
       if (totalCents < 0) {
         throw new UnprocessableEntityException({
@@ -319,7 +338,9 @@ export class SalesService {
           message: "Sale discount cannot exceed the sale subtotal.",
           details: {
             subtotal: toMoney(subtotalCents),
-            discountAmount: toMoney(discountAmountCents),
+            discountAmount: toMoney(
+              discountAmountCents + promotionDiscountCents,
+            ),
           },
         });
       }
@@ -437,6 +458,10 @@ export class SalesService {
           discountAmount: toMoney(discountAmountCents),
           taxAmount: toMoney(taxAmountCents),
           total: toMoney(totalCents),
+          promotionId: activePromotion?.id ?? null,
+          promotionDiscount: activePromotion
+            ? toMoney(promotionDiscountCents)
+            : null,
           status: "COMPLETED",
           details: { create: detailsData },
           payments: { create: paymentsData },
