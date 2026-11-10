@@ -19,7 +19,7 @@ import '../inventory/InventoryPage.css'
 import '../inventory/ClosurePage.css'
 import './CashShiftPage.css'
 
-const AMOUNT_PATTERN = /^\d+\.\d{2}$/
+const AMOUNT_PATTERN = /^\d+(\.\d{1,2})?$/
 const OBSERVATION_MAX = 300
 const HISTORY_FILTER_DEFAULTS = { estado: 'todos', desde: '', hasta: '' }
 
@@ -191,7 +191,7 @@ export function CashShiftPage() {
     }
 
     if (!AMOUNT_PATTERN.test(openingAmount)) {
-      setOpenAmountError('Escribe el monto con dos decimales, por ejemplo 50000.00')
+      setOpenAmountError('Escribe un monto válido, por ejemplo 50000')
       valid = false
     } else {
       setOpenAmountError('')
@@ -202,11 +202,13 @@ export function CashShiftPage() {
     setSubmittingOpen(true)
     setOpenError(null)
 
+    const normalizedOpening = parseFloat(openingAmount).toFixed(2)
+
     try {
       const shift = await cashShiftsService.open(
         {
           branchId: openBranchId,
-          openingAmount,
+          openingAmount: normalizedOpening,
           observation: openObservation.trim() || undefined,
         },
         token,
@@ -227,10 +229,12 @@ export function CashShiftPage() {
     if (!openShift) return
 
     if (!AMOUNT_PATTERN.test(closingAmount)) {
-      setClosingAmountError('Escribe el monto con dos decimales, por ejemplo 380000.00')
+      setClosingAmountError('Escribe un monto válido, por ejemplo 380000')
       return
     }
     setClosingAmountError('')
+
+    const normalizedClosing = parseFloat(closingAmount).toFixed(2)
 
     setSubmittingClose(true)
     setCloseError(null)
@@ -239,7 +243,7 @@ export function CashShiftPage() {
       await cashShiftsService.close(
         openShift.id,
         {
-          closingAmount,
+          closingAmount: normalizedClosing,
           observation: closeObservation.trim() || undefined,
         },
         token,
@@ -324,7 +328,7 @@ export function CashShiftPage() {
                 value={openingAmount}
                 onChange={(e) => setOpeningAmount(e.target.value)}
                 error={openAmountError}
-                hint="Dinero físico al iniciar el turno (use punto decimal)"
+                hint="Dinero físico al iniciar el turno"
               />
             </div>
             <TextAreaField
