@@ -13,6 +13,7 @@ import { CustomerDetailPage } from '../pages/customers/CustomerDetailPage'
 import { CustomersPage } from '../pages/customers/CustomersPage'
 import { ForbiddenPage } from '../pages/ForbiddenPage'
 import { GoogleAuthCallbackPage } from '../pages/GoogleAuthCallbackPage'
+import { CashShiftPage } from '../pages/cash-shifts/CashShiftPage'
 import { ClosurePage } from '../pages/inventory/ClosurePage'
 import { ConsolidatedInventoryPage } from '../pages/inventory/ConsolidatedInventoryPage'
 import { InventoryPage } from '../pages/inventory/InventoryPage'
@@ -229,6 +230,15 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/auditoria']}>
             <AuditLogsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/caja/turno"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/caja/turno']}>
+            <CashShiftPage />
           </ProtectedRoute>
         }
       />
