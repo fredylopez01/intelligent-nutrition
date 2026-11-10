@@ -137,7 +137,7 @@ describe("POST /api/v1/cash-shifts (open) (e2e)", () => {
 
   it("opens a shift and persists it in the database", async () => {
     const response = await openShift(validPayload(), tokens.BRANCH_LEADER).expect(201);
-    const shift = (response.body as ShiftResponse);
+    const shift = (response.body as ApiResponse<ShiftResponse>).data!;
 
     expect(shift).toMatchObject({
       id: expect.any(String),
@@ -211,9 +211,9 @@ describe("PATCH /api/v1/cash-shifts/:id/close (e2e)", () => {
 
     documentTypeId = (
       await prisma.documentType.upsert({
-        where: { code: `CS-CLOSE-${runId}` },
+        where: { code: `CS-CLO-${runId}` },
         update: { active: true },
-        create: { code: `CS-CLOSE-${runId}`, name: "Doc e2e cierre" },
+        create: { code: `CS-CLO-${runId}`, name: "Doc e2e cierre" },
       })
     ).id;
 
@@ -290,7 +290,7 @@ describe("PATCH /api/v1/cash-shifts/:id/close (e2e)", () => {
       tokens.BRANCH_LEADER,
     ).expect(200);
 
-    const result = response.body as ShiftResponse;
+    const result = (response.body as ApiResponse<ShiftResponse>).data!;
     expect(result).toMatchObject({
       id: shift.id,
       status: "CLOSED",
