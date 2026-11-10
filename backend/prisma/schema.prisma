@@ -75,16 +75,17 @@ model UserAccount {
   createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
 
-  person            Person         @relation(fields: [personId], references: [id])
-  role              Role           @relation(fields: [roleId], references: [id])
-  branchAssignments UserBranch[]
-  auditLogs         AuditLog[]
-  createdImages     ProductImage[] @relation("ProductImageCreatedBy")
+  person             Person         @relation(fields: [personId], references: [id])
+  role               Role           @relation(fields: [roleId], references: [id])
+  branchAssignments  UserBranch[]
+  auditLogs          AuditLog[]
+  createdImages      ProductImage[] @relation("ProductImageCreatedBy")
   inventoryMovements InventoryMovement[]
   purchases          Purchase[]
   inventoryClosures  InventoryClosure[]
   sales              Sale[]
   notifications      Notification[]
+  cashShifts         CashShift[]
 
   @@map("user_account")
 }
@@ -132,6 +133,7 @@ model Branch {
   inventoryClosures  InventoryClosure[]
   sales              Sale[]
   notifications      Notification[]
+  cashShifts         CashShift[]
 
   @@map("branch")
 }
@@ -524,4 +526,28 @@ model Notification {
 
   @@index([userId, read, createdAt])
   @@map("notification")
+}
+
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+}
+
+model CashShift {
+  id             String          @id @default(uuid()) @db.Uuid
+  branchId       String          @map("branch_id") @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  openedAt       DateTime        @default(now()) @map("opened_at") @db.Timestamp(6)
+  closedAt       DateTime?       @map("closed_at") @db.Timestamp(6)
+  openingAmount  Decimal         @map("opening_amount") @db.Decimal(12, 2)
+  closingAmount  Decimal?        @map("closing_amount") @db.Decimal(12, 2)
+  status         CashShiftStatus @default(OPEN)
+  observation    String?         @db.Text
+
+  branch Branch      @relation(fields: [branchId], references: [id])
+  user   UserAccount @relation(fields: [userId], references: [personId])
+
+  @@index([branchId, status])
+  @@index([userId, status])
+  @@map("cash_shift")
 }
