@@ -6,6 +6,7 @@
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
+  previewFeatures = ["partialIndexes"]
   moduleFormat = "cjs"
 }
 
@@ -74,7 +75,6 @@ model UserAccount {
   lastLoginAt             DateTime? @map("last_login_at") @db.Timestamp(6)
   createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
-
   person               Person                @relation(fields: [personId], references: [id])
   role                 Role                  @relation(fields: [roleId], references: [id])
   branchAssignments    UserBranch[]
@@ -87,6 +87,7 @@ model UserAccount {
   notifications        Notification[]
   supplyStockMovements SupplyStockMovement[]
   cashShifts           CashShift[]
+  createdPromotions  Promotion[]
 
   @@map("user_account")
 }
@@ -470,6 +471,24 @@ model Sale {
   @@index([saleAt])
   @@index([status])
   @@map("sale")
+}
+
+model Promotion {
+  id                 String   @id @default(uuid()) @db.Uuid
+  createdById        String   @map("created_by") @db.Uuid
+  name               String   @unique @db.VarChar(100)
+  discountPercentage Decimal  @map("discount_percentage") @db.Decimal(5, 2)
+  startDate          DateTime? @map("start_date") @db.Date
+  endDate            DateTime? @map("end_date") @db.Date
+  active             Boolean  @default(false)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  createdBy UserAccount @relation(fields: [createdById], references: [personId])
+
+  @@index([active])
+  @@unique([active], where: raw("active = true"), map: "promotion_one_active_idx")
+  @@map("promotion")
 }
 
 model SaleDetail {
