@@ -10,7 +10,7 @@ import { PrismaService } from "../../database/prisma/prisma.service.js";
 import { ListSalesReportQueryDto } from "./dto/list-sales-report-query.dto.js";
 import { RestockReportQueryDto } from "./dto/restock-report-query.dto.js";
 
-interface RestockReportRow {
+export interface RestockReportRow {
   productId: string;
   name: string;
   referenceCode: string;
