@@ -27,6 +27,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { NightlyJobsModule } from "./modules/nightly-jobs/nightly-jobs.module.js";
 import { DashboardModule } from "./modules/dashboard/dashboard.module.js";
 import { ReportsModule } from "./modules/reports/reports.module.js";
+import { SuppliesModule } from "./modules/supplies/supplies.module.js";
 import { CashShiftsModule } from "./modules/cash-shifts/cash-shifts.module.js";
 
 @Module({
@@ -59,6 +60,7 @@ import { CashShiftsModule } from "./modules/cash-shifts/cash-shifts.module.js";
     NightlyJobsModule,
     DashboardModule,
     ReportsModule,
+    SuppliesModule,
     CashShiftsModule,
   ],
   controllers: [AppController],

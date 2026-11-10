@@ -1,0 +1,237 @@
+import { jest, describe, beforeEach, it, expect } from "@jest/globals";
+
+type AsyncMock = (...args: unknown[]) => Promise<unknown>;
+type SyncMock = (...args: unknown[]) => unknown;
+
+const prismaMock = {
+  supply: {
+    findFirst: jest.fn<AsyncMock>(),
+    findUnique: jest.fn<AsyncMock>(),
+    findMany: jest.fn<AsyncMock>(),
+    count: jest.fn<AsyncMock>(),
+    create: jest.fn<AsyncMock>(),
+    update: jest.fn<AsyncMock>(),
+  },
+  unitMeasure: {
+    findUnique: jest.fn<AsyncMock>(),
+  },
+  $transaction: jest.fn<SyncMock>(),
+};
+
+const auditMock = {
+  createAuditLog: jest.fn<AsyncMock>(),
+};
+
+jest.unstable_mockModule("../../database/prisma/prisma.service.js", () => ({
+  PrismaService: jest.fn().mockImplementation(() => prismaMock),
+}));
+
+jest.unstable_mockModule("../audit/audit.service.js", () => ({
+  AuditService: jest.fn().mockImplementation(() => auditMock),
+}));
+
+const { Test } = await import("@nestjs/testing");
+const { ConflictException, NotFoundException, UnprocessableEntityException } =
+  await import("@nestjs/common");
+const { SuppliesService } = await import("./supplies.service.js");
+const { PrismaService } = await import(
+  "../../database/prisma/prisma.service.js"
+);
+const { AuditService } = await import("../audit/audit.service.js");
+
+const superadmin = {
+  id: "user-1",
+  active: true,
+  role: { name: "SUPERADMIN" },
+};
+
+const unitActive = { id: "unit-1", active: true };
+const unitInactive = { id: "unit-2", active: false };
+
+const supplyRow = {
+  id: "supply-1",
+  name: "Whey Protein",
+  unitOfMeasure: { id: "unit-1", name: "Gramo", abreviation: "g" },
+  active: true,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+describe("SuppliesService.create", () => {
+  let service: InstanceType<typeof SuppliesService>;
+
+  beforeEach(async () => {
+    jest.resetAllMocks();
+
+    prismaMock.$transaction.mockImplementation(
+      async (fn: (tx: typeof prismaMock) => Promise<unknown>) => fn(prismaMock),
+    );
+    auditMock.createAuditLog.mockResolvedValue(undefined);
+
+    const module = await Test.createTestingModule({
+      providers: [
+        SuppliesService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(SuppliesService);
+  });
+
+  it("creates a supply when name is unique and unit is active", async () => {
+    prismaMock.supply.findFirst.mockResolvedValueOnce(null);
+    prismaMock.unitMeasure.findUnique.mockResolvedValueOnce(unitActive);
+    prismaMock.supply.create.mockResolvedValueOnce(supplyRow);
+
+    const result = await service.create(
+      { name: "Whey Protein", unitOfMeasureId: "unit-1" },
+      superadmin,
+    );
+
+    expect(result).toEqual(supplyRow);
+    expect(prismaMock.supply.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws ConflictException when name already exists", async () => {
+    prismaMock.supply.findFirst.mockResolvedValueOnce({ id: "existing-1" });
+
+    await expect(
+      service.create({ name: "Whey Protein", unitOfMeasureId: "unit-1" }, superadmin),
+    ).rejects.toThrow(ConflictException);
+
+    expect(prismaMock.supply.create).not.toHaveBeenCalled();
+  });
+
+  it("throws NotFoundException when unit of measure does not exist", async () => {
+    prismaMock.supply.findFirst.mockResolvedValueOnce(null);
+    prismaMock.unitMeasure.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      service.create({ name: "Whey Protein", unitOfMeasureId: "unit-1" }, superadmin),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it("throws UnprocessableEntityException when unit of measure is inactive", async () => {
+    prismaMock.supply.findFirst.mockResolvedValueOnce(null);
+    prismaMock.unitMeasure.findUnique.mockResolvedValueOnce(unitInactive);
+
+    await expect(
+      service.create({ name: "Whey Protein", unitOfMeasureId: "unit-2" }, superadmin),
+    ).rejects.toThrow(UnprocessableEntityException);
+  });
+});
+
+describe("SuppliesService.findAll", () => {
+  let service: InstanceType<typeof SuppliesService>;
+
+  beforeEach(async () => {
+    jest.resetAllMocks();
+
+    const module = await Test.createTestingModule({
+      providers: [
+        SuppliesService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(SuppliesService);
+  });
+
+  it("returns paginated supplies", async () => {
+    prismaMock.$transaction.mockResolvedValueOnce([1, [supplyRow]]);
+
+    const result = await service.findAll({ page: 1, limit: 10 });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.meta.total).toBe(1);
+    expect(result.meta.totalPages).toBe(1);
+  });
+
+  it("returns empty result when no supplies exist", async () => {
+    prismaMock.$transaction.mockResolvedValueOnce([0, []]);
+
+    const result = await service.findAll({ page: 1, limit: 10 });
+
+    expect(result.data).toHaveLength(0);
+    expect(result.meta.totalPages).toBe(0);
+  });
+});
+
+describe("SuppliesService.findOne", () => {
+  let service: InstanceType<typeof SuppliesService>;
+
+  beforeEach(async () => {
+    jest.resetAllMocks();
+
+    const module = await Test.createTestingModule({
+      providers: [
+        SuppliesService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(SuppliesService);
+  });
+
+  it("returns supply when found", async () => {
+    prismaMock.supply.findUnique.mockResolvedValueOnce(supplyRow);
+
+    const result = await service.findOne("supply-1");
+
+    expect(result).toEqual(supplyRow);
+  });
+
+  it("throws NotFoundException when supply does not exist", async () => {
+    prismaMock.supply.findUnique.mockResolvedValueOnce(null);
+
+    await expect(service.findOne("non-existent")).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe("SuppliesService.updateStatus", () => {
+  let service: InstanceType<typeof SuppliesService>;
+
+  beforeEach(async () => {
+    jest.resetAllMocks();
+
+    prismaMock.$transaction.mockImplementation(
+      async (fn: (tx: typeof prismaMock) => Promise<unknown>) => fn(prismaMock),
+    );
+    auditMock.createAuditLog.mockResolvedValue(undefined);
+
+    const module = await Test.createTestingModule({
+      providers: [
+        SuppliesService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(SuppliesService);
+  });
+
+  it("deactivates an active supply", async () => {
+    prismaMock.supply.findUnique.mockResolvedValueOnce({ name: "Whey", active: true });
+    prismaMock.supply.update.mockResolvedValueOnce({});
+
+    const result = await service.updateStatus("supply-1", false, superadmin);
+
+    expect(result).toEqual({ message: "Supply status updated successfully." });
+    expect(prismaMock.supply.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws ConflictException when supply is already in the requested state", async () => {
+    prismaMock.supply.findUnique.mockResolvedValueOnce({ name: "Whey", active: false });
+
+    await expect(
+      service.updateStatus("supply-1", false, superadmin),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it("throws NotFoundException when supply does not exist", async () => {
+    prismaMock.supply.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      service.updateStatus("non-existent", false, superadmin),
+    ).rejects.toThrow(NotFoundException);
+  });
+});
