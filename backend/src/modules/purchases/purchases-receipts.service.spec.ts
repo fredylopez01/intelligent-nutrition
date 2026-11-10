@@ -62,6 +62,8 @@ function purchase(receivedQuantity = 0) {
   };
 }
 
+const branchId = "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d";
+
 const tx = {
   purchase: { findUnique: jest.fn<AsyncMock>(), update: jest.fn<AsyncMock>() },
   purchaseDetail: {
@@ -75,6 +77,7 @@ const prisma = {
     jest.fn<
       (operation: (client: typeof tx) => Promise<unknown>) => Promise<unknown>
     >(),
+  branch: { findMany: jest.fn<AsyncMock>() },
 };
 const audit = { createAuditLog: jest.fn<AsyncMock>() };
 const generalStock = { increase: jest.fn<AsyncMock>() };
@@ -255,5 +258,76 @@ describe("PurchasesService receipts by lot", () => {
 
     expect(generalStock.increase).not.toHaveBeenCalled();
     expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts a valid active branch as destination", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([{ id: branchId, active: true }]);
+
+    await expect(
+      service.receive(
+        purchaseId,
+        {
+          items: [
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 10,
+              expirationDate: "2027-06-30",
+              branchId,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).resolves.toBeDefined();
+
+    expect(prisma.branch.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: [branchId] } } }),
+    );
+  });
+
+  it("throws NotFoundException when branchId does not exist", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([]);
+
+    await expect(
+      service.receive(
+        purchaseId,
+        {
+          items: [
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 10,
+              expirationDate: "2027-06-30",
+              branchId,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toMatchObject({ response: { code: "BRANCH_NOT_FOUND" } });
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("throws UnprocessableEntityException when branch is inactive", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([{ id: branchId, active: false }]);
+
+    await expect(
+      service.receive(
+        purchaseId,
+        {
+          items: [
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 10,
+              expirationDate: "2027-06-30",
+              branchId,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toMatchObject({ response: { code: "BRANCH_INACTIVE" } });
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
