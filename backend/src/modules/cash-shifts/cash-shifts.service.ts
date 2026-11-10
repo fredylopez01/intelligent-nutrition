@@ -49,8 +49,8 @@ function toShiftResponse(shift: {
     status: shift.status,
     openedAt: shift.openedAt,
     closedAt: shift.closedAt,
-    openingAmount: shift.openingAmount.toString(),
-    closingAmount: shift.closingAmount?.toString() ?? null,
+    openingAmount: Number(shift.openingAmount).toFixed(2),
+    closingAmount: shift.closingAmount != null ? Number(shift.closingAmount).toFixed(2) : null,
     observation: shift.observation,
   };
 }
@@ -239,8 +239,8 @@ export class CashShiftsService {
           status: s.status,
           openedAt: s.openedAt,
           closedAt: s.closedAt,
-          openingAmount: s.openingAmount.toString(),
-          closingAmount: s.closingAmount?.toString() ?? null,
+          openingAmount: Number(s.openingAmount).toFixed(2),
+          closingAmount: s.closingAmount != null ? Number(s.closingAmount).toFixed(2) : null,
         };
       }),
       meta: {
