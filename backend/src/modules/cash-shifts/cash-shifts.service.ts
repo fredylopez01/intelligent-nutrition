@@ -105,7 +105,7 @@ export class CashShiftsService {
         tx,
       );
 
-      return { data: toShiftResponse(shift) };
+      return toShiftResponse(shift);
     });
   }
 
@@ -164,7 +164,7 @@ export class CashShiftsService {
         tx,
       );
 
-      return { data: toShiftResponse(updated) };
+      return toShiftResponse(updated);
     });
   }
 
@@ -260,6 +260,6 @@ export class CashShiftsService {
     if (!shift) {
       throw new NotFoundException("Cash shift not found.");
     }
-    return { data: toShiftResponse(shift) };
+    return toShiftResponse(shift);
   }
 }
