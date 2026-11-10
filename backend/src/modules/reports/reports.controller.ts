@@ -5,6 +5,7 @@ import { Roles } from "../../common/decorators/roles.decorator.js";
 import { BranchScopeGuard } from "../../common/guards/branch-scope.guard.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 import { ListSalesReportQueryDto } from "./dto/list-sales-report-query.dto.js";
+import { RestockReportQueryDto } from "./dto/restock-report-query.dto.js";
 import { ReportsService } from "./reports.service.js";
 
 @Controller("reports")
@@ -20,5 +21,15 @@ export class ReportsController {
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
     return this.reportsService.getSalesReport(query, currentUser);
+  }
+
+  @Get("restock")
+  @Roles("SUPERADMIN", "BRANCH_LEADER")
+  @BranchScope("query.branchId")
+  getRestockReport(
+    @Query() query: RestockReportQueryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return this.reportsService.getRestockReport(query, currentUser);
   }
 }
