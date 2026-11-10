@@ -172,6 +172,9 @@ FRONTEND_URL="http://localhost:5173"
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""
 GOOGLE_CALLBACK_URL="http://localhost:3000/api/v1/auth/google/callback"
+
+# URL base del servidor API que muestra Swagger
+API_BASE_URL="http://localhost:3000"
 ```
 
 `PASSWORD_RESET_TOKEN_EXPIRATION_MINUTES` controla cuánto tiempo es válido el enlace de recuperación. Su valor predeterminado es 60 minutos.
@@ -218,6 +221,12 @@ Si falla la URL, una migración o el seed, revisa `docker compose logs backend-i
 curl http://localhost:3000/api/v1/health
 # Esperado: {"status":"ok"}
 ```
+
+Swagger está disponible en `http://localhost:3000/api/docs`. La documentación
+requiere iniciar sesión con las credenciales de un usuario activo cuyo rol sea
+`DEV`; el login valida la cuenta en la base de datos. `API_BASE_URL` configura
+el dominio base del servidor que aparece en Swagger y, si se omite, usa
+`http://localhost:3000`.
 
 **Ver logs:**
 

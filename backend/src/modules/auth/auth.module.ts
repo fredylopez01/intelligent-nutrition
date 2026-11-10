@@ -14,6 +14,8 @@ import { EmailModule } from "../../modules/email/email.module.js";
 import { AuditModule } from "../audit/audit.module.js";
 import { GoogleStrategy } from "./strategies/google.strategy.js";
 import { GoogleAuthGuard } from "./guards/google-auth.guard.js";
+import { SwaggerDocumentationController } from "../../swagger/swagger-documentation.controller.js";
+import { SwaggerDocumentationGuard } from "../../swagger/swagger-documentation.guard.js";
 
 @Module({
   imports: [
@@ -44,12 +46,13 @@ import { GoogleAuthGuard } from "./guards/google-auth.guard.js";
     EmailModule,
     AuditModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, SwaggerDocumentationController],
   providers: [
     AuthService,
     JwtStrategy,
     GoogleStrategy,
     GoogleAuthGuard,
+    SwaggerDocumentationGuard,
     JwtAuthGuard,
     {
       provide: APP_GUARD,
@@ -61,6 +64,6 @@ import { GoogleAuthGuard } from "./guards/google-auth.guard.js";
     },
     RolesGuard,
   ],
-  exports: [AuthService, JwtAuthGuard],
+  exports: [AuthService, JwtAuthGuard, SwaggerDocumentationGuard],
 })
 export class AuthModule {}
