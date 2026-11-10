@@ -75,16 +75,17 @@ model UserAccount {
   createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
 
-  person            Person         @relation(fields: [personId], references: [id])
-  role              Role           @relation(fields: [roleId], references: [id])
-  branchAssignments UserBranch[]
-  auditLogs         AuditLog[]
-  createdImages     ProductImage[] @relation("ProductImageCreatedBy")
-  inventoryMovements InventoryMovement[]
-  purchases          Purchase[]
-  inventoryClosures  InventoryClosure[]
-  sales              Sale[]
-  notifications      Notification[]
+  person               Person                @relation(fields: [personId], references: [id])
+  role                 Role                  @relation(fields: [roleId], references: [id])
+  branchAssignments    UserBranch[]
+  auditLogs            AuditLog[]
+  createdImages        ProductImage[]        @relation("ProductImageCreatedBy")
+  inventoryMovements   InventoryMovement[]
+  purchases            Purchase[]
+  inventoryClosures    InventoryClosure[]
+  sales                Sale[]
+  notifications        Notification[]
+  supplyStockMovements SupplyStockMovement[]
 
   @@map("user_account")
 }
@@ -125,13 +126,15 @@ model Branch {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
-  userAssignments    UserBranch[]
-  branchInventories  BranchInventory[]
-  inventoryMovements InventoryMovement[] @relation("InventoryMovementDestinationBranch")
-  originMovements    InventoryMovement[] @relation("InventoryMovementOriginBranch")
-  inventoryClosures  InventoryClosure[]
-  sales              Sale[]
-  notifications      Notification[]
+  userAssignments       UserBranch[]
+  branchInventories     BranchInventory[]
+  inventoryMovements    InventoryMovement[] @relation("InventoryMovementDestinationBranch")
+  originMovements       InventoryMovement[] @relation("InventoryMovementOriginBranch")
+  inventoryClosures     InventoryClosure[]
+  sales                 Sale[]
+  notifications         Notification[]
+  supplyStocks          SupplyStock[]
+  supplyStockMovements  SupplyStockMovement[]
 
   @@map("branch")
 }
@@ -193,6 +196,7 @@ model UnitMeasure {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   products Product[]
+  supplies Supply[]
 
   @@map("unit_measure")
 }
@@ -524,4 +528,61 @@ model Notification {
 
   @@index([userId, read, createdAt])
   @@map("notification")
+}
+
+enum SupplyMovementType {
+  ENTRY
+  EXIT
+}
+
+model Supply {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String   @unique @db.VarChar(150)
+  unitOfMeasureId String   @map("unit_of_measure_id") @db.Uuid
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  unitOfMeasure UnitMeasure           @relation(fields: [unitOfMeasureId], references: [id])
+  stocks        SupplyStock[]
+  movements     SupplyStockMovement[]
+
+  @@index([unitOfMeasureId])
+  @@map("supply")
+}
+
+model SupplyStock {
+  id              String   @id @default(uuid()) @db.Uuid
+  branchId        String   @map("branch_id") @db.Uuid
+  supplyId        String   @map("supply_id") @db.Uuid
+  quantity        Decimal  @default(0) @db.Decimal(12, 3)
+  minimumQuantity Decimal  @default(0) @map("minimum_quantity") @db.Decimal(12, 3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  branch Branch @relation(fields: [branchId], references: [id])
+  supply Supply @relation(fields: [supplyId], references: [id])
+
+  @@unique([branchId, supplyId])
+  @@index([branchId])
+  @@index([supplyId])
+  @@map("supply_stock")
+}
+
+model SupplyStockMovement {
+  id           String             @id @default(uuid()) @db.Uuid
+  branchId     String             @map("branch_id") @db.Uuid
+  supplyId     String             @map("supply_id") @db.Uuid
+  movementType SupplyMovementType @map("movement_type")
+  quantity     Decimal            @db.Decimal(12, 3)
+  observation  String?            @db.Text
+  userId       String             @map("user_id") @db.Uuid
+  movementAt   DateTime           @default(now()) @map("movement_at") @db.Timestamp(6)
+
+  branch Branch      @relation(fields: [branchId], references: [id])
+  supply Supply      @relation(fields: [supplyId], references: [id])
+  user   UserAccount @relation(fields: [userId], references: [personId])
+
+  @@index([branchId, supplyId])
+  @@index([movementAt])
+  @@map("supply_stock_movement")
 }
