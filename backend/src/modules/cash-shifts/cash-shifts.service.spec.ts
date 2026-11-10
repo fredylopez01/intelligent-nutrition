@@ -98,8 +98,8 @@ describe("CashShiftsService.open", () => {
       branchLeader,
     );
 
-    expect(result.data.id).toBe("shift-1");
-    expect(result.data.status).toBe("OPEN");
+    expect(result.id).toBe("shift-1");
+    expect(result.status).toBe("OPEN");
     expect(prismaMock.cashShift.create).toHaveBeenCalledTimes(1);
   });
 
@@ -155,7 +155,7 @@ describe("CashShiftsService.close", () => {
       branchLeader,
     );
 
-    expect(result.data.status).toBe("CLOSED");
+    expect(result.status).toBe("CLOSED");
   });
 
   it("allows SUPERADMIN to close any shift", async () => {
@@ -179,7 +179,7 @@ describe("CashShiftsService.close", () => {
       superadmin,
     );
 
-    expect(result.data.status).toBe("CLOSED");
+    expect(result.status).toBe("CLOSED");
   });
 
   it("throws ForbiddenException when non-owner tries to close the shift", async () => {
@@ -290,8 +290,8 @@ describe("CashShiftsService.findOne", () => {
 
     const result = await service.findOne("shift-1");
 
-    expect(result.data.id).toBe("shift-1");
-    expect(result.data.user.fullName).toBe("Laura Pérez");
+    expect(result.id).toBe("shift-1");
+    expect(result.user.fullName).toBe("Laura Pérez");
   });
 
   it("throws NotFoundException when shift does not exist", async () => {
