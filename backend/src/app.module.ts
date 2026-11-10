@@ -30,6 +30,7 @@ import { ReportsModule } from "./modules/reports/reports.module.js";
 import { PromotionsModule } from "./modules/promotions/promotions.module.js";
 import { SuppliesModule } from "./modules/supplies/supplies.module.js";
 import { CashShiftsModule } from "./modules/cash-shifts/cash-shifts.module.js";
+import { RecipesModule } from "./modules/recipes/recipes.module.js";
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { CashShiftsModule } from "./modules/cash-shifts/cash-shifts.module.js";
     PromotionsModule,
     SuppliesModule,
     CashShiftsModule,
+    RecipesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
