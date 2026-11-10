@@ -131,14 +131,95 @@ describe("PromotionsService", () => {
     expect(promotionMock.create).not.toHaveBeenCalled();
   });
 
-  it("returns the active promotion without date filtering", async () => {
+  it("rejects a new promotion when its date range overlaps an existing one", async () => {
+    promotionMock.findFirst.mockResolvedValue({ id: "existing-promotion-id" });
+
+    await expect(
+      service.create(
+        {
+          name: "Overlapping offer",
+          discountPercentage: "20.00",
+          startDate: "2026-03-31",
+          endDate: "2026-04-30",
+        },
+        currentUser,
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: expect.objectContaining({
+        code: "PROMOTION_DATE_RANGE_OVERLAP",
+      }),
+    });
+
+    expect(promotionMock.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            {
+              OR: [
+                { startDate: null },
+                { startDate: { lte: new Date("2026-04-30T00:00:00.000Z") } },
+              ],
+            },
+            {
+              OR: [
+                { endDate: null },
+                { endDate: { gte: new Date("2026-03-31T00:00:00.000Z") } },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    expect(promotionMock.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an edit when the updated range overlaps another promotion", async () => {
+    promotionMock.findUnique.mockResolvedValue(buildPromotion());
+    promotionMock.findFirst.mockResolvedValue({ id: "other-promotion-id" });
+
+    await expect(
+      service.update("promotion-id", { startDate: "2026-03-15" }, currentUser),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: expect.objectContaining({
+        code: "PROMOTION_DATE_RANGE_OVERLAP",
+      }),
+    });
+
+    expect(promotionMock.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { not: "promotion-id" },
+        }),
+      }),
+    );
+    expect(promotionMock.update).not.toHaveBeenCalled();
+  });
+
+  it("returns the active promotion whose date range includes today", async () => {
     const promotion = buildPromotion({ active: true });
     promotionMock.findFirst.mockResolvedValue(promotion);
 
     const result = await service.findActive();
 
     expect(promotionMock.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { active: true } }),
+      expect.objectContaining({
+        where: {
+          active: true,
+          AND: [
+            {
+              OR: [
+                { startDate: null },
+                { startDate: { lte: expect.any(Date) } },
+              ],
+            },
+            {
+              OR: [{ endDate: null }, { endDate: { gte: expect.any(Date) } }],
+            },
+          ],
+        },
+      }),
     );
     expect(result).toMatchObject({ id: "promotion-id", active: true });
   });
