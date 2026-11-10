@@ -223,21 +223,6 @@ export function ReceiptForm({ purchase, onReceived, onCancel }: ReceiptFormProps
                         </select>
                       </div>
                     )}
-                    <div className="purchase-form__field receipt-form__note">
-                      <label htmlFor={`receipt-note-${lot.key}`}>Observación</label>
-                      <input
-                        id={`receipt-note-${lot.key}`}
-                        aria-label={`Observación de ${label}`}
-                        className="ui-field__control"
-                        maxLength={500}
-                        placeholder="Opcional"
-                        value={lot.observation}
-                        onChange={(event) =>
-                          updateLot(item.id, lot.key, { observation: event.target.value })
-                        }
-                        disabled={submitting}
-                      />
-                    </div>
                     {(lots[item.id] ?? []).length > 1 && (
                       <button
                         type="button"
@@ -254,6 +239,21 @@ export function ReceiptForm({ purchase, onReceived, onCancel }: ReceiptFormProps
                         ×
                       </button>
                     )}
+                    <div className="purchase-form__field receipt-form__note">
+                      <label htmlFor={`receipt-note-${lot.key}`}>Observación</label>
+                      <input
+                        id={`receipt-note-${lot.key}`}
+                        aria-label={`Observación de ${label}`}
+                        className="ui-field__control"
+                        maxLength={500}
+                        placeholder="Opcional"
+                        value={lot.observation}
+                        onChange={(event) =>
+                          updateLot(item.id, lot.key, { observation: event.target.value })
+                        }
+                        disabled={submitting}
+                      />
+                    </div>
                     {rowError && (
                       <span className="ui-field__error receipt-form__error" role="alert">
                         {rowError}

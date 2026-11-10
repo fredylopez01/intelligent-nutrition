@@ -118,14 +118,22 @@
 }
 
 .receipt-form__lot {
-  display: grid;
-  grid-template-columns: minmax(0, 0.6fr) minmax(0, 0.9fr) minmax(0, 1.2fr) 2rem;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  align-items: start;
+  align-items: flex-start;
+}
+
+.receipt-form__lot .purchase-form__field {
+  flex: 1 1 6rem;
+}
+
+.receipt-form__lot .receipt-form__note {
+  flex: 1 1 100%;
 }
 
 .receipt-form__error {
-  grid-column: 1 / -1;
+  flex: 1 1 100%;
 }
 
 .receipt-form__add {
@@ -142,13 +150,8 @@
     padding-top: 0;
   }
 
-  .receipt-form__lot {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2rem;
-  }
-
-  .receipt-form__note {
-    grid-column: 1 / -1;
-    grid-row: 2;
+  .receipt-form__lot .purchase-form__field {
+    flex: 1 1 8rem;
   }
 
   .purchase-detail__totals {
