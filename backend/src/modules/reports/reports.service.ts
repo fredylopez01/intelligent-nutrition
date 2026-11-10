@@ -8,6 +8,18 @@ import { businessDayBounds } from "../../common/utils/business-day.util.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 import { PrismaService } from "../../database/prisma/prisma.service.js";
 import { ListSalesReportQueryDto } from "./dto/list-sales-report-query.dto.js";
+import { RestockReportQueryDto } from "./dto/restock-report-query.dto.js";
+
+interface RestockReportRow {
+  productId: string;
+  name: string;
+  referenceCode: string;
+  branchId: string;
+  branchName: string;
+  currentQuantity: number;
+  minimumStock: number;
+  deficit: number;
+}
 
 interface SalesReportGroup {
   day: string;
@@ -105,5 +117,52 @@ export class ReportsService {
         totalPages: total === 0 ? 0 : Math.ceil(total / limit),
       },
     };
+  }
+
+  async getRestockReport(
+    query: RestockReportQueryDto,
+    currentUser: AuthenticatedUser,
+  ) {
+    const { branchId } = query;
+
+    if (currentUser.role.name === "BRANCH_LEADER") {
+      const assignedBranchIds = new Set(
+        (currentUser.branches ?? []).map((branch) => branch.id),
+      );
+      if (!branchId || !assignedBranchIds.has(branchId)) {
+        throw new ForbiddenException({
+          code: "BRANCH_SCOPE_VIOLATION",
+          message: "You do not have access to this branch.",
+          details: branchId ? { branchId } : {},
+        });
+      }
+    }
+
+    const filters: Prisma.Sql[] = [Prisma.sql`p.active = true`];
+    if (branchId) {
+      filters.push(Prisma.sql`bi.branch_id = ${branchId}::uuid`);
+    }
+
+    const rows = await this.prisma.$queryRaw<RestockReportRow[]>`
+      SELECT
+        p.id                                        AS "productId",
+        p.name                                      AS "name",
+        p.reference_code                            AS "referenceCode",
+        b.id                                        AS "branchId",
+        b.name                                      AS "branchName",
+        SUM(bi.quantity)::int                       AS "currentQuantity",
+        MAX(bi.minimum_stock)::int                  AS "minimumStock",
+        (MAX(bi.minimum_stock) - SUM(bi.quantity))::int AS "deficit"
+      FROM branch_inventory bi
+      INNER JOIN product p ON p.id = bi.product_id
+      INNER JOIN branch b  ON b.id = bi.branch_id
+      WHERE ${Prisma.join(filters, " AND ")}
+      GROUP BY p.id, p.name, p.reference_code, b.id, b.name
+      HAVING SUM(bi.quantity) < MAX(bi.minimum_stock)
+      ORDER BY (MAX(bi.minimum_stock) - SUM(bi.quantity)) ASC
+      LIMIT 100
+    `;
+
+    return { data: rows };
   }
 }

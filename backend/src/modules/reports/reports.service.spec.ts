@@ -128,3 +128,74 @@ describe("ReportsService.getSalesReport", () => {
     expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
   });
 });
+
+const restockRow = {
+  productId: "product-1",
+  name: "Whey Protein 2 lb",
+  referenceCode: "WHEY-2LB-001",
+  branchId: "branch-assigned",
+  branchName: "Sede Centro",
+  currentQuantity: 2,
+  minimumStock: 5,
+  deficit: 3,
+};
+
+describe("ReportsService.getRestockReport", () => {
+  let service: InstanceType<typeof ReportsService>;
+
+  beforeEach(async () => {
+    jest.resetAllMocks();
+    prismaMock.$queryRaw.mockResolvedValueOnce([restockRow]);
+
+    const module = await Test.createTestingModule({
+      providers: [
+        ReportsService,
+        { provide: PrismaService, useValue: prismaMock },
+      ],
+    }).compile();
+    service = module.get(ReportsService);
+  });
+
+  it("returns restock rows for superadmin without branchId filter", async () => {
+    const result = await service.getRestockReport({}, superadmin);
+
+    expect(result).toEqual({ data: [restockRow] });
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns restock rows for superadmin with branchId filter", async () => {
+    const result = await service.getRestockReport(
+      { branchId: "branch-assigned" },
+      superadmin,
+    );
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].deficit).toBe(3);
+  });
+
+  it("allows a branch leader to query their assigned branch", async () => {
+    const result = await service.getRestockReport(
+      { branchId: "branch-assigned" },
+      branchLeader,
+    );
+
+    expect(result.data).toHaveLength(1);
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("forbids a branch leader from querying another branch", async () => {
+    await expect(
+      service.getRestockReport({ branchId: "branch-other" }, branchLeader),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("forbids a branch leader when no branchId is provided", async () => {
+    await expect(
+      service.getRestockReport({}, branchLeader),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
+  });
+});
