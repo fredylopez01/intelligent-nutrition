@@ -42,6 +42,42 @@ function validatePromotionDates(startDate: Date | null, endDate: Date | null) {
   }
 }
 
+function promotionDateRangeOverlaps() {
+  return new ConflictException({
+    code: "PROMOTION_DATE_RANGE_OVERLAP",
+    message: "Promotion dates overlap with an existing promotion.",
+    details: {},
+  });
+}
+
+async function findOverlappingPromotion(
+  transaction: Prisma.TransactionClient,
+  startDate: Date | null,
+  endDate: Date | null,
+  excludedPromotionId?: string,
+) {
+  const conditions: Prisma.PromotionWhereInput[] = [];
+
+  if (endDate) {
+    conditions.push({
+      OR: [{ startDate: null }, { startDate: { lte: endDate } }],
+    });
+  }
+  if (startDate) {
+    conditions.push({
+      OR: [{ endDate: null }, { endDate: { gte: startDate } }],
+    });
+  }
+
+  return transaction.promotion.findFirst({
+    where: {
+      ...(excludedPromotionId ? { id: { not: excludedPromotionId } } : {}),
+      AND: conditions,
+    },
+    select: { id: true },
+  });
+}
+
 function toPromotionResponse(promotion: PromotionRecord) {
   return {
     id: promotion.id,
@@ -125,6 +161,15 @@ export class PromotionsService {
 
     try {
       return await this.prisma.$transaction(async (transaction) => {
+        const overlappingPromotion = await findOverlappingPromotion(
+          transaction,
+          startDate,
+          endDate,
+        );
+        if (overlappingPromotion) {
+          throw promotionDateRangeOverlaps();
+        }
+
         const promotion = await transaction.promotion.create({
           data: {
             createdById: currentUser.id,
@@ -203,8 +248,21 @@ export class PromotionsService {
   }
 
   async findActive() {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
     const promotion = await this.prisma.promotion.findFirst({
-      where: { active: true },
+      where: {
+        active: true,
+        AND: [
+          {
+            OR: [{ startDate: null }, { startDate: { lte: today } }],
+          },
+          {
+            OR: [{ endDate: null }, { endDate: { gte: today } }],
+          },
+        ],
+      },
       select: promotionSelect,
     });
 
@@ -263,6 +321,16 @@ export class PromotionsService {
             ? existingPromotion.endDate
             : toDate(updatePromotionDto.endDate);
         validatePromotionDates(startDate, endDate);
+
+        const overlappingPromotion = await findOverlappingPromotion(
+          transaction,
+          startDate,
+          endDate,
+          promotionId,
+        );
+        if (overlappingPromotion) {
+          throw promotionDateRangeOverlaps();
+        }
 
         const updatedPromotion = await transaction.promotion.update({
           where: { id: promotionId, active: false },
