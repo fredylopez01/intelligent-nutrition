@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { useAuth } from '../../hooks/useAuth'
+import { branchesService } from '../../services/branches.service'
 import { purchasesService } from '../../services/purchases.service'
 import type { Purchase, ReceiptItemPayload } from '../../types/purchase'
 import { todayInputValue } from '../../utils/inventory'
@@ -17,11 +18,17 @@ interface ReceiptFormProps {
   onCancel: () => void
 }
 
+interface BranchOption {
+  id: string
+  name: string
+}
+
 interface LotRow {
   key: number
   quantity: string
   expirationDate: string
   observation: string
+  branchId: string
 }
 
 const WHOLE_PATTERN = /^\d{1,9}$/
@@ -29,11 +36,11 @@ const WHOLE_PATTERN = /^\d{1,9}$/
 let nextKey = 0
 const newLot = (quantity = ''): LotRow => {
   nextKey += 1
-  return { key: nextKey, quantity, expirationDate: '', observation: '' }
+  return { key: nextKey, quantity, expirationDate: '', observation: '', branchId: '' }
 }
 
 export function ReceiptForm({ purchase, onReceived, onCancel }: ReceiptFormProps) {
-  const { token } = useAuth()
+  const { user, token } = useAuth()
   const pendingItems = purchase.items.filter(
     (item) => item.requestedQuantity - item.receivedQuantity > 0,
   )
@@ -48,7 +55,28 @@ export function ReceiptForm({ purchase, onReceived, onCancel }: ReceiptFormProps
   const [showErrors, setShowErrors] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [branchOptions, setBranchOptions] = useState<BranchOption[]>([])
   const today = todayInputValue()
+
+  const isSuperadmin = user?.role.name === 'SUPERADMIN'
+  const leaderBranches: BranchOption[] =
+    user?.role.name === 'BRANCH_LEADER' ? (user.branches ?? []) : []
+  const showDestino = isSuperadmin || leaderBranches.length > 1
+  const availableBranches = isSuperadmin ? branchOptions : leaderBranches
+
+  useEffect(() => {
+    if (!isSuperadmin) return
+    let cancelled = false
+    branchesService
+      .list({ active: true, limit: 100 }, token)
+      .then((response) => {
+        if (!cancelled) setBranchOptions(response.data)
+      })
+      .catch(() => {/* non-critical: selector remains hidden */})
+    return () => {
+      cancelled = true
+    }
+  }, [isSuperadmin, token])
 
   const updateLot = (itemId: string, key: number, changes: Partial<LotRow>) =>
     setLots((current) => ({
@@ -62,7 +90,7 @@ export function ReceiptForm({ purchase, onReceived, onCancel }: ReceiptFormProps
     if (!WHOLE_PATTERN.test(quantity)) return 'Cantidad entera de 0 en adelante.'
     if (Number(quantity) > 0 && !lot.expirationDate) return 'Escribe el vencimiento del lote.'
     if (Number(quantity) > 0 && lot.expirationDate < today) {
-      return 'El lote ya está vencido: no puede entrar al stock general.'
+      return 'El lote ya está vencido: no puede entrar al inventario.'
     }
     return null
   }
@@ -73,11 +101,11 @@ export function ReceiptForm({ purchase, onReceived, onCancel }: ReceiptFormProps
       0,
     )
     if (received > pending) return `Solo faltan ${pending} por recibir en esta línea.`
-    const dates = (lots[itemId] ?? [])
+    const keys = (lots[itemId] ?? [])
       .filter((lot) => Number(lot.quantity) > 0)
-      .map((lot) => lot.expirationDate)
-    if (new Set(dates).size !== dates.length) {
-      return 'Dos lotes tienen el mismo vencimiento: súmalos en una sola fila.'
+      .map((lot) => `${lot.expirationDate}|${lot.branchId}`)
+    if (new Set(keys).size !== keys.length) {
+      return 'Dos filas tienen el mismo vencimiento y destino: combínalas en una sola.'
     }
     return null
   }
@@ -98,6 +126,7 @@ export function ReceiptForm({ purchase, onReceived, onCancel }: ReceiptFormProps
           purchaseDetailId: item.id,
           receivedQuantity: Number(lot.quantity),
           expirationDate: lot.expirationDate,
+          ...(lot.branchId ? { branchId: lot.branchId } : {}),
           ...(lot.observation.trim() ? { observation: lot.observation.trim() } : {}),
         })),
     )
@@ -172,6 +201,28 @@ export function ReceiptForm({ purchase, onReceived, onCancel }: ReceiptFormProps
                         disabled={submitting}
                       />
                     </div>
+                    {showDestino && availableBranches.length > 0 && (
+                      <div className="purchase-form__field">
+                        <label htmlFor={`receipt-dest-${lot.key}`}>Destino</label>
+                        <select
+                          id={`receipt-dest-${lot.key}`}
+                          aria-label={`Destino de ${label}`}
+                          className="ui-field__control"
+                          value={lot.branchId}
+                          onChange={(event) =>
+                            updateLot(item.id, lot.key, { branchId: event.target.value })
+                          }
+                          disabled={submitting}
+                        >
+                          <option value="">Stock general</option>
+                          {availableBranches.map((branch) => (
+                            <option key={branch.id} value={branch.id}>
+                              {branch.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="purchase-form__field receipt-form__note">
                       <label htmlFor={`receipt-note-${lot.key}`}>Observación</label>
                       <input

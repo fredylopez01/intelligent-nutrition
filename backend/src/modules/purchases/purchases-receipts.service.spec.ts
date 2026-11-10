@@ -216,7 +216,7 @@ describe("PurchasesService receipts by lot", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it("rejects the same line twice with the same expiration date", async () => {
+  it("rejects the same line twice with the same expiration date and no branch", async () => {
     await expect(
       service.receive(
         purchaseId,
@@ -239,6 +239,37 @@ describe("PurchasesService receipts by lot", () => {
     ).rejects.toMatchObject({
       response: { code: "DUPLICATED_PURCHASE_DETAIL" },
     });
+  });
+
+  it("allows two lots with the same expiration date sent to different branches", async () => {
+    const branchId2 = "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e";
+    prisma.branch.findMany.mockResolvedValueOnce([
+      { id: branchId, active: true },
+      { id: branchId2, active: true },
+    ]);
+
+    await expect(
+      service.receive(
+        purchaseId,
+        {
+          items: [
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 3,
+              expirationDate: "2027-01-31",
+              branchId,
+            },
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 3,
+              expirationDate: "2027-01-31",
+              branchId: branchId2,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).resolves.toBeDefined();
   });
 
   it("does not touch the general stock for a line received with zero units", async () => {

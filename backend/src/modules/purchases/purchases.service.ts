@@ -372,13 +372,14 @@ export class PurchasesService {
     }
 
     const lotKeys = items.map(
-      (i) => `${i.purchaseDetailId}:${i.expirationDate.slice(0, 10)}`,
+      (i) =>
+        `${i.purchaseDetailId}:${i.expirationDate.slice(0, 10)}:${i.branchId ?? ""}`,
     );
     if (new Set(lotKeys).size !== lotKeys.length) {
       throw new UnprocessableEntityException({
         code: "DUPLICATED_PURCHASE_DETAIL",
         message:
-          "Items contain the same purchase detail twice with the same expiration date.",
+          "Items contain the same purchase detail with the same expiration date and destination.",
       });
     }
 
