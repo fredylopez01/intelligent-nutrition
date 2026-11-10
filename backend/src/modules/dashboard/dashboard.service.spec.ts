@@ -29,7 +29,7 @@ describe("DashboardService", () => {
   let service: InstanceType<typeof DashboardService>;
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     prismaMock.branch.findUnique.mockResolvedValue({ id: "branch-id" });
     prismaMock.sale.aggregate
       .mockResolvedValueOnce({
@@ -100,5 +100,118 @@ describe("DashboardService", () => {
     expect(prismaMock.sale.aggregate).not.toHaveBeenCalled();
     expect(prismaMock.sale.findMany).not.toHaveBeenCalled();
     expect(prismaMock.branchInventory.findMany).not.toHaveBeenCalled();
+  });
+
+  it("returns zeroed indicators for a branch without sales or inventory", async () => {
+    prismaMock.sale.aggregate.mockReset();
+    prismaMock.sale.aggregate.mockResolvedValue({
+      _count: { _all: 0 },
+      _sum: { total: null },
+    });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    prismaMock.branchInventory.findMany.mockResolvedValue([]);
+
+    await expect(service.getBranchDashboard("branch-id")).resolves.toEqual({
+      salesToday: { count: 0, totalAmount: 0 },
+      uniqueCustomersToday: 0,
+      criticalStockProducts: 0,
+      monthlyRevenue: 0,
+    });
+  });
+
+  it("filters today's sales with the Bogota day boundaries", async () => {
+    jest.useFakeTimers({ now: new Date("2026-11-10T15:00:00.000Z") });
+
+    try {
+      await service.getBranchDashboard("branch-id");
+    } finally {
+      jest.useRealTimers();
+    }
+
+    expect(prismaMock.sale.aggregate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          saleAt: {
+            gte: new Date("2026-11-10T05:00:00.000Z"),
+            lt: new Date("2026-11-11T05:00:00.000Z"),
+          },
+        }),
+      }),
+    );
+  });
+
+  it("filters the monthly revenue from the first day of the business month", async () => {
+    jest.useFakeTimers({ now: new Date("2026-11-10T15:00:00.000Z") });
+
+    try {
+      await service.getBranchDashboard("branch-id");
+    } finally {
+      jest.useRealTimers();
+    }
+
+    expect(prismaMock.sale.aggregate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          branchId: "branch-id",
+          status: "COMPLETED",
+          saleAt: {
+            gte: new Date("2026-11-01T05:00:00.000Z"),
+            lte: new Date("2026-11-10T15:00:00.000Z"),
+          },
+        }),
+      }),
+    );
+  });
+
+  it("scopes every query to the requested branch and ignores anonymous customers", async () => {
+    await service.getBranchDashboard("branch-other");
+
+    expect(prismaMock.branch.findUnique).toHaveBeenCalledWith({
+      where: { id: "branch-other" },
+      select: { id: true },
+    });
+    expect(prismaMock.sale.aggregate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({ branchId: "branch-other" }),
+      }),
+    );
+    expect(prismaMock.sale.aggregate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({ branchId: "branch-other" }),
+      }),
+    );
+    expect(prismaMock.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          branchId: "branch-other",
+          customerId: { not: null },
+        }),
+      }),
+    );
+    expect(prismaMock.branchInventory.findMany).toHaveBeenCalledWith({
+      where: { branchId: "branch-other" },
+      select: { productId: true, quantity: true },
+    });
+  });
+
+  it("groups the stock by product before applying the critical threshold", async () => {
+    prismaMock.branchInventory.findMany.mockResolvedValue([
+      { productId: "fits-above", quantity: 3 },
+      { productId: "fits-above", quantity: 3 },
+      { productId: "exactly-limit", quantity: 4 },
+      { productId: "exactly-limit", quantity: 1 },
+      { productId: "below", quantity: 4 },
+      { productId: "empty", quantity: 0 },
+    ]);
+
+    await expect(service.getBranchDashboard("branch-id")).resolves.toMatchObject(
+      {
+        criticalStockProducts: 2,
+      },
+    );
   });
 });
