@@ -6,6 +6,7 @@ import {
   it,
   jest,
 } from "@jest/globals";
+import { BadRequestException } from "@nestjs/common";
 
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 
@@ -17,6 +18,7 @@ const branchId = "11111111-1111-4111-8111-111111111111";
 const otherBranchId = "44444444-4444-4444-8444-444444444444";
 const closureId = "33333333-3333-4333-8333-333333333333";
 const wheyId = "55555555-5555-4555-8555-555555555555";
+const cashShiftId = "77777777-7777-4777-8777-777777777777";
 
 const day = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
@@ -46,6 +48,7 @@ const tx = {
     update: jest.fn<AsyncMock>(),
   },
   inventoryClosureDetail: { update: jest.fn<AsyncMock>() },
+  cashShift: { findFirst: jest.fn<AsyncMock>() },
 };
 const prisma = {
   $transaction: jest.fn<(arg: unknown) => Promise<unknown>>(),
@@ -87,6 +90,7 @@ function closure(
     confirmed: status === "CONFIRMED",
     locked,
     closedAt: null,
+    cashShiftId: null,
     branch: { name: "Centro" },
     user: { person: { firstName: "Laura", lastName: null } },
     details,
@@ -110,8 +114,10 @@ describe("InventoryClosuresService.confirm", () => {
       (arg as (client: typeof tx) => Promise<unknown>)(tx),
     );
     tx.inventoryClosure.findUnique.mockResolvedValue(counted);
+    tx.cashShift.findFirst.mockResolvedValue({ id: cashShiftId });
     tx.inventoryClosure.update.mockResolvedValue({
       ...counted,
+      cashShiftId,
       status: "CONFIRMED",
       confirmed: true,
       locked: true,
@@ -139,6 +145,7 @@ describe("InventoryClosuresService.confirm", () => {
       expect.objectContaining({
         where: { id: closureId },
         data: {
+          cashShiftId,
           status: "CONFIRMED",
           confirmed: true,
           locked: true,
@@ -146,6 +153,43 @@ describe("InventoryClosuresService.confirm", () => {
         },
       }),
     );
+  });
+
+  it("links the confirmed closure to an active shift in its branch", async () => {
+    await service.confirm(closureId, assistant);
+
+    expect(tx.cashShift.findFirst).toHaveBeenCalledWith({
+      where: {
+        branchId,
+        status: "OPEN",
+      },
+      orderBy: { openedAt: "desc" },
+      select: { id: true },
+    });
+    expect(tx.inventoryClosure.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ cashShiftId }),
+      }),
+    );
+  });
+
+  it("returns 400 and does not close inventory without an active cash shift", async () => {
+    tx.cashShift.findFirst.mockResolvedValue(null);
+
+    const error = await service
+      .confirm(closureId, assistant)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(BadRequestException);
+    if (error instanceof BadRequestException) {
+      expect(error.getStatus()).toBe(400);
+      expect(error.getResponse()).toMatchObject({
+        code: "ACTIVE_CASH_SHIFT_REQUIRED",
+      });
+    }
+
+    expect(tx.inventoryClosure.update).not.toHaveBeenCalled();
+    expect(tx.inventoryClosureDetail.update).not.toHaveBeenCalled();
   });
 
   it("records the confirmation in the audit log", async () => {
