@@ -307,6 +307,7 @@ export class SalesService {
 
         return {
           productId: item.productId,
+          recipeId: item.recipeId ?? null,
           quantity: item.quantity,
           unitPrice: toMoney(unitPriceCents),
           subtotal: toMoney(itemSubtotalCents),

@@ -21,6 +21,14 @@ export class CreateSaleItemDto {
   @IsNotEmpty()
   productId!: string;
 
+  @ApiPropertyOptional({
+    format: "uuid",
+    description: "Recipe associated with this prepared item, when applicable.",
+  })
+  @IsOptional()
+  @IsUUID()
+  recipeId?: string;
+
   @ApiProperty({ minimum: 1, example: 2, description: "Units sold." })
   @Type(() => Number)
   @IsInt()

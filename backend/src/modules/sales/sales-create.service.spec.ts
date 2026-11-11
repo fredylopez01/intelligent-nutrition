@@ -528,6 +528,24 @@ describe("SalesService.create", () => {
       });
     });
 
+    it("persists the recipe id for a prepared sale item", async () => {
+      const recipeId = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+
+      await service.create(
+        {
+          ...baseDto,
+          items: [{ productId: productAId, recipeId, quantity: 2 }],
+        },
+        superadmin,
+      );
+
+      const [detail] = createdSaleData().details.create;
+      expect(detail).toMatchObject({
+        productId: productAId,
+        recipeId,
+      });
+    });
+
     it("sums the item discounts and the general discount", async () => {
       const dto = {
         ...baseDto,
