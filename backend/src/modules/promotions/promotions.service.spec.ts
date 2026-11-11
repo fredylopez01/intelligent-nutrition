@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { Test } from "@nestjs/testing";
 import { Prisma } from "../../../generated/prisma/client.js";
 import { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
@@ -67,7 +67,7 @@ describe("PromotionsService", () => {
   let service: PromotionsService;
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     prismaMock.$transaction.mockImplementation(executeTransaction);
 
     const module = await Test.createTestingModule({
@@ -306,5 +306,345 @@ describe("PromotionsService", () => {
       }),
     );
     expect(auditMock.createAuditLog).toHaveBeenCalledTimes(2);
+  });
+
+  describe("create with dates", () => {
+    it("stores the range as UTC dates and returns it as YYYY-MM-DD", async () => {
+      promotionMock.findFirst.mockResolvedValue(null);
+      promotionMock.create.mockResolvedValue(buildPromotion());
+
+      const result = await service.create(
+        {
+          name: "Spring offer",
+          discountPercentage: "15.00",
+          startDate: "2026-03-01",
+          endDate: "2026-03-31",
+        },
+        currentUser,
+      );
+
+      expect(promotionMock.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            startDate: new Date("2026-03-01T00:00:00.000Z"),
+            endDate: new Date("2026-03-31T00:00:00.000Z"),
+          }),
+        }),
+      );
+      expect(result).toMatchObject({
+        startDate: "2026-03-01",
+        endDate: "2026-03-31",
+      });
+    });
+
+    it("checks the overlap without date conditions when the promotion has no dates", async () => {
+      promotionMock.findFirst.mockResolvedValue(null);
+      promotionMock.create.mockResolvedValue(
+        buildPromotion({ startDate: null, endDate: null }),
+      );
+
+      await service.create(
+        { name: "Always on", discountPercentage: "5.00" },
+        currentUser,
+      );
+
+      expect(promotionMock.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { AND: [] } }),
+      );
+    });
+
+    it("maps a duplicate name to PROMOTION_NAME_ALREADY_EXISTS", async () => {
+      promotionMock.findFirst.mockResolvedValue(null);
+      promotionMock.create.mockRejectedValue({ code: "P2002" });
+
+      await expect(
+        service.create(
+          { name: "Duplicated offer", discountPercentage: "10.00" },
+          currentUser,
+        ),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: expect.objectContaining({
+          code: "PROMOTION_NAME_ALREADY_EXISTS",
+        }),
+      });
+    });
+  });
+
+  describe("findAll validation", () => {
+    it("rejects a search shorter than two characters", async () => {
+      await expect(
+        service.findAll({
+          page: 1,
+          limit: 10,
+          search: "p",
+          sortBy: "createdAt",
+          sortOrder: "desc",
+        }),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: expect.objectContaining({ code: "VALIDATION_ERROR" }),
+      });
+      expect(promotionMock.count).not.toHaveBeenCalled();
+    });
+
+    it("does not filter when no query filters are provided", async () => {
+      promotionMock.count.mockResolvedValue(0);
+      promotionMock.findMany.mockResolvedValue([]);
+
+      const result = await service.findAll({
+        page: 1,
+        limit: 10,
+        sortBy: "createdAt",
+        sortOrder: "desc",
+      });
+
+      expect(promotionMock.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} }),
+      );
+      expect(result.meta).toMatchObject({ total: 0, totalPages: 0 });
+    });
+  });
+
+  describe("findActive date window", () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("compares the range against today at 00:00 UTC", async () => {
+      jest.useFakeTimers({ now: new Date("2026-03-15T18:45:00.000Z") });
+      promotionMock.findFirst.mockResolvedValue(null);
+      const today = new Date("2026-03-15T00:00:00.000Z");
+
+      await service.findActive();
+
+      expect(promotionMock.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            active: true,
+            AND: [
+              { OR: [{ startDate: null }, { startDate: { lte: today } }] },
+              { OR: [{ endDate: null }, { endDate: { gte: today } }] },
+            ],
+          },
+        }),
+      );
+    });
+  });
+
+  describe("findOne", () => {
+    it("returns the promotion with a two-decimal discount", async () => {
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+
+      await expect(service.findOne("promotion-id")).resolves.toMatchObject({
+        id: "promotion-id",
+        discountPercentage: "15.00",
+        startDate: "2026-03-01",
+        endDate: "2026-03-31",
+      });
+    });
+
+    it("throws NOT_FOUND when the promotion does not exist", async () => {
+      promotionMock.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOne("missing-id")).rejects.toMatchObject({
+        status: 404,
+        response: expect.objectContaining({ code: "NOT_FOUND" }),
+      });
+    });
+  });
+
+  describe("update edge cases", () => {
+    it("keeps the stored dates when only the name changes and audits both versions", async () => {
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+      promotionMock.findFirst.mockResolvedValue(null);
+      promotionMock.update.mockResolvedValue(
+        buildPromotion({ name: "Renamed offer" }),
+      );
+
+      await service.update(
+        "promotion-id",
+        { name: "Renamed offer" },
+        currentUser,
+      );
+
+      expect(promotionMock.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { name: "Renamed offer" } }),
+      );
+      expect(auditMock.createAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "UPDATE",
+          oldData: expect.objectContaining({ name: "Spring offer" }),
+          newData: expect.objectContaining({ name: "Renamed offer" }),
+        }),
+        transactionMock,
+      );
+    });
+
+    it("updates the discount and the date range explicitly", async () => {
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+      promotionMock.findFirst.mockResolvedValue(null);
+      promotionMock.update.mockResolvedValue(
+        buildPromotion({
+          discountPercentage: new Prisma.Decimal("20.00"),
+          startDate: new Date("2026-04-01T00:00:00.000Z"),
+          endDate: new Date("2026-04-30T00:00:00.000Z"),
+        }),
+      );
+
+      const result = await service.update(
+        "promotion-id",
+        {
+          discountPercentage: "20.00",
+          startDate: "2026-04-01",
+          endDate: "2026-04-30",
+        },
+        currentUser,
+      );
+
+      expect(promotionMock.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            discountPercentage: new Prisma.Decimal("20.00"),
+            startDate: new Date("2026-04-01T00:00:00.000Z"),
+            endDate: new Date("2026-04-30T00:00:00.000Z"),
+          },
+        }),
+      );
+      expect(result).toMatchObject({
+        discountPercentage: "20.00",
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+      });
+    });
+
+    it("throws NOT_FOUND when the promotion does not exist", async () => {
+      promotionMock.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update("missing-id", { name: "Updated" }, currentUser),
+      ).rejects.toMatchObject({
+        status: 404,
+        response: expect.objectContaining({ code: "NOT_FOUND" }),
+      });
+    });
+
+    it("maps a duplicate name to PROMOTION_NAME_ALREADY_EXISTS", async () => {
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+      promotionMock.findFirst.mockResolvedValue(null);
+      promotionMock.update.mockRejectedValue({ code: "P2002" });
+
+      await expect(
+        service.update("promotion-id", { name: "Duplicated" }, currentUser),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: expect.objectContaining({
+          code: "PROMOTION_NAME_ALREADY_EXISTS",
+        }),
+      });
+    });
+
+    it("maps a missing row on update to PROMOTION_IS_ACTIVE", async () => {
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+      promotionMock.findFirst.mockResolvedValue(null);
+      promotionMock.update.mockRejectedValue({ code: "P2025" });
+
+      await expect(
+        service.update("promotion-id", { name: "Updated" }, currentUser),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: expect.objectContaining({ code: "PROMOTION_IS_ACTIVE" }),
+      });
+    });
+
+    it("rejects a start date after the stored end date", async () => {
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+
+      await expect(
+        service.update(
+          "promotion-id",
+          { startDate: "2026-04-15" },
+          currentUser,
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(promotionMock.findFirst).not.toHaveBeenCalled();
+      expect(promotionMock.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateStatus edge cases", () => {
+    it("deactivates an active promotion with a single audit entry", async () => {
+      promotionMock.findUnique.mockResolvedValue(
+        buildPromotion({ active: true }),
+      );
+      promotionMock.update.mockResolvedValue(buildPromotion({ active: false }));
+
+      await expect(
+        service.updateStatus("promotion-id", false, currentUser),
+      ).resolves.toEqual({ message: "Promotion status updated successfully." });
+
+      expect(promotionMock.updateMany).not.toHaveBeenCalled();
+      expect(promotionMock.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "promotion-id", active: true },
+          data: { active: false },
+        }),
+      );
+      expect(auditMock.createAuditLog).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects a status change to the current state", async () => {
+      promotionMock.findUnique.mockResolvedValue(
+        buildPromotion({ active: true }),
+      );
+
+      await expect(
+        service.updateStatus("promotion-id", true, currentUser),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: expect.objectContaining({ code: "ALREADY_IN_STATE" }),
+      });
+    });
+
+    it("throws NOT_FOUND when the promotion does not exist", async () => {
+      promotionMock.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateStatus("missing-id", true, currentUser),
+      ).rejects.toMatchObject({
+        status: 404,
+        response: expect.objectContaining({ code: "NOT_FOUND" }),
+      });
+    });
+
+    it("maps a write conflict while activating to PROMOTION_ALREADY_ACTIVE", async () => {
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+      promotionMock.findMany.mockResolvedValue([]);
+      promotionMock.updateMany.mockResolvedValue({ count: 0 });
+      promotionMock.update.mockRejectedValue({ code: "P2034" });
+
+      await expect(
+        service.updateStatus("promotion-id", true, currentUser),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: expect.objectContaining({
+          code: "PROMOTION_ALREADY_ACTIVE",
+        }),
+      });
+    });
+
+    it("maps a missing row while activating to ALREADY_IN_STATE", async () => {
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+      promotionMock.findMany.mockResolvedValue([]);
+      promotionMock.updateMany.mockResolvedValue({ count: 0 });
+      promotionMock.update.mockRejectedValue({ code: "P2025" });
+
+      await expect(
+        service.updateStatus("promotion-id", true, currentUser),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: expect.objectContaining({ code: "ALREADY_IN_STATE" }),
+      });
+    });
   });
 });
