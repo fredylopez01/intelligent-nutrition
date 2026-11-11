@@ -400,6 +400,7 @@ model InventoryClosure {
   id          String                 @id @default(uuid()) @db.Uuid
   branchId    String                 @map("branch_id") @db.Uuid
   userId      String?                @map("user_id") @db.Uuid
+  cashShiftId String?                @map("cash_shift_id") @db.Uuid
   closureDate DateTime               @map("closure_date") @db.Date
   status      InventoryClosureStatus @default(PENDING)
   confirmed   Boolean                @default(false)
@@ -410,11 +411,13 @@ model InventoryClosure {
 
   branch  Branch                  @relation(fields: [branchId], references: [id])
   user    UserAccount?            @relation(fields: [userId], references: [personId])
+  cashShift CashShift?               @relation(fields: [cashShiftId], references: [id], onDelete: SetNull)
   details InventoryClosureDetail[]
 
   @@unique([branchId, closureDate])
   @@index([branchId])
   @@index([closureDate])
+  @@index([cashShiftId])
   @@map("inventory_closure")
 }
 
@@ -668,6 +671,7 @@ model CashShift {
 
   branch Branch      @relation(fields: [branchId], references: [id])
   user   UserAccount @relation(fields: [userId], references: [personId])
+  inventoryClosures InventoryClosure[]
 
   @@index([branchId, status])
   @@index([userId, status])
