@@ -364,9 +364,13 @@ El proyecto usa **Azure Pipelines** como plataforma de CI/CD, con **GitHub** com
 ### Flujo completo
 
 ```
-Desarrollador hace merge a "main" en Azure Repos
+Desarrollador crea o actualiza un PR hacia "main" en Azure Repos
        ↓
-Azure Pipeline se dispara (azure-pipelines.yml)
+Build Validation ejecuta Build
+       ↓
+El PR aprobado se integra a "main"
+       ↓
+Azure Pipeline ejecuta Build y, si pasa, Sync
        ↓
 El pipeline hace "git push" de la rama main hacia GitHub
        ↓
@@ -377,28 +381,26 @@ Render detecta el cambio en GitHub (Webhook automático)
 Render construye y despliega el backend
 ```
 
-### Pipeline de sincronización
+### Pipeline de Build y sincronización
 
-El archivo `azure-pipelines.yml` en la raíz define el pipeline que:
+El archivo `azure-pipelines.yml` en la raíz define dos etapas:
 
-1. Se dispara al hacer merge a `main`
-2. Hace checkout del repositorio de Azure
-3. Configura el remoto de GitHub usando un PAT almacenado en un Variable Group
-4. Hace `push` forzado de la rama `main` hacia GitHub
+1. **Build:** usa Node.js 22, instala dependencias con `npm ci` y compila backend y frontend. Para el backend también genera el cliente Prisma.
+2. **Sync:** solo se ejecuta en `main` después de que Build termine correctamente. Usa el PAT del Variable Group `github-sync-secrets` para sincronizar `main` con GitHub.
 
-### Gate de PR
+### Validación requerida de PR
 
-El pipeline de PR ejecuta los tests de bootstrap del backend en un contenedor Docker antes de permitir el merge.
+Azure Repos no activa la validación de PR con `pr:` en YAML. Para bloquear merges cuando Build falla, configura **Build Validation** en `Repos > Branches > main > Branch policies`, selecciona este pipeline y déjalo como requerido y automático. Si ya hay otra política que ejecuta los smoke tests de bootstrap, revisa si se debe conservar para evitar validaciones duplicadas. La expiración inmediata de validaciones cuando cambia `main` ofrece mayor frescura, pero puede volver a ejecutar builds de PR abiertos.
 
 ### Costos
 
 | Plataforma      | Plan gratuito                                 | Límite                         |
 | --------------- | --------------------------------------------- | ------------------------------ |
-| Azure Pipelines | 1 job paralelo, 1,800 min/mes                 | Suficiente para sincronización |
+| Azure Pipelines | 1 job paralelo, 1,800 min/mes                 | Compartido entre validaciones de PR y builds de `main` |
 | GitHub Actions  | 2,000 min/mes (privado) o ilimitado (público) | No usado actualmente           |
 | Render          | Web Service gratuito                          | Con cold starts                |
 
-> **Nota:** Como el pipeline de Azure solo hace un `git push` (menos de 1 minuto por ejecución), es muy poco probable que se superen los límites gratuitos.
+> **Nota:** Cada actualización de un PR puede ejecutar Build y el merge a `main` vuelve a ejecutar Build antes de sincronizar. El consumo mensual depende de la duración medida de cada build y del número de PR/actualizaciones; revisa el uso de minutos en Azure DevOps.
 
 ---
 

@@ -6,23 +6,62 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-variables:
-  - group: github-sync-secrets # Grupo con GH_PAT
+stages:
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: BuildApplications
+        displayName: Build backend and frontend
+        steps:
+          - checkout: self
 
-steps:
-  - checkout: self
-    fetchDepth: 0
+          - task: NodeTool@0
+            displayName: Use Node.js 22
+            inputs:
+              versionSpec: 22.x
 
-  - script: |
-      git config --global user.email "ci-bot@intelligentnutrition.shop"
-      git config --global user.name "CI-CD Bot"
+          - script: npm ci
+            displayName: Install backend dependencies
+            workingDirectory: backend
 
-      git remote add deploy "https://github.com/fredylopez01/intelligent-nutrition.git"
+          - script: npx prisma generate
+            displayName: Generate Prisma client
+            workingDirectory: backend
 
-      git checkout -B main
+          - script: npm run build
+            displayName: Build backend
+            workingDirectory: backend
 
-      AUTH_HEADER="AUTHORIZATION: basic $(echo -n x-access-token:$GH_PAT | base64 -w0)"
-      git -c http.https://github.com/.extraheader="$AUTH_HEADER" push deploy main --force
-    displayName: "Sync main branch to GitHub"
-    env:
-      GH_PAT: $(GH_PAT)
+          - script: npm ci
+            displayName: Install frontend dependencies
+            workingDirectory: frontend
+
+          - script: npm run build
+            displayName: Build frontend
+            workingDirectory: frontend
+
+  - stage: Sync
+    displayName: Sync GitHub mirror
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      - group: github-sync-secrets
+    jobs:
+      - job: SyncToGitHub
+        displayName: Sync main to GitHub
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - script: |
+              git config --global user.email "ci-bot@intelligentnutrition.shop"
+              git config --global user.name "CI-CD Bot"
+
+              git remote add deploy "https://github.com/fredylopez01/intelligent-nutrition.git"
+              git checkout -B main
+
+              AUTH_HEADER="AUTHORIZATION: basic $(echo -n x-access-token:$GH_PAT | base64 -w0)"
+              git -c http.https://github.com/.extraheader="$AUTH_HEADER" push deploy main --force
+            displayName: Push main to GitHub
+            env:
+              GH_PAT: $(GH_PAT)
