@@ -21,6 +21,7 @@ import {
 const CLOSURE_SELECT = {
   id: true,
   branchId: true,
+  cashShiftId: true,
   closureDate: true,
   status: true,
   confirmed: true,
@@ -108,6 +109,7 @@ function toClosureResponse(
   return {
     id: closure.id,
     branchId: closure.branchId,
+    cashShiftId: closure.cashShiftId,
     branchName: closure.branch.name,
     closureDate: formatExpirationDate(closure.closureDate),
     status: closure.status,
@@ -284,6 +286,21 @@ export class InventoryClosuresService {
       this.assertBranchScope(closure.branchId, currentUser);
       this.assertPending(closure);
 
+      const cashShift = await tx.cashShift.findFirst({
+        where: {
+          branchId: closure.branchId,
+          status: "OPEN",
+        },
+        orderBy: { openedAt: "desc" },
+        select: { id: true },
+      });
+      if (!cashShift) {
+        throw new BadRequestException({
+          code: "ACTIVE_CASH_SHIFT_REQUIRED",
+          message: "An active cash shift is required to close inventory.",
+        });
+      }
+
       const pending = closure.details.filter(
         (detail) => detail.physicalQuantity === null,
       );
@@ -317,6 +334,7 @@ export class InventoryClosuresService {
       const updated = await tx.inventoryClosure.update({
         where: { id: closureId },
         data: {
+          cashShiftId: cashShift.id,
           status: "CONFIRMED",
           confirmed: true,
           locked: true,
