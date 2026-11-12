@@ -454,6 +454,7 @@ model Sale {
   saleAt         DateTime   @default(now()) @map("sale_at") @db.Timestamp(6)
   subtotal       Decimal    @db.Decimal(12, 2)
   discountAmount Decimal    @map("discount_amount") @db.Decimal(12, 2)
+  discountReason String?    @map("discount_reason") @db.VarChar(200)
   taxAmount      Decimal    @map("tax_amount") @db.Decimal(12, 2)
   total          Decimal    @db.Decimal(12, 2)
   promotionId    String?    @map("promotion_id") @db.Uuid

@@ -31,7 +31,7 @@ vi.mock('../../services/paymentMethods.service', () => ({
 }))
 
 vi.mock('../../services/promotions.service', () => ({
-  promotionsService: { getActive: vi.fn() },
+  promotionsService: { listApplicable: vi.fn() },
 }))
 
 vi.mock('../../services/categories.service', () => ({
@@ -102,7 +102,7 @@ beforeEach(() => {
   sellable.mockResolvedValue(page([whey, creatine]))
   listMethods.mockResolvedValue(paymentMethodsPage([CASH, NEQUI]))
   createSale.mockResolvedValue(buildSale())
-  vi.mocked(promotionsService.getActive).mockResolvedValue(null)
+  vi.mocked(promotionsService.listApplicable).mockResolvedValue([])
   const empty = { data: [], meta: { page: 1, limit: 100, total: 0, totalPages: 0 } }
   vi.mocked(categoriesService.list).mockResolvedValue({
     data: [{ id: 'cat-protein', name: 'Proteínas', description: null, active: true }],
@@ -142,7 +142,7 @@ describe('PosPage', () => {
         name: 'Creatina 300 g: ya agregaste todas las unidades disponibles',
       }),
     ).toBeDisabled()
-    expect(screen.getByText('$ 389.900')).toBeInTheDocument()
+    expect(screen.getAllByText('$ 389.900')).toHaveLength(2)
   })
 
   it('changes and removes quantities from the selection', async () => {
@@ -238,7 +238,7 @@ describe('PosPage', () => {
     await user.type(quantity, '9')
 
     expect(quantity).toHaveValue('3')
-    expect(screen.getByText('$ 435.000')).toBeInTheDocument()
+    expect(screen.getAllByText('$ 435.000')).toHaveLength(2)
   })
 
   it('charges the sale with the chosen method and shows the ticket', async () => {
@@ -262,6 +262,7 @@ describe('PosPage', () => {
       {
         branchId: 'branch-centro',
         items: [{ productId: 'product-whey', quantity: 2 }],
+        promotionId: null,
         payments: [{ paymentMethodId: 'pm-nequi', amount: '290000.00', reference: 'NQ-123' }],
       },
       'test-token',
@@ -307,19 +308,19 @@ describe('PosPage', () => {
   })
 
   it('shows the active promotion in the sale totals', async () => {
-    vi.mocked(promotionsService.getActive).mockResolvedValue(
+    vi.mocked(promotionsService.listApplicable).mockResolvedValue([
       buildPromotion({ active: true, name: 'Black Friday', discountPercentage: '15.00' }),
-    )
+    ])
     const { user } = renderPage()
     await user.click(
       await screen.findByRole('button', { name: 'Agregar Whey Protein 2 lb a la venta' }),
     )
 
     const selection = within(screen.getByRole('complementary', { name: 'Venta en curso' }))
-    expect(await selection.findByText('Black Friday (15 %)')).toBeInTheDocument()
+    expect(await selection.findByText('Promoción Black Friday (15 %)')).toBeInTheDocument()
     expect(selection.getByText('−$ 21.750')).toBeInTheDocument()
     expect(selection.getByText('$ 123.250')).toBeInTheDocument()
-    expect(promotionsService.getActive).toHaveBeenCalledWith('test-token')
+    expect(promotionsService.listApplicable).toHaveBeenCalledWith('test-token')
   })
 
   it('does not ask for the promotion when the user only consults the products', async () => {
@@ -327,7 +328,7 @@ describe('PosPage', () => {
     renderPage()
 
     await screen.findByText('Whey Protein 2 lb')
-    expect(promotionsService.getActive).not.toHaveBeenCalled()
+    expect(promotionsService.listApplicable).not.toHaveBeenCalled()
   })
 
   it('splits the payment between the active methods', async () => {
@@ -344,6 +345,119 @@ describe('PosPage', () => {
     await user.type(second.getByLabelText('Monto'), '45000')
     expect(screen.getByText('Los pagos superan el total por $ 45.000.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Añadir pago' })).not.toBeInTheDocument()
+  })
+
+  it('charges every payment of a split sale and starts the next one with a single payment', async () => {
+    const { user } = renderPage()
+    await user.click(
+      await screen.findByRole('button', { name: 'Agregar Whey Protein 2 lb a la venta' }),
+    )
+    await waitFor(() => expect(screen.getByLabelText('Método de pago')).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Añadir pago' }))
+    const first = within(screen.getByRole('group', { name: 'Pago 1' }))
+    const second = within(screen.getByRole('group', { name: 'Pago 2' }))
+    await user.clear(first.getByLabelText('Monto'))
+    await user.type(first.getByLabelText('Monto'), '100.000')
+    await user.type(second.getByLabelText('Monto'), '45000')
+    await user.type(second.getByLabelText('Referencia del pago (opcional)'), 'NQ-5')
+    await user.click(screen.getByRole('button', { name: 'Finalizar venta' }))
+
+    const dialog = within(screen.getByRole('dialog', { name: 'Confirmar venta' }))
+    await user.click(await dialog.findByRole('button', { name: /Cobrar\s\$\s145\.000/ }))
+
+    expect(createSale).toHaveBeenCalledWith(
+      {
+        branchId: 'branch-centro',
+        items: [{ productId: 'product-whey', quantity: 1 }],
+        promotionId: null,
+        payments: [
+          { paymentMethodId: 'pm-cash', amount: '100000.00', reference: null },
+          { paymentMethodId: 'pm-nequi', amount: '45000.00', reference: 'NQ-5' },
+        ],
+      },
+      'test-token',
+    )
+    const ticket = within(await screen.findByRole('dialog', { name: 'Venta registrada' }))
+    await user.click(ticket.getByRole('button', { name: 'Nueva venta' }))
+    expect(screen.getAllByRole('group', { name: /^Pago \d$/ })).toHaveLength(1)
+    expect(screen.queryByLabelText('Monto')).not.toBeInTheDocument()
+  })
+
+  it('blocks the charge when the split payments do not match the total', async () => {
+    const { user } = renderPage()
+    await user.click(
+      await screen.findByRole('button', { name: 'Agregar Whey Protein 2 lb a la venta' }),
+    )
+    await waitFor(() => expect(screen.getByLabelText('Método de pago')).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Añadir pago' }))
+    await user.type(
+      within(screen.getByRole('group', { name: 'Pago 2' })).getByLabelText('Monto'),
+      '5000',
+    )
+    await user.click(screen.getByRole('button', { name: 'Finalizar venta' }))
+
+    const dialog = within(screen.getByRole('dialog', { name: 'Confirmar venta' }))
+    expect(await dialog.findByText(/Los pagos suman \$\s150\.000/)).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: /Cobrar\s\$\s145\.000/ })).toBeDisabled()
+  })
+
+  it('checks the active promotion again when the checkout opens', async () => {
+    const listApplicable = vi.mocked(promotionsService.listApplicable)
+    listApplicable
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([buildPromotion({ active: true, discountPercentage: '10.00' })])
+    const { user } = renderPage()
+    await user.click(
+      await screen.findByRole('button', { name: 'Agregar Whey Protein 2 lb a la venta' }),
+    )
+    await waitFor(() => expect(screen.getByLabelText('Método de pago')).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Finalizar venta' }))
+
+    const dialog = within(screen.getByRole('dialog', { name: 'Confirmar venta' }))
+    await user.click(await dialog.findByRole('button', { name: /Cobrar\s\$\s130\.500/ }))
+
+    expect(listApplicable).toHaveBeenCalledTimes(2)
+    expect(createSale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promotionId: 'promo-black-friday',
+        payments: [{ paymentMethodId: 'pm-cash', amount: '130500.00', reference: null }],
+      }),
+      'test-token',
+    )
+  })
+
+  it('charges a custom discount for a customer and resets it for the next sale', async () => {
+    vi.mocked(promotionsService.listApplicable).mockResolvedValue([
+      buildPromotion({ active: true, name: 'Black Friday', discountPercentage: '15.00' }),
+    ])
+    const { user } = renderPage()
+    await user.click(
+      await screen.findByRole('button', { name: 'Agregar Whey Protein 2 lb a la venta' }),
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('Descuento')).toHaveValue('promo:promo-black-friday'),
+    )
+    await user.selectOptions(screen.getByLabelText('Descuento'), 'custom')
+    await user.click(screen.getByRole('radio', { name: 'Valor en pesos' }))
+    await user.type(screen.getByLabelText('Valor del descuento'), '5.000')
+    await user.type(screen.getByLabelText('Motivo del descuento'), 'Cliente frecuente')
+    await user.click(screen.getByRole('button', { name: 'Finalizar venta' }))
+
+    const dialog = within(screen.getByRole('dialog', { name: 'Confirmar venta' }))
+    await user.click(await dialog.findByRole('button', { name: /Cobrar\s\$\s140\.000/ }))
+
+    expect(createSale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promotionId: null,
+        discountAmount: '5000.00',
+        discountReason: 'Cliente frecuente',
+        payments: [{ paymentMethodId: 'pm-cash', amount: '140000.00', reference: null }],
+      }),
+      'test-token',
+    )
+    const ticket = within(await screen.findByRole('dialog', { name: 'Venta registrada' }))
+    await user.click(ticket.getByRole('button', { name: 'Nueva venta' }))
+    expect(screen.getByLabelText('Descuento')).toHaveValue('promo:promo-black-friday')
   })
 
   it('keeps the sale when the checkout is cancelled', async () => {

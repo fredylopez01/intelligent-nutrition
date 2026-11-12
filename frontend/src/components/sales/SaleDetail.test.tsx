@@ -99,6 +99,22 @@ describe('SaleDetail', () => {
     expect(totals.getByText('$ 246.500')).toBeInTheDocument()
   })
 
+  it('shows the reason of a custom discount', () => {
+    const { container } = render(
+      <SaleDetail
+        sale={buildSale({
+          discountAmount: '20000.00',
+          discountReason: 'Cliente frecuente',
+          total: '270000.00',
+        })}
+      />,
+    )
+    const totals = within(container.querySelector('.sale-detail__totals') as HTMLElement)
+
+    expect(totals.getByText('Descuentos · Cliente frecuente')).toBeInTheDocument()
+    expect(totals.getByText('−$ 20.000')).toBeInTheDocument()
+  })
+
   it('hides the promotion row when the sale had none', () => {
     const { container } = render(
       <SaleDetail sale={buildSale({ promotionId: null, promotionDiscount: null })} />,

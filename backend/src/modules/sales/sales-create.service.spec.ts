@@ -7,6 +7,7 @@ import {
   it,
   jest,
 } from "@jest/globals";
+import { UnprocessableEntityException } from "@nestjs/common";
 import type { TestingModule } from "@nestjs/testing";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 
@@ -94,6 +95,7 @@ const auditMock = {
 };
 const promotionsMock = {
   findActive: jest.fn<AsyncMock>(),
+  findApplicableById: jest.fn<AsyncMock>(),
 };
 
 jest.unstable_mockModule("../../database/prisma/prisma.service.js", () => ({
@@ -117,6 +119,7 @@ type SaleCreateData = {
   customerId: string | null;
   subtotal: string;
   discountAmount: string;
+  discountReason: string | null;
   taxAmount: string;
   total: string;
   promotionId: string | null;
@@ -661,6 +664,82 @@ describe("SalesService.create", () => {
     });
   });
 
+  describe("promotion chosen by the seller", () => {
+    it("sells without a promotion when promotionId is null", async () => {
+      await service.create({ ...baseDto, promotionId: null }, superadmin);
+
+      expect(promotionsMock.findActive).not.toHaveBeenCalled();
+      expect(promotionsMock.findApplicableById).not.toHaveBeenCalled();
+      expect(createdSaleData()).toMatchObject({
+        promotionId: null,
+        promotionDiscount: null,
+        total: "24.70",
+      });
+    });
+
+    it("applies the promotion chosen instead of the active one", async () => {
+      promotionsMock.findApplicableById.mockResolvedValue({
+        id: "chosen-id",
+        discountPercentage: "10.00",
+      });
+      const dto = {
+        ...baseDto,
+        promotionId: "chosen-id",
+        payments: [{ paymentMethodId: cashMethodId, amount: "22.23" }],
+      };
+
+      await service.create(dto, superadmin);
+
+      expect(promotionsMock.findApplicableById).toHaveBeenCalledWith(
+        "chosen-id",
+      );
+      expect(promotionsMock.findActive).not.toHaveBeenCalled();
+      expect(createdSaleData()).toMatchObject({
+        promotionId: "chosen-id",
+        promotionDiscount: "2.47",
+        total: "22.23",
+      });
+    });
+
+    it("stops the sale when the chosen promotion is not valid", async () => {
+      promotionsMock.findApplicableById.mockRejectedValue(
+        new UnprocessableEntityException({ code: "PROMOTION_NOT_APPLICABLE" }),
+      );
+
+      await expect(
+        service.create({ ...baseDto, promotionId: "old-id" }, superadmin),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: "PROMOTION_NOT_APPLICABLE" },
+      });
+      expect(transactionMock.sale.create).not.toHaveBeenCalled();
+    });
+
+    it("records the custom discount with its reason", async () => {
+      const dto = {
+        ...baseDto,
+        promotionId: null,
+        discountAmount: "4.70",
+        discountReason: "  Cliente frecuente  ",
+        payments: [{ paymentMethodId: cashMethodId, amount: "20.00" }],
+      };
+
+      await service.create(dto, superadmin);
+
+      expect(createdSaleData()).toMatchObject({
+        discountAmount: "4.70",
+        discountReason: "Cliente frecuente",
+        total: "20.00",
+      });
+    });
+
+    it("stores no reason when none is sent", async () => {
+      await service.create(baseDto, superadmin);
+
+      expect(createdSaleData().discountReason).toBeNull();
+    });
+  });
+
   describe("discount limits", () => {
     it("rejects an item discount greater than its subtotal", async () => {
       const dto = {
@@ -1023,6 +1102,7 @@ describe("SalesService.create", () => {
         saleAt: saleDate,
         subtotal: "24.70",
         discountAmount: "2.00",
+        discountReason: null,
         taxAmount: "1.00",
         total: "23.70",
         promotionId: null,

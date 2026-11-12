@@ -1,19 +1,21 @@
 import type { PaymentMethod } from '../../types/paymentMethod'
 import type { Promotion } from '../../types/promotion'
-import type { PaymentDraft, SellableProduct } from '../../types/sale'
+import type { DiscountChoice, PaymentDraft, SellableProduct } from '../../types/sale'
 import { formatPrice } from '../../utils/products'
-import { formatPercentage } from '../../utils/promotions'
 import {
   PAYMENT_REFERENCE_MAX_LENGTH,
   centsToInput,
   createPaymentDraft,
+  discountReady,
   paymentsBalance,
-  promotionDiscountCents,
   selectionTotalCents,
+  type ResolvedDiscount,
 } from '../../utils/sales'
 import { Button } from '../ui/Button'
 import { SelectField } from '../ui/SelectField'
 import { TextField } from '../ui/TextField'
+
+import { DiscountPicker } from './DiscountPicker'
 
 import './PointOfSale.css'
 
@@ -27,7 +29,12 @@ interface PosSelectionProps {
   onChangeQuantity: (productId: string, quantity: number) => void
   onRemove: (productId: string) => void
   onClear: () => void
-  promotion: Promotion | null
+  promotions: Promotion[]
+  promotionsStatus: 'loading' | 'success' | 'error'
+  discountChoice: DiscountChoice | null
+  discount: ResolvedDiscount
+  onDiscountChange: (choice: DiscountChoice) => void
+  onRetryPromotions: () => void
   paymentMethods: PaymentMethod[]
   paymentStatus: 'loading' | 'success' | 'error'
   payments: PaymentDraft[]
@@ -41,7 +48,12 @@ export function PosSelection({
   onChangeQuantity,
   onRemove,
   onClear,
-  promotion,
+  promotions,
+  promotionsStatus,
+  discountChoice,
+  discount,
+  onDiscountChange,
+  onRetryPromotions,
   paymentMethods,
   paymentStatus,
   payments,
@@ -51,8 +63,7 @@ export function PosSelection({
 }: PosSelectionProps) {
   const units = lines.reduce((sum, line) => sum + line.quantity, 0)
   const subtotalCents = selectionTotalCents(lines)
-  const discountCents = promotionDiscountCents(subtotalCents, promotion?.discountPercentage)
-  const totalCents = subtotalCents - discountCents
+  const totalCents = subtotalCents - discount.cents
   const noMethods = paymentStatus === 'success' && paymentMethods.length === 0
   const isSplit = payments.length > 1
   const balance = paymentsBalance(payments, totalCents)
@@ -185,25 +196,31 @@ export function PosSelection({
           <dt>Unidades</dt>
           <dd>{units}</dd>
         </div>
-        {promotion && (
-          <>
-            <div>
-              <dt>Subtotal</dt>
-              <dd>{formatPrice(subtotalCents / 100)}</dd>
-            </div>
-            <div className="pos-selection__discount">
-              <dt>
-                {promotion.name} ({formatPercentage(promotion.discountPercentage)})
-              </dt>
-              <dd>−{formatPrice(discountCents / 100)}</dd>
-            </div>
-          </>
+        <div>
+          <dt>Subtotal</dt>
+          <dd>{formatPrice(subtotalCents / 100)}</dd>
+        </div>
+        {discount.cents > 0 && discount.label && (
+          <div className="pos-selection__discount">
+            <dt>{discount.label}</dt>
+            <dd>−{formatPrice(discount.cents / 100)}</dd>
+          </div>
         )}
         <div className="pos-selection__total">
           <dt>Total</dt>
           <dd>{formatPrice(totalCents / 100)}</dd>
         </div>
       </dl>
+
+      <DiscountPicker
+        promotions={promotions}
+        promotionsStatus={promotionsStatus}
+        choice={discountChoice}
+        discount={discount}
+        disabled={lines.length === 0}
+        onChange={onDiscountChange}
+        onRetryPromotions={onRetryPromotions}
+      />
 
       <fieldset className="pos-selection__payment">
         <legend className={isSplit ? 'pos-selection__legend' : 'sr-only'}>
@@ -329,7 +346,10 @@ export function PosSelection({
         )}
       </fieldset>
 
-      <Button onClick={onCheckout} disabled={lines.length === 0 || missingMethod}>
+      <Button
+        onClick={onCheckout}
+        disabled={lines.length === 0 || missingMethod || !discountReady(discount)}
+      >
         Finalizar venta
       </Button>
       <p className="pos-selection__note">

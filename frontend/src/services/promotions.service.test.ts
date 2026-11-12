@@ -46,6 +46,13 @@ describe('promotionsService', () => {
     await expect(promotionsService.getActive('token')).resolves.toBeNull()
   })
 
+  it('lists the promotions valid today for the point of sale', async () => {
+    vi.mocked(http.get).mockResolvedValue([BLACK_FRIDAY])
+
+    await expect(promotionsService.listApplicable('token')).resolves.toEqual([BLACK_FRIDAY])
+    expect(http.get).toHaveBeenCalledWith('/promotions/applicable', { token: 'token' })
+  })
+
   it('creates a promotion with its optional dates', async () => {
     vi.mocked(http.post).mockResolvedValue(BLACK_FRIDAY)
 

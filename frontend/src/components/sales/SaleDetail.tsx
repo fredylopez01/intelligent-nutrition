@@ -88,7 +88,9 @@ export function SaleDetail({ sale }: SaleDetailProps) {
           {hasAdjustments && (
             <>
               <div>
-                <dt>Descuentos</dt>
+                <dt>
+                  {sale.discountReason ? `Descuentos · ${sale.discountReason}` : 'Descuentos'}
+                </dt>
                 <dd>−{formatPrice(sale.discountAmount)}</dd>
               </div>
               <div>

@@ -29,6 +29,7 @@ const saleSelect = {
   saleAt: true,
   subtotal: true,
   discountAmount: true,
+  discountReason: true,
   taxAmount: true,
   total: true,
   promotionId: true,
@@ -107,6 +108,7 @@ function formatSaleResponse(sale: SaleWithRelations) {
     saleAt: sale.saleAt,
     subtotal: Number(sale.subtotal).toFixed(2),
     discountAmount: Number(sale.discountAmount).toFixed(2),
+    discountReason: sale.discountReason ?? null,
     taxAmount: Number(sale.taxAmount).toFixed(2),
     total: Number(sale.total).toFixed(2),
     promotionId: sale.promotionId ?? null,
@@ -321,7 +323,12 @@ export class SalesService {
       const generalTaxCents = toCents(dto.taxAmount ?? "0.00");
       const discountAmountCents = itemsDiscountCents + generalDiscountCents;
       const taxAmountCents = itemsTaxCents + generalTaxCents;
-      const activePromotion = await this.promotionsService.findActive();
+      const activePromotion =
+        dto.promotionId === undefined
+          ? await this.promotionsService.findActive()
+          : dto.promotionId === null
+            ? null
+            : await this.promotionsService.findApplicableById(dto.promotionId);
       const promotionDiscountCents = activePromotion
         ? Math.round(
             (subtotalCents * Number(activePromotion.discountPercentage)) / 100,
@@ -457,6 +464,7 @@ export class SalesService {
           saleAt: now,
           subtotal: toMoney(subtotalCents),
           discountAmount: toMoney(discountAmountCents),
+          discountReason: dto.discountReason?.trim() || null,
           taxAmount: toMoney(taxAmountCents),
           total: toMoney(totalCents),
           promotionId: activePromotion?.id ?? null,

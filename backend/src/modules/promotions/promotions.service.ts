@@ -91,6 +91,20 @@ function toPromotionResponse(promotion: PromotionRecord) {
   };
 }
 
+function startOfUtcDay(): Date {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  return today;
+}
+
+function currentPeriodConditions(): Prisma.PromotionWhereInput[] {
+  const today = startOfUtcDay();
+  return [
+    { OR: [{ startDate: null }, { startDate: { lte: today } }] },
+    { OR: [{ endDate: null }, { endDate: { gte: today } }] },
+  ];
+}
+
 function promotionNotFound() {
   return new NotFoundException({
     code: "NOT_FOUND",
@@ -248,25 +262,46 @@ export class PromotionsService {
   }
 
   async findActive() {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-
     const promotion = await this.prisma.promotion.findFirst({
-      where: {
-        active: true,
-        AND: [
-          {
-            OR: [{ startDate: null }, { startDate: { lte: today } }],
-          },
-          {
-            OR: [{ endDate: null }, { endDate: { gte: today } }],
-          },
-        ],
-      },
+      where: { active: true, AND: currentPeriodConditions() },
       select: promotionSelect,
     });
 
     return promotion ? toPromotionResponse(promotion) : null;
+  }
+
+  async findApplicable() {
+    const promotions = await this.prisma.promotion.findMany({
+      where: { AND: currentPeriodConditions() },
+      orderBy: [{ active: "desc" }, { name: "asc" }],
+      select: promotionSelect,
+    });
+
+    return promotions.map(toPromotionResponse);
+  }
+
+  async findApplicableById(promotionId: string) {
+    const promotion = await this.prisma.promotion.findUnique({
+      where: { id: promotionId },
+      select: promotionSelect,
+    });
+
+    if (!promotion) {
+      throw promotionNotFound();
+    }
+
+    const today = startOfUtcDay();
+    const started = !promotion.startDate || promotion.startDate <= today;
+    const notEnded = !promotion.endDate || promotion.endDate >= today;
+    if (!started || !notEnded) {
+      throw new UnprocessableEntityException({
+        code: "PROMOTION_NOT_APPLICABLE",
+        message: "The promotion is not valid today.",
+        details: { promotionId },
+      });
+    }
+
+    return toPromotionResponse(promotion);
   }
 
   async findOne(promotionId: string) {

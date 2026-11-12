@@ -162,6 +162,28 @@ export class CreateSaleDto {
   })
   taxAmount?: string;
 
+  @ApiPropertyOptional({
+    type: String,
+    format: "uuid",
+    nullable: true,
+    description:
+      "Promotion to apply. Omit it to apply the active promotion, send null to sell without a promotion.",
+  })
+  @IsOptional()
+  @IsUUID()
+  promotionId?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: 200,
+    description: "Reason of the custom discount sent in discountAmount.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  discountReason?: string | null;
+
   @ApiProperty({
     type: [CreateSalePaymentDto],
     minItems: 1,
