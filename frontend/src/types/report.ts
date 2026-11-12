@@ -19,3 +19,16 @@ export interface SalesReportResponse {
   data: SalesReportRow[]
   meta: PaginationMeta
 }
+
+export interface RestockReportRow {
+  productId: string
+  name: string
+  referenceCode: string
+  branchId: string
+  branchName: string
+  currentQuantity: number
+  minimumStock: number
+  deficit: number
+  projectedDemand7d: number
+  suggestedUnits: number
+}

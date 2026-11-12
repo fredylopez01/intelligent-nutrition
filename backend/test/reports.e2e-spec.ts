@@ -31,6 +31,8 @@ interface RestockRow {
   currentQuantity: number;
   minimumStock: number;
   deficit: number;
+  projectedDemand7d: number;
+  suggestedUnits: number;
 }
 
 interface ApiError {
@@ -73,10 +75,8 @@ describe("GET /api/v1/reports (e2e)", () => {
 
   const rowsOf = (body: unknown) => (body as SalesReportBody).data;
 
-  // The service already returns { data: rows }, so the global interceptor wraps it
-  // again: the endpoint responds { data: { data: rows } } instead of the contract shape.
   const restockRowsOf = (body: unknown): RestockRow[] =>
-    (body as { data: { data: RestockRow[] } }).data.data;
+    (body as { data: RestockRow[] }).data;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -309,11 +309,9 @@ describe("GET /api/v1/reports (e2e)", () => {
       ["sales", "/api/v1/reports/sales"],
       ["restock", "/api/v1/reports/restock"],
     ])("denies the BRANCH_ASSISTANT role on %s", async (_name, path) => {
-      const response = await get(
-        path,
-        tokens.BRANCH_ASSISTANT,
-        RANGE,
-      ).expect(403);
+      const response = await get(path, tokens.BRANCH_ASSISTANT, RANGE).expect(
+        403,
+      );
 
       expect((response.body as ApiError).error.code).toBe(
         "INSUFFICIENT_PERMISSIONS",
@@ -411,9 +409,7 @@ describe("GET /api/v1/reports (e2e)", () => {
         to: "2026-10-01",
       }).expect(400);
 
-      expect((response.body as ApiError).error.code).toBe(
-        "INVALID_DATE_RANGE",
-      );
+      expect((response.body as ApiError).error.code).toBe("INVALID_DATE_RANGE");
     });
 
     it("paginates the grouped rows", async () => {
@@ -484,6 +480,82 @@ describe("GET /api/v1/reports (e2e)", () => {
   });
 
   describe("restock report", () => {
+    const DEMAND_SALE = `RPT-DEM-${runId}`;
+
+    beforeAll(async () => {
+      const recent = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      const old = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000);
+      const saleWith = (suffix: string, saleAt: Date, quantity: number) =>
+        prisma.sale.create({
+          data: {
+            saleNumber: `${DEMAND_SALE}-${suffix}`,
+            branchId: branchAId,
+            userId: personIds[0],
+            saleAt,
+            subtotal: "600000.00",
+            discountAmount: "0.00",
+            taxAmount: "0.00",
+            total: "600000.00",
+            status: "COMPLETED",
+            details: {
+              create: {
+                productId: lowProductId,
+                quantity,
+                unitPrice: "10000.00",
+                subtotal: "600000.00",
+                discountAmount: "0.00",
+                taxAmount: "0.00",
+                total: "600000.00",
+              },
+            },
+          },
+        });
+      await saleWith("reciente", recent, 60);
+      await saleWith("antigua", old, 300);
+    });
+
+    afterAll(async () => {
+      await prisma.saleDetail.deleteMany({
+        where: { sale: { saleNumber: { startsWith: DEMAND_SALE } } },
+      });
+      await prisma.sale.deleteMany({
+        where: { saleNumber: { startsWith: DEMAND_SALE } },
+      });
+    });
+
+    it("projects 7 days of demand from the sales of the last 30 days", async () => {
+      const response = await restock(tokens.SUPERADMIN, {
+        branchId: branchAId,
+      }).expect(200);
+      const row = restockRowsOf(response.body).find(
+        (item) => item.productId === lowProductId,
+      );
+
+      expect(row).toMatchObject({
+        currentQuantity: 5,
+        minimumStock: 10,
+        deficit: 5,
+        projectedDemand7d: 14,
+        suggestedUnits: 9,
+      });
+    });
+
+    it("suggests the deficit for a product without recent sales", async () => {
+      const response = await restock(tokens.SUPERADMIN, {
+        branchId: branchAId,
+      }).expect(200);
+      const row = restockRowsOf(response.body).find(
+        (item) => item.name === `${PRODUCT_PREFIX}critico`,
+      );
+
+      expect(row).toMatchObject({
+        currentQuantity: 0,
+        minimumStock: 20,
+        projectedDemand7d: 0,
+        suggestedUnits: 20,
+      });
+    });
+
     it("reports the deficit of a product below its minimum, summing its lots", async () => {
       const response = await restock(tokens.SUPERADMIN, {
         branchId: branchAId,
@@ -538,9 +610,7 @@ describe("GET /api/v1/reports (e2e)", () => {
       const response = await restock(tokens.SUPERADMIN, {
         branchId: branchAId,
       }).expect(200);
-      const deficits = restockRowsOf(response.body).map(
-        (item) => item.deficit,
-      );
+      const deficits = restockRowsOf(response.body).map((item) => item.deficit);
 
       expect(deficits).toEqual([5, 20]);
     });

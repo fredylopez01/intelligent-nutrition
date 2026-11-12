@@ -1,4 +1,4 @@
-import type { SalesReportParams, SalesReportResponse } from '../types/report'
+import type { RestockReportRow, SalesReportParams, SalesReportResponse } from '../types/report'
 
 import { http } from './http'
 
@@ -16,4 +16,7 @@ function buildQuery(params: object): string {
 export const reportsService = {
   sales: (params: SalesReportParams, token: string | null) =>
     http.get<SalesReportResponse>(`${REPORTS_PATH}/sales${buildQuery(params)}`, { token }),
+
+  restock: (params: { branchId?: string }, token: string | null) =>
+    http.get<RestockReportRow[]>(`${REPORTS_PATH}/restock${buildQuery(params)}`, { token }),
 }

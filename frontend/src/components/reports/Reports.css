@@ -39,7 +39,8 @@
   color: var(--color-text-faint);
 }
 
-.reports-table__inline {
+.reports-table__inline,
+.reports-table__inline-text {
   display: none;
 }
 
@@ -65,5 +66,9 @@
 
   .reports-table__inline {
     display: block;
+  }
+
+  .reports-table__inline-text {
+    display: inline;
   }
 }
