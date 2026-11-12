@@ -89,3 +89,10 @@ export interface CreateSalePayload {
   items: { productId: string; quantity: number }[]
   payments: { paymentMethodId: string; amount: string; reference?: string | null }[]
 }
+
+export interface PaymentDraft {
+  id: string
+  paymentMethodId: string
+  amount: string
+  reference: string
+}

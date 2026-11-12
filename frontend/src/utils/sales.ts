@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { ApiError } from '../services/http'
 import type { RoleName } from '../types/auth'
-import type { SaleStatus } from '../types/sale'
+import type { PaymentDraft, SaleStatus } from '../types/sale'
 
 export const SALE_REGISTER_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER', 'BRANCH_ASSISTANT']
 export const SALE_REVERSE_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER', 'BRANCH_ASSISTANT']
@@ -52,6 +52,62 @@ export function promotionDiscountCents(
 ): number {
   if (!discountPercentage) return 0
   return Math.round((subtotalCents * Number(discountPercentage)) / 100)
+}
+
+export const PAYMENT_REFERENCE_MAX_LENGTH = 100
+
+let paymentDraftSequence = 0
+
+export function createPaymentDraft(paymentMethodId = '', amount = ''): PaymentDraft {
+  paymentDraftSequence += 1
+  return { id: `payment-${paymentDraftSequence}`, paymentMethodId, amount, reference: '' }
+}
+
+const THOUSANDS_PATTERN = /^\d{1,3}(\.\d{3})+$/
+const AMOUNT_PATTERN = /^\d+(\.\d{1,2})?$/
+
+export function parseAmountCents(text: string): number | null {
+  let value = text.replace(/[\s$]/g, '')
+  if (!value) return null
+  if (value.includes(',')) value = value.replace(/\./g, '').replace(',', '.')
+  else if (THOUSANDS_PATTERN.test(value)) value = value.replace(/\./g, '')
+  if (!AMOUNT_PATTERN.test(value)) return null
+  return toCents(value)
+}
+
+export function centsToInput(cents: number): string {
+  return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2).replace('.', ',')
+}
+
+export interface PaymentsBalance {
+  amounts: (number | null)[]
+  assignedCents: number
+  differenceCents: number
+  complete: boolean
+  matches: boolean
+}
+
+export function paymentsBalance(
+  payments: { amount: string }[],
+  totalCents: number,
+): PaymentsBalance {
+  const amounts =
+    payments.length === 1
+      ? [totalCents]
+      : payments.map((payment) => {
+          const cents = parseAmountCents(payment.amount)
+          return cents !== null && cents > 0 ? cents : null
+        })
+  const assignedCents = amounts.reduce<number>((sum, cents) => sum + (cents ?? 0), 0)
+  const complete = amounts.every((cents) => cents !== null)
+  const differenceCents = totalCents - assignedCents
+  return {
+    amounts,
+    assignedCents,
+    differenceCents,
+    complete,
+    matches: complete && differenceCents === 0,
+  }
 }
 
 export interface StockShortage {
