@@ -4,6 +4,9 @@ import { ApiError } from '../services/http'
 
 import {
   centsToAmount,
+  centsToInput,
+  parseAmountCents,
+  paymentsBalance,
   promotionDiscountCents,
   selectionTotalCents,
   stockShortages,
@@ -27,6 +30,49 @@ describe('sale helpers', () => {
     expect(promotionDiscountCents(9999999, '12.50')).toBe(1250000)
     expect(promotionDiscountCents(29000000, null)).toBe(0)
     expect(promotionDiscountCents(29000000, undefined)).toBe(0)
+  })
+
+  it('reads the amounts typed with thousands separators or decimal commas', () => {
+    expect(parseAmountCents('50000')).toBe(5000000)
+    expect(parseAmountCents('50.000')).toBe(5000000)
+    expect(parseAmountCents('$ 1.250.000')).toBe(125000000)
+    expect(parseAmountCents('87.499,99')).toBe(8749999)
+    expect(parseAmountCents('1500,5')).toBe(150050)
+    expect(parseAmountCents('19.99')).toBe(1999)
+    expect(parseAmountCents('')).toBeNull()
+    expect(parseAmountCents('abc')).toBeNull()
+    expect(parseAmountCents('12,345')).toBeNull()
+  })
+
+  it('writes the cents back as an editable amount', () => {
+    expect(centsToInput(29000000)).toBe('290000')
+    expect(centsToInput(8749999)).toBe('87499,99')
+  })
+
+  it('charges the whole total with a single payment', () => {
+    expect(paymentsBalance([{ amount: '' }], 29000000)).toMatchObject({
+      amounts: [29000000],
+      differenceCents: 0,
+      matches: true,
+    })
+  })
+
+  it('compares several payments with the total', () => {
+    expect(paymentsBalance([{ amount: '190.000' }, { amount: '100000' }], 29000000)).toMatchObject({
+      assignedCents: 29000000,
+      differenceCents: 0,
+      complete: true,
+      matches: true,
+    })
+    expect(paymentsBalance([{ amount: '100000' }, { amount: '90000' }], 29000000)).toMatchObject({
+      differenceCents: 10000000,
+      matches: false,
+    })
+    expect(paymentsBalance([{ amount: '290000' }, { amount: '0' }], 29000000)).toMatchObject({
+      amounts: [29000000, null],
+      complete: false,
+      matches: false,
+    })
   })
 
   it('reads the products without enough stock from the api error', () => {

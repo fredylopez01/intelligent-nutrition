@@ -13,15 +13,16 @@ import { Pagination } from '../../components/ui/Pagination'
 import { ReloadButton } from '../../components/ui/ReloadButton'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { useActivePaymentMethods } from '../../hooks/useActivePaymentMethods'
+import { useActivePromotion } from '../../hooks/useActivePromotion'
 import { useAuth } from '../../hooks/useAuth'
 import { useCatalogOptions } from '../../hooks/useCatalogOptions'
 import { useInventoryBranches } from '../../hooks/useInventoryBranches'
 import { usePagination } from '../../hooks/usePagination'
 import { useSellableProducts } from '../../hooks/useSellableProducts'
 import { AppLayout } from '../../layouts/AppLayout'
-import type { Sale, SellableProduct } from '../../types/sale'
+import type { PaymentDraft, Sale, SellableProduct } from '../../types/sale'
 import { hasRole } from '../../utils/categories'
-import { SALE_REGISTER_ROLES } from '../../utils/sales'
+import { SALE_REGISTER_ROLES, createPaymentDraft } from '../../utils/sales'
 
 import '../inventory/InventoryPage.css'
 import '../../components/sales/PointOfSale.css'
@@ -56,14 +57,18 @@ export function PosPage() {
   })
   const lines = selection.branchId === branch?.id ? selection.lines : []
   const payments = useActivePaymentMethods(canSell)
-  const [chosenMethodId, setChosenMethodId] = useState('')
-  const [reference, setReference] = useState('')
+  const activePromotion = useActivePromotion(canSell)
+  const [paymentDrafts, setPaymentDrafts] = useState<PaymentDraft[]>(() => [createPaymentDraft()])
   const [checkingOut, setCheckingOut] = useState(false)
   const [completedSale, setCompletedSale] = useState<Sale | null>(null)
+  const resolvedPayments = paymentDrafts.map((draft, index) => {
+    const available = payments.paymentMethods.some((method) => method.id === draft.paymentMethodId)
+    if (available) return draft
+    return { ...draft, paymentMethodId: index === 0 ? (payments.paymentMethods[0]?.id ?? '') : '' }
+  })
+  const firstPayment = resolvedPayments[0]
   const paymentMethod =
-    payments.paymentMethods.find((method) => method.id === chosenMethodId) ??
-    payments.paymentMethods[0] ??
-    null
+    payments.paymentMethods.find((method) => method.id === firstPayment.paymentMethodId) ?? null
 
   const { status, products, meta, error, refetch } = useSellableProducts(branch?.id ?? null, {
     ...params,
@@ -101,7 +106,7 @@ export function PosPage() {
   const handleCompleted = (sale: Sale) => {
     setCheckingOut(false)
     setSelection({ branchId: branch?.id ?? '', lines: [] })
-    setReference('')
+    setPaymentDrafts([createPaymentDraft()])
     setCompletedSale(sale)
     refetch()
   }
@@ -291,12 +296,11 @@ export function PosPage() {
             onChangeQuantity={changeQuantity}
             onRemove={removeProduct}
             onClear={() => updateLines(() => [])}
+            promotion={activePromotion.promotion}
             paymentMethods={payments.paymentMethods}
             paymentStatus={payments.status}
-            paymentMethodId={paymentMethod?.id ?? ''}
-            onPaymentMethodChange={setChosenMethodId}
-            reference={reference}
-            onReferenceChange={setReference}
+            payments={resolvedPayments}
+            onPaymentsChange={setPaymentDrafts}
             onRetryPaymentMethods={payments.reload}
             onCheckout={() => setCheckingOut(true)}
           />
@@ -314,7 +318,7 @@ export function PosPage() {
             branch={branch}
             lines={lines}
             paymentMethod={paymentMethod}
-            reference={reference}
+            reference={firstPayment.reference}
             onCompleted={handleCompleted}
             onStockChanged={refetch}
             onCancel={() => setCheckingOut(false)}

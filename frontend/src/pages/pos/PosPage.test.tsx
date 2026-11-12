@@ -11,6 +11,7 @@ import { promotionsService } from '../../services/promotions.service'
 import { salesService } from '../../services/sales.service'
 import { unitsService } from '../../services/units.service'
 import { CASH, NEQUI, paymentMethodsPage } from '../../test-utils/paymentMethods'
+import { buildPromotion } from '../../test-utils/promotions'
 import { buildSale, buildSellable } from '../../test-utils/sales'
 import type { SellableProduct } from '../../types/sale'
 
@@ -303,6 +304,46 @@ describe('PosPage', () => {
 
     expect(await screen.findByText(/No hay métodos de pago activos/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Finalizar venta' })).toBeDisabled()
+  })
+
+  it('shows the active promotion in the sale totals', async () => {
+    vi.mocked(promotionsService.getActive).mockResolvedValue(
+      buildPromotion({ active: true, name: 'Black Friday', discountPercentage: '15.00' }),
+    )
+    const { user } = renderPage()
+    await user.click(
+      await screen.findByRole('button', { name: 'Agregar Whey Protein 2 lb a la venta' }),
+    )
+
+    const selection = within(screen.getByRole('complementary', { name: 'Venta en curso' }))
+    expect(await selection.findByText('Black Friday (15 %)')).toBeInTheDocument()
+    expect(selection.getByText('−$ 21.750')).toBeInTheDocument()
+    expect(selection.getByText('$ 123.250')).toBeInTheDocument()
+    expect(promotionsService.getActive).toHaveBeenCalledWith('test-token')
+  })
+
+  it('does not ask for the promotion when the user only consults the products', async () => {
+    auth.role = 'DEV'
+    renderPage()
+
+    await screen.findByText('Whey Protein 2 lb')
+    expect(promotionsService.getActive).not.toHaveBeenCalled()
+  })
+
+  it('splits the payment between the active methods', async () => {
+    const { user } = renderPage()
+    await user.click(
+      await screen.findByRole('button', { name: 'Agregar Whey Protein 2 lb a la venta' }),
+    )
+    await waitFor(() => expect(screen.getByLabelText('Método de pago')).toBeEnabled())
+
+    await user.click(screen.getByRole('button', { name: 'Añadir pago' }))
+
+    const second = within(screen.getByRole('group', { name: 'Pago 2' }))
+    expect(second.getByLabelText('Método de pago')).toHaveValue('pm-nequi')
+    await user.type(second.getByLabelText('Monto'), '45000')
+    expect(screen.getByText('Los pagos superan el total por $ 45.000.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Añadir pago' })).not.toBeInTheDocument()
   })
 
   it('keeps the sale when the checkout is cancelled', async () => {
