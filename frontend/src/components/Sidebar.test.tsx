@@ -52,6 +52,8 @@ describe('Sidebar menu by role', () => {
       'Inventario',
       'Catálogo',
       'POS',
+      'Caja',
+      'Promociones',
       'Clientes',
       'Proveedores',
       'Usuarios',
@@ -94,6 +96,16 @@ describe('Sidebar menu by role', () => {
       expect(labels).not.toContain(hidden)
     }
   })
+
+  it.each(['BRANCH_LEADER', 'BRANCH_ASSISTANT', 'DEV'])(
+    'hides the promotions from the %s',
+    (role) => {
+      auth.role = role
+      renderSidebar()
+
+      expect(menuLabels()).not.toContain('Promociones')
+    },
+  )
 
   it('does not render disabled entries for hidden modules', () => {
     auth.role = 'BRANCH_ASSISTANT'

@@ -1,0 +1,74 @@
+.promotions-table th.promotions-table__col-discount,
+.promotions-table td.promotions-table__col-discount {
+  width: 7.5rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.promotions-table th.promotions-table__col-period,
+.promotions-table td.promotions-table__col-period {
+  width: 15rem;
+}
+
+.promotions-table__discount {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.promotions-table__period {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+}
+
+.promotions-table__warning {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--color-warning);
+}
+
+.promotions-table__row--active td {
+  background: var(--color-surface-elevated);
+}
+
+.promotions-table__inline {
+  display: none;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  white-space: normal;
+}
+
+.promotion-form__dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.promotion-form__percentage .ui-field__control {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 767px) {
+  .promotions-table th.promotions-table__col-discount,
+  .promotions-table td.promotions-table__col-discount,
+  .promotions-table th.promotions-table__col-period,
+  .promotions-table td.promotions-table__col-period {
+    display: none;
+  }
+
+  .promotions-table__inline {
+    display: block;
+  }
+}
+
+@media (max-width: 479px) {
+  .promotion-form__dates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

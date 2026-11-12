@@ -18,6 +18,7 @@ export const ROUTE_ROLES: Record<string, RoleName[]> = {
   '/usuarios': ['SUPERADMIN', 'DEV'],
   '/auditoria': ['SUPERADMIN', 'DEV'],
   '/caja/turno': ['SUPERADMIN', 'BRANCH_LEADER', 'BRANCH_ASSISTANT'],
+  '/promociones': ['SUPERADMIN'],
 }
 
 export function canAccess(path: string, roleName: string | undefined): boolean {
