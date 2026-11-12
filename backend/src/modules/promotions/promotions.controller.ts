@@ -47,6 +47,12 @@ export class PromotionsController {
     return this.promotionsService.findActive();
   }
 
+  @Get("applicable")
+  @Roles("DEV", "SUPERADMIN", "BRANCH_LEADER", "BRANCH_ASSISTANT")
+  findApplicable() {
+    return this.promotionsService.findApplicable();
+  }
+
   @Get(":promotionId")
   findOne(@Param("promotionId", new ParseUUIDPipe()) promotionId: string) {
     return this.promotionsService.findOne(promotionId);

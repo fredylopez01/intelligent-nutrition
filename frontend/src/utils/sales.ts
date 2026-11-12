@@ -2,7 +2,10 @@ import { z } from 'zod'
 
 import { ApiError } from '../services/http'
 import type { RoleName } from '../types/auth'
-import type { PaymentDraft, SaleStatus } from '../types/sale'
+import type { Promotion } from '../types/promotion'
+import type { DiscountChoice, PaymentDraft, SaleStatus } from '../types/sale'
+
+import { formatPercentage } from './promotions'
 
 export const SALE_REGISTER_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER', 'BRANCH_ASSISTANT']
 export const SALE_REVERSE_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER', 'BRANCH_ASSISTANT']
@@ -52,6 +55,116 @@ export function promotionDiscountCents(
 ): number {
   if (!discountPercentage) return 0
   return Math.round((subtotalCents * Number(discountPercentage)) / 100)
+}
+
+export const DISCOUNT_REASON_MAX_LENGTH = 200
+
+const PERCENTAGE_PATTERN = /^\d{1,3}([.,]\d{1,2})?$/
+
+export interface ResolvedDiscount {
+  kind: DiscountChoice['kind']
+  cents: number
+  label: string | null
+  promotion: Promotion | null
+  needsPromotions: boolean
+  valueError: string | null
+  reasonError: string | null
+  promotionError: string | null
+  payload: { promotionId: string | null; discountAmount?: string; discountReason?: string }
+}
+
+export function resolveDiscount(
+  choice: DiscountChoice | null,
+  promotions: Promotion[],
+  subtotalCents: number,
+): ResolvedDiscount {
+  const base = {
+    cents: 0,
+    label: null,
+    promotion: null,
+    valueError: null,
+    reasonError: null,
+    promotionError: null,
+  }
+  const effective: DiscountChoice =
+    choice ??
+    (() => {
+      const active = promotions.find((promotion) => promotion.active)
+      return active ? { kind: 'promotion', promotionId: active.id } : { kind: 'none' }
+    })()
+
+  if (effective.kind === 'none') {
+    return {
+      ...base,
+      kind: 'none',
+      needsPromotions: choice === null,
+      payload: { promotionId: null },
+    }
+  }
+
+  if (effective.kind === 'promotion') {
+    const promotion = promotions.find((item) => item.id === effective.promotionId) ?? null
+    if (!promotion) {
+      return {
+        ...base,
+        kind: 'promotion',
+        needsPromotions: true,
+        promotionError: 'La promoción elegida ya no está vigente. Elige otro descuento.',
+        payload: { promotionId: effective.promotionId },
+      }
+    }
+    return {
+      ...base,
+      kind: 'promotion',
+      needsPromotions: true,
+      cents: promotionDiscountCents(subtotalCents, promotion.discountPercentage),
+      label: `Promoción ${promotion.name} (${formatPercentage(promotion.discountPercentage)})`,
+      promotion,
+      payload: { promotionId: promotion.id },
+    }
+  }
+
+  const reason = effective.reason.trim()
+  const reasonError = reason ? null : 'Escribe el motivo del descuento.'
+  let cents = 0
+  let valueError: string | null = null
+  let label = 'Descuento personalizado'
+  if (effective.type === 'percentage') {
+    const text = effective.value.trim()
+    const percentage = Number(text.replace(',', '.'))
+    if (!PERCENTAGE_PATTERN.test(text) || percentage <= 0 || percentage > 100) {
+      valueError = 'Escribe un porcentaje mayor que 0 y máximo 100.'
+    } else {
+      cents = Math.round((subtotalCents * percentage) / 100)
+      label = `Descuento personalizado (${formatPercentage(percentage)})`
+    }
+  } else {
+    const amount = parseAmountCents(effective.value)
+    if (amount === null || amount <= 0) {
+      valueError = 'Escribe un valor mayor que 0, por ejemplo 10.000.'
+    } else if (amount > subtotalCents) {
+      valueError = 'El descuento no puede superar el subtotal de la venta.'
+    } else {
+      cents = amount
+    }
+  }
+  const valid = !valueError && !reasonError
+  return {
+    ...base,
+    kind: 'custom',
+    needsPromotions: false,
+    cents: valid ? cents : 0,
+    label,
+    valueError,
+    reasonError,
+    payload: valid
+      ? { promotionId: null, discountAmount: centsToAmount(cents), discountReason: reason }
+      : { promotionId: null },
+  }
+}
+
+export function discountReady(discount: ResolvedDiscount): boolean {
+  return !discount.valueError && !discount.reasonError && !discount.promotionError
 }
 
 export const PAYMENT_REFERENCE_MAX_LENGTH = 100
@@ -129,6 +242,10 @@ export function resolveSaleError(error: unknown, fallback: string): string {
       return 'Ya no hay unidades suficientes de algunos productos. Ajusta las cantidades de la venta.'
     case 'PAYMENT_TOTAL_MISMATCH':
       return 'El total cambió porque se actualizó un precio o la promoción activa. Revisa el total y vuelve a intentar.'
+    case 'PROMOTION_NOT_APPLICABLE':
+      return 'La promoción elegida ya no está vigente. Elige otro descuento.'
+    case 'DISCOUNT_EXCEEDS_SUBTOTAL':
+      return 'El descuento no puede superar el subtotal de la venta.'
     case 'INVENTORY_CLOSED':
       return 'El inventario de la sede ya se cerró hoy: no se pueden registrar más ventas hasta mañana.'
     case 'PAYMENT_METHOD_INACTIVE':

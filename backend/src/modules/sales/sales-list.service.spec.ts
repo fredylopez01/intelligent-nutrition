@@ -407,6 +407,7 @@ describe("SalesService read operations (GET /sales)", () => {
         saleAt,
         subtotal: "24.70",
         discountAmount: "1.20",
+        discountReason: null,
         taxAmount: "0.00",
         total: "23.50",
         promotionId: null,

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '../services/http'
+import { buildPromotion } from '../test-utils/promotions'
 
 import {
   centsToAmount,
+  discountReady,
+  resolveDiscount,
   centsToInput,
   parseAmountCents,
   paymentsBalance,
@@ -73,6 +76,66 @@ describe('sale helpers', () => {
       complete: false,
       matches: false,
     })
+  })
+
+  it('uses the active promotion when the seller has not chosen a discount', () => {
+    const active = buildPromotion({ active: true, discountPercentage: '15.00' })
+    const other = buildPromotion({ id: 'promo-other', active: false })
+
+    expect(resolveDiscount(null, [other, active], 29000000)).toMatchObject({
+      kind: 'promotion',
+      cents: 4350000,
+      payload: { promotionId: 'promo-black-friday' },
+    })
+    expect(resolveDiscount(null, [other], 29000000)).toMatchObject({
+      kind: 'none',
+      cents: 0,
+      payload: { promotionId: null },
+    })
+  })
+
+  it('flags a chosen promotion that is no longer valid', () => {
+    const discount = resolveDiscount({ kind: 'promotion', promotionId: 'gone' }, [], 29000000)
+
+    expect(discount.promotionError).toMatch(/ya no está vigente/)
+    expect(discountReady(discount)).toBe(false)
+  })
+
+  it('computes a custom discount and requires its reason', () => {
+    const percentage = resolveDiscount(
+      { kind: 'custom', type: 'percentage', value: '12,5', reason: ' Cliente frecuente ' },
+      [],
+      9999999,
+    )
+    expect(percentage).toMatchObject({
+      cents: 1250000,
+      label: 'Descuento personalizado (12,5 %)',
+      payload: {
+        promotionId: null,
+        discountAmount: '12500.00',
+        discountReason: 'Cliente frecuente',
+      },
+    })
+
+    const missingReason = resolveDiscount(
+      { kind: 'custom', type: 'amount', value: '10.000', reason: '' },
+      [],
+      29000000,
+    )
+    expect(missingReason).toMatchObject({
+      cents: 0,
+      reasonError: 'Escribe el motivo del descuento.',
+    })
+    expect(missingReason.payload).toEqual({ promotionId: null })
+    expect(discountReady(missingReason)).toBe(false)
+
+    expect(
+      resolveDiscount(
+        { kind: 'custom', type: 'amount', value: '300000', reason: 'x' },
+        [],
+        29000000,
+      ).valueError,
+    ).toBe('El descuento no puede superar el subtotal de la venta.')
   })
 
   it('reads the products without enough stock from the api error', () => {

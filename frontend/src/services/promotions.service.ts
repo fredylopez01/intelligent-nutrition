@@ -32,6 +32,9 @@ export const promotionsService = {
     return result && 'id' in result ? result : null
   },
 
+  listApplicable: (token: string | null) =>
+    http.get<Promotion[]>(`${PROMOTIONS_PATH}/applicable`, { token }),
+
   create: (payload: CreatePromotionPayload, token: string | null) =>
     http.post<Promotion>(PROMOTIONS_PATH, payload, { token }),
 

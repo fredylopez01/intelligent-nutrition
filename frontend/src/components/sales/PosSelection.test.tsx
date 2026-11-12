@@ -8,8 +8,8 @@ import { buildPromotion } from '../../test-utils/promotions'
 import { buildSellable } from '../../test-utils/sales'
 import type { PaymentMethod } from '../../types/paymentMethod'
 import type { Promotion } from '../../types/promotion'
-import type { PaymentDraft } from '../../types/sale'
-import { createPaymentDraft } from '../../utils/sales'
+import type { DiscountChoice, PaymentDraft } from '../../types/sale'
+import { createPaymentDraft, resolveDiscount, selectionTotalCents } from '../../utils/sales'
 
 import { PosSelection, type SelectionLine } from './PosSelection'
 
@@ -29,7 +29,7 @@ const DAVIPLATA: PaymentMethod = {
 }
 
 interface SelectionOptions {
-  promotion?: Promotion | null
+  promotions?: Promotion[]
   paymentMethods?: PaymentMethod[]
   payments?: PaymentDraft[]
 }
@@ -40,19 +40,31 @@ function renderSelection(lines: SelectionLine[] = [], options: SelectionOptions 
   const onClear = vi.fn()
   const onCheckout = vi.fn()
   const onPaymentsChange = vi.fn()
+  const onDiscountChange = vi.fn()
   const user = userEvent.setup()
 
   function Harness() {
     const [payments, setPayments] = useState<PaymentDraft[]>(
       options.payments ?? [createPaymentDraft(CASH.id)],
     )
+    const [choice, setChoice] = useState<DiscountChoice | null>(null)
+    const promotions = options.promotions ?? []
+    const discount = resolveDiscount(choice, promotions, selectionTotalCents(lines))
     return (
       <PosSelection
         lines={lines}
         onChangeQuantity={onChangeQuantity}
         onRemove={onRemove}
         onClear={onClear}
-        promotion={options.promotion ?? null}
+        promotions={promotions}
+        promotionsStatus="success"
+        discountChoice={choice}
+        discount={discount}
+        onDiscountChange={(next) => {
+          onDiscountChange(next)
+          setChoice(next)
+        }}
+        onRetryPromotions={vi.fn()}
         paymentMethods={options.paymentMethods ?? [CASH, NEQUI]}
         paymentStatus="success"
         payments={payments}
@@ -100,7 +112,7 @@ describe('PosSelection', () => {
     expect(totals.getByText('Unidades')).toBeInTheDocument()
     expect(totals.getByText('3')).toBeInTheDocument()
     expect(totals.getByText('Total')).toBeInTheDocument()
-    expect(totals.getByText('$ 389.900')).toBeInTheDocument()
+    expect(totals.getAllByText('$ 389.900')).toHaveLength(2)
   })
 
   it('increments a line', async () => {
@@ -164,29 +176,127 @@ describe('PosSelection', () => {
   })
 })
 
-describe('PosSelection promotion', () => {
-  it('shows the promotion discount and the total to charge', () => {
-    const { container } = renderSelection([{ product: whey, quantity: 2 }], {
-      promotion: buildPromotion({
-        active: true,
-        name: 'Black Friday',
-        discountPercentage: '15.00',
-      }),
-    })
-    const totals = within(container.querySelector('.pos-selection__totals') as HTMLElement)
+const BLACK_FRIDAY = buildPromotion({
+  active: true,
+  name: 'Black Friday',
+  discountPercentage: '15.00',
+})
+const WEEKEND = buildPromotion({
+  id: 'promo-weekend',
+  name: 'Fin de semana',
+  discountPercentage: '5.00',
+  active: false,
+})
 
-    expect(totals.getByText('Subtotal')).toBeInTheDocument()
+function totalsOf(container: HTMLElement) {
+  return within(container.querySelector('.pos-selection__totals') as HTMLElement)
+}
+
+describe('PosSelection discount', () => {
+  it('applies the active promotion by default and shows the total to charge', () => {
+    const { container } = renderSelection([{ product: whey, quantity: 2 }], {
+      promotions: [BLACK_FRIDAY, WEEKEND],
+    })
+    const totals = totalsOf(container)
+
+    expect(screen.getByLabelText('Descuento')).toHaveValue('promo:promo-black-friday')
     expect(totals.getByText('$ 290.000')).toBeInTheDocument()
-    expect(totals.getByText('Black Friday (15 %)')).toBeInTheDocument()
+    expect(totals.getByText('Promoción Black Friday (15 %)')).toBeInTheDocument()
     expect(totals.getByText('−$ 43.500')).toBeInTheDocument()
     expect(totals.getByText('$ 246.500')).toBeInTheDocument()
   })
 
-  it('keeps the totals unchanged without a promotion', () => {
-    const { container } = renderSelection([{ product: whey, quantity: 2 }])
-    const totals = within(container.querySelector('.pos-selection__totals') as HTMLElement)
+  it('lists no discount, every valid promotion and the custom discount', () => {
+    renderSelection([{ product: whey, quantity: 2 }], { promotions: [BLACK_FRIDAY, WEEKEND] })
 
-    expect(totals.queryByText('Subtotal')).not.toBeInTheDocument()
+    const options = within(screen.getByLabelText('Descuento'))
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(options).toEqual([
+      'Sin descuento',
+      'Black Friday · 15 % (activa)',
+      'Fin de semana · 5 %',
+      'Descuento personalizado',
+    ])
+  })
+
+  it('removes the discount or picks another promotion', async () => {
+    const { user, container } = renderSelection([{ product: whey, quantity: 2 }], {
+      promotions: [BLACK_FRIDAY, WEEKEND],
+    })
+
+    await user.selectOptions(screen.getByLabelText('Descuento'), 'none')
+    expect(totalsOf(container).queryByText(/Promoción/)).not.toBeInTheDocument()
+    expect(totalsOf(container).getAllByText('$ 290.000')).toHaveLength(2)
+
+    await user.selectOptions(screen.getByLabelText('Descuento'), 'promo:promo-weekend')
+    expect(totalsOf(container).getByText('Promoción Fin de semana (5 %)')).toBeInTheDocument()
+    expect(totalsOf(container).getByText('$ 275.500')).toBeInTheDocument()
+  })
+
+  it('starts without discount when there is no active promotion', () => {
+    const { container } = renderSelection([{ product: whey, quantity: 2 }], {
+      promotions: [WEEKEND],
+    })
+
+    expect(screen.getByLabelText('Descuento')).toHaveValue('none')
+    expect(totalsOf(container).queryByText(/Promoción/)).not.toBeInTheDocument()
+  })
+
+  it('applies a custom percentage with its reason', async () => {
+    const { user, container, onCheckout } = renderSelection([{ product: whey, quantity: 2 }])
+
+    await user.selectOptions(screen.getByLabelText('Descuento'), 'custom')
+    expect(screen.getByRole('radio', { name: 'Porcentaje' })).toBeChecked()
+    await user.type(screen.getByLabelText('Porcentaje (%)'), '10')
+    expect(screen.getByRole('button', { name: 'Finalizar venta' })).toBeDisabled()
+    expect(screen.getByText('Escribe el motivo del descuento.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Motivo del descuento'), 'Cliente frecuente')
+
+    expect(totalsOf(container).getByText('Descuento personalizado (10 %)')).toBeInTheDocument()
+    expect(totalsOf(container).getByText('−$ 29.000')).toBeInTheDocument()
+    expect(totalsOf(container).getByText('$ 261.000')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Finalizar venta' }))
+    expect(onCheckout).toHaveBeenCalled()
+  })
+
+  it('applies a custom amount in pesos', async () => {
+    const { user, container } = renderSelection([{ product: whey, quantity: 2 }])
+
+    await user.selectOptions(screen.getByLabelText('Descuento'), 'custom')
+    await user.click(screen.getByRole('radio', { name: 'Valor en pesos' }))
+    await user.type(screen.getByLabelText('Valor del descuento'), '20.000')
+    await user.type(screen.getByLabelText('Motivo del descuento'), 'Ajuste por cliente')
+
+    expect(totalsOf(container).getByText('Descuento personalizado')).toBeInTheDocument()
+    expect(totalsOf(container).getByText('−$ 20.000')).toBeInTheDocument()
+    expect(totalsOf(container).getByText('$ 270.000')).toBeInTheDocument()
+  })
+
+  it('rejects a custom discount above the subtotal or an invalid percentage', async () => {
+    const { user } = renderSelection([{ product: whey, quantity: 2 }])
+    await user.selectOptions(screen.getByLabelText('Descuento'), 'custom')
+
+    await user.type(screen.getByLabelText('Porcentaje (%)'), '120')
+    expect(screen.getByText('Escribe un porcentaje mayor que 0 y máximo 100.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'Valor en pesos' }))
+    await user.clear(screen.getByLabelText('Valor del descuento'))
+    await user.type(screen.getByLabelText('Valor del descuento'), '300000')
+    expect(
+      screen.getByText('El descuento no puede superar el subtotal de la venta.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Finalizar venta' })).toBeDisabled()
+  })
+
+  it('explains when no promotion is valid today', () => {
+    renderSelection([{ product: whey, quantity: 1 }])
+
+    expect(
+      screen.getByText(
+        'No hay promociones vigentes hoy. Puedes aplicar un descuento personalizado.',
+      ),
+    ).toBeInTheDocument()
   })
 })
 
@@ -260,7 +370,7 @@ describe('PosSelection payments', () => {
 
   it('compares the payments against the total with the promotion', async () => {
     const { user, container } = renderSelection([{ product: whey, quantity: 2 }], {
-      promotion: buildPromotion({ active: true, discountPercentage: '15.00' }),
+      promotions: [buildPromotion({ active: true, discountPercentage: '15.00' })],
     })
 
     await user.click(screen.getByRole('button', { name: 'Añadir pago' }))

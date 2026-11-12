@@ -62,6 +62,7 @@ export interface SalePayment {
 }
 
 export interface Sale extends Omit<SaleSummary, 'itemsCount'> {
+  discountReason?: string | null
   promotionId?: string | null
   promotionDiscount?: string | null
   items: SaleItem[]
@@ -87,6 +88,9 @@ export interface CreateSalePayload {
   branchId: string
   customerId?: string | null
   items: { productId: string; quantity: number }[]
+  promotionId?: string | null
+  discountAmount?: string
+  discountReason?: string | null
   payments: { paymentMethodId: string; amount: string; reference?: string | null }[]
 }
 
@@ -96,3 +100,10 @@ export interface PaymentDraft {
   amount: string
   reference: string
 }
+
+export type CustomDiscountType = 'percentage' | 'amount'
+
+export type DiscountChoice =
+  | { kind: 'none' }
+  | { kind: 'promotion'; promotionId: string }
+  | { kind: 'custom'; type: CustomDiscountType; value: string; reason: string }

@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from "@jest/globals";
 import { Test } from "@nestjs/testing";
 import { Prisma } from "../../../generated/prisma/client.js";
 import { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
@@ -429,6 +436,94 @@ describe("PromotionsService", () => {
           },
         }),
       );
+    });
+  });
+
+  describe("findApplicable", () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("lists the promotions valid today with the active one first", async () => {
+      jest.useFakeTimers({ now: new Date("2026-03-15T18:45:00.000Z") });
+      const today = new Date("2026-03-15T00:00:00.000Z");
+      promotionMock.findMany.mockResolvedValue([
+        buildPromotion({ active: true }),
+        buildPromotion({ id: "other-id", name: "Weekend", startDate: null }),
+      ]);
+
+      const result = await service.findApplicable();
+
+      expect(promotionMock.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            AND: [
+              { OR: [{ startDate: null }, { startDate: { lte: today } }] },
+              { OR: [{ endDate: null }, { endDate: { gte: today } }] },
+            ],
+          },
+          orderBy: [{ active: "desc" }, { name: "asc" }],
+        }),
+      );
+      expect(result).toEqual([
+        expect.objectContaining({ id: "promotion-id", active: true }),
+        expect.objectContaining({ id: "other-id", startDate: null }),
+      ]);
+    });
+  });
+
+  describe("findApplicableById", () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("returns a promotion valid today even when it is not active", async () => {
+      jest.useFakeTimers({ now: new Date("2026-03-15T18:45:00.000Z") });
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+
+      await expect(
+        service.findApplicableById("promotion-id"),
+      ).resolves.toMatchObject({
+        id: "promotion-id",
+        active: false,
+        discountPercentage: "15.00",
+      });
+    });
+
+    it("accepts the first and last day of the period", async () => {
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+
+      jest.useFakeTimers({ now: new Date("2026-03-01T05:00:00.000Z") });
+      await expect(
+        service.findApplicableById("promotion-id"),
+      ).resolves.toBeDefined();
+      jest.useFakeTimers({ now: new Date("2026-03-31T23:00:00.000Z") });
+      await expect(
+        service.findApplicableById("promotion-id"),
+      ).resolves.toBeDefined();
+    });
+
+    it("rejects a promotion outside its dates", async () => {
+      jest.useFakeTimers({ now: new Date("2026-04-01T12:00:00.000Z") });
+      promotionMock.findUnique.mockResolvedValue(buildPromotion());
+
+      await expect(
+        service.findApplicableById("promotion-id"),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: expect.objectContaining({ code: "PROMOTION_NOT_APPLICABLE" }),
+      });
+    });
+
+    it("throws NOT_FOUND when the promotion does not exist", async () => {
+      promotionMock.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.findApplicableById("missing-id"),
+      ).rejects.toMatchObject({
+        status: 404,
+        response: expect.objectContaining({ code: "NOT_FOUND" }),
+      });
     });
   });
 
