@@ -1,12 +1,16 @@
 import { useState } from 'react'
 
+import { useActivePromotion } from '../../hooks/useActivePromotion'
 import { useAuth } from '../../hooks/useAuth'
+import { ApiError } from '../../services/http'
 import { salesService } from '../../services/sales.service'
 import type { PaymentMethod } from '../../types/paymentMethod'
 import type { Sale } from '../../types/sale'
 import { formatPrice } from '../../utils/products'
+import { formatPercentage } from '../../utils/promotions'
 import {
   centsToAmount,
+  promotionDiscountCents,
   resolveSaleError,
   selectionTotalCents,
   stockShortages,
@@ -39,10 +43,15 @@ export function CheckoutDialog({
   onCancel,
 }: CheckoutDialogProps) {
   const { token } = useAuth()
+  const activePromotion = useActivePromotion()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<{ message: string; shortages: StockShortage[] } | null>(null)
-  const totalCents = selectionTotalCents(lines)
+  const promotion = activePromotion.promotion
+  const subtotalCents = selectionTotalCents(lines)
+  const discountCents = promotionDiscountCents(subtotalCents, promotion?.discountPercentage)
+  const totalCents = subtotalCents - discountCents
   const trimmedReference = reference.trim()
+  const promotionReady = activePromotion.status === 'success'
 
   const confirm = async () => {
     setSubmitting(true)
@@ -69,6 +78,9 @@ export function CheckoutDialog({
     } catch (caught) {
       const shortages = stockShortages(caught)
       if (shortages.length > 0) onStockChanged()
+      if (caught instanceof ApiError && caught.code === 'PAYMENT_TOTAL_MISMATCH') {
+        activePromotion.reload()
+      }
       setError({
         message: resolveSaleError(caught, 'No fue posible registrar la venta. Intenta de nuevo.'),
         shortages,
@@ -110,6 +122,17 @@ export function CheckoutDialog({
         ))}
       </ul>
 
+      {activePromotion.status === 'error' && (
+        <div className="pos-checkout__promotion-error">
+          <Alert tone="error">
+            No fue posible consultar la promoción activa, así que no sabemos el total exacto.
+          </Alert>
+          <Button variant="outline" onClick={activePromotion.reload}>
+            Reintentar
+          </Button>
+        </div>
+      )}
+
       <dl className="pos-checkout__summary">
         <div>
           <dt>Sede</dt>
@@ -122,23 +145,50 @@ export function CheckoutDialog({
             {trimmedReference ? ` · Ref. ${trimmedReference}` : ''}
           </dd>
         </div>
+        {promotion && (
+          <>
+            <div>
+              <dt>Subtotal</dt>
+              <dd className="pos-checkout__figure">{formatPrice(subtotalCents / 100)}</dd>
+            </div>
+            <div className="pos-checkout__discount">
+              <dt>
+                Promoción {promotion.name} ({formatPercentage(promotion.discountPercentage)})
+              </dt>
+              <dd className="pos-checkout__figure">−{formatPrice(discountCents / 100)}</dd>
+            </div>
+          </>
+        )}
         <div className="pos-checkout__total">
           <dt>Total a cobrar</dt>
-          <dd>{formatPrice(totalCents / 100)}</dd>
+          <dd>
+            {activePromotion.status === 'loading' ? (
+              <span className="pos-checkout__pending" role="status">
+                Consultando promoción...
+              </span>
+            ) : (
+              formatPrice(totalCents / 100)
+            )}
+          </dd>
         </div>
       </dl>
 
       <p className="pos-selection__note">
         Al confirmar se descuentan las unidades de los lotes que vencen primero y la venta queda
         registrada a tu nombre.
+        {promotion ? ' El sistema aplica la promoción activa al registrar la venta.' : ''}
       </p>
 
       <div className="pos-checkout__actions">
         <Button variant="outline" onClick={onCancel} disabled={submitting}>
           Seguir vendiendo
         </Button>
-        <Button onClick={() => void confirm()} disabled={submitting}>
-          {submitting ? 'Registrando...' : `Cobrar ${formatPrice(totalCents / 100)}`}
+        <Button onClick={() => void confirm()} disabled={submitting || !promotionReady}>
+          {submitting
+            ? 'Registrando...'
+            : promotionReady
+              ? `Cobrar ${formatPrice(totalCents / 100)}`
+              : 'Cobrar'}
         </Button>
       </div>
     </div>

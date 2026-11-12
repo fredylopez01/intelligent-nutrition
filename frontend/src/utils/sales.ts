@@ -46,6 +46,14 @@ export function selectionTotalCents(
   return lines.reduce((sum, line) => sum + toCents(line.product.price) * line.quantity, 0)
 }
 
+export function promotionDiscountCents(
+  subtotalCents: number,
+  discountPercentage: string | null | undefined,
+): number {
+  if (!discountPercentage) return 0
+  return Math.round((subtotalCents * Number(discountPercentage)) / 100)
+}
+
 export interface StockShortage {
   productName: string
   requested: number
@@ -64,7 +72,7 @@ export function resolveSaleError(error: unknown, fallback: string): string {
     case 'INSUFFICIENT_STOCK':
       return 'Ya no hay unidades suficientes de algunos productos. Ajusta las cantidades de la venta.'
     case 'PAYMENT_TOTAL_MISMATCH':
-      return 'El total cambió porque se actualizó un precio. Recarga los productos y vuelve a intentar.'
+      return 'El total cambió porque se actualizó un precio o la promoción activa. Revisa el total y vuelve a intentar.'
     case 'INVENTORY_CLOSED':
       return 'El inventario de la sede ya se cerró hoy: no se pueden registrar más ventas hasta mañana.'
     case 'PAYMENT_METHOD_INACTIVE':

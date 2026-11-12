@@ -82,6 +82,32 @@ describe('SaleDetail', () => {
     expect(totals.queryByText('Impuestos')).not.toBeInTheDocument()
   })
 
+  it('shows the discount of the promotion applied to the sale', () => {
+    const { container } = render(
+      <SaleDetail
+        sale={buildSale({
+          total: '246500.00',
+          promotionId: 'promo-black-friday',
+          promotionDiscount: '43500.00',
+        })}
+      />,
+    )
+    const totals = within(container.querySelector('.sale-detail__totals') as HTMLElement)
+
+    expect(totals.getByText('Promoción')).toBeInTheDocument()
+    expect(totals.getByText('−$ 43.500')).toBeInTheDocument()
+    expect(totals.getByText('$ 246.500')).toBeInTheDocument()
+  })
+
+  it('hides the promotion row when the sale had none', () => {
+    const { container } = render(
+      <SaleDetail sale={buildSale({ promotionId: null, promotionDiscount: null })} />,
+    )
+    const totals = within(container.querySelector('.sale-detail__totals') as HTMLElement)
+
+    expect(totals.queryByText('Promoción')).not.toBeInTheDocument()
+  })
+
   it('shows a payment without reference', () => {
     render(<SaleDetail sale={buildSale()} />)
 

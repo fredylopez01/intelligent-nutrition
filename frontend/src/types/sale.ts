@@ -62,6 +62,8 @@ export interface SalePayment {
 }
 
 export interface Sale extends Omit<SaleSummary, 'itemsCount'> {
+  promotionId?: string | null
+  promotionDiscount?: string | null
   items: SaleItem[]
   payments: SalePayment[]
 }
