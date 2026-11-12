@@ -36,7 +36,7 @@ function renderSidebar(path = '/dashboard') {
   )
 }
 
-const ALWAYS = ['Dashboard', 'Inventario', 'Catálogo', 'POS', 'Reportes']
+const ALWAYS = ['Dashboard', 'Inventario', 'Catálogo', 'POS']
 
 beforeEach(() => {
   auth.role = 'SUPERADMIN'
@@ -67,7 +67,9 @@ describe('Sidebar menu by role', () => {
     renderSidebar()
 
     const labels = menuLabels()
-    expect(labels).toEqual(expect.arrayContaining([...ALWAYS, 'Clientes', 'Proveedores']))
+    expect(labels).toEqual(
+      expect.arrayContaining([...ALWAYS, 'Clientes', 'Proveedores', 'Reportes']),
+    )
     expect(labels).not.toContain('Sedes')
     expect(labels).not.toContain('Usuarios')
     expect(labels).not.toContain('Auditoría')
@@ -79,7 +81,7 @@ describe('Sidebar menu by role', () => {
 
     const labels = menuLabels()
     expect(labels).toEqual(expect.arrayContaining([...ALWAYS, 'Clientes']))
-    for (const hidden of ['Sedes', 'Proveedores', 'Usuarios', 'Auditoría']) {
+    for (const hidden of ['Sedes', 'Proveedores', 'Usuarios', 'Auditoría', 'Reportes']) {
       expect(labels).not.toContain(hidden)
     }
   })
@@ -89,10 +91,16 @@ describe('Sidebar menu by role', () => {
     renderSidebar()
 
     const labels = menuLabels()
-    expect(labels).toEqual(
-      expect.arrayContaining(['Dashboard', 'Reportes', 'Usuarios', 'Auditoría']),
-    )
-    for (const hidden of ['Sedes', 'Inventario', 'Catálogo', 'POS', 'Clientes', 'Proveedores']) {
+    expect(labels).toEqual(expect.arrayContaining(['Dashboard', 'Usuarios', 'Auditoría']))
+    for (const hidden of [
+      'Sedes',
+      'Inventario',
+      'Catálogo',
+      'POS',
+      'Clientes',
+      'Proveedores',
+      'Reportes',
+    ]) {
       expect(labels).not.toContain(hidden)
     }
   })
