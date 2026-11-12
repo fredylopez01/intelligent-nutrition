@@ -48,6 +48,10 @@ const NAV_ITEMS: NavItem[] = [
     to: '/caja/turno',
   },
   {
+    label: 'Promociones',
+    to: '/promociones',
+  },
+  {
     label: 'Clientes',
     to: '/clientes',
   },
