@@ -11,11 +11,6 @@ export const PENDING_MODULES: PendingModule[] = [
     description: 'Ventas del día, stock por sede y alertas de inventario en una sola vista.',
   },
   {
-    path: '/reportes/reposicion',
-    title: 'Reposición sugerida',
-    description: 'Sugerencia informativa de reposición a partir del histórico de ventas.',
-  },
-  {
     path: '/perfil',
     title: 'Mi perfil',
     description: 'Consulta y actualiza tus datos personales y de contacto.',

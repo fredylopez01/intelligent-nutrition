@@ -115,6 +115,18 @@ describe('Sidebar menu by role', () => {
     },
   )
 
+  it('shows the reports and the restock suggestion to the branch leader', () => {
+    auth.role = 'BRANCH_LEADER'
+    renderSidebar('/reportes')
+
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' })
+    const reports = within(nav)
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href')?.startsWith('/reportes'))
+      .map((link) => link.textContent)
+    expect(reports).toEqual(['Reportes', 'Reportes', 'Reposición sugerida'])
+  })
+
   it('does not render disabled entries for hidden modules', () => {
     auth.role = 'BRANCH_ASSISTANT'
     renderSidebar()

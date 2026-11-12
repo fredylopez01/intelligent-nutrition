@@ -34,4 +34,21 @@ describe('reportsService', () => {
 
     expect(http.get).toHaveBeenCalledWith('/reports/sales?page=1', { token: 'token' })
   })
+
+  it('asks for the restock report of a branch', async () => {
+    vi.mocked(http.get).mockResolvedValue([])
+
+    await expect(reportsService.restock({ branchId: 'branch-1' }, 'token')).resolves.toEqual([])
+    expect(http.get).toHaveBeenCalledWith('/reports/restock?branchId=branch-1', {
+      token: 'token',
+    })
+  })
+
+  it('asks for the restock of every branch without the branch', async () => {
+    vi.mocked(http.get).mockResolvedValue([])
+
+    await reportsService.restock({}, 'token')
+
+    expect(http.get).toHaveBeenCalledWith('/reports/restock', { token: 'token' })
+  })
 })

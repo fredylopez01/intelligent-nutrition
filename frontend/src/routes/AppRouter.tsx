@@ -29,6 +29,7 @@ import { PosPage } from '../pages/pos/PosPage'
 import { SalesPage } from '../pages/pos/SalesPage'
 import { PromotionsPage } from '../pages/promotions/PromotionsPage'
 import { ReportsPage } from '../pages/reports/ReportsPage'
+import { RestockPage } from '../pages/reports/RestockPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
 import { PurchasesPage } from '../pages/suppliers/PurchasesPage'
 import { SupplierDetailPage } from '../pages/suppliers/SupplierDetailPage'
@@ -250,6 +251,15 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/reportes']}>
             <ReportsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reportes/reposicion"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/reportes/reposicion']}>
+            <RestockPage />
           </ProtectedRoute>
         }
       />

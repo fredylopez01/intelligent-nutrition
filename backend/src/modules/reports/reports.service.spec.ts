@@ -13,7 +13,8 @@ jest.unstable_mockModule("../../database/prisma/prisma.service.js", () => ({
 const { Test } = await import("@nestjs/testing");
 const { BadRequestException, ForbiddenException } =
   await import("@nestjs/common");
-const { ReportsService } = await import("./reports.service.js");
+const { ReportsService, toRestockReportRow } =
+  await import("./reports.service.js");
 const { PrismaService } =
   await import("../../database/prisma/prisma.service.js");
 
@@ -129,6 +130,18 @@ describe("ReportsService.getSalesReport", () => {
   });
 });
 
+const restockQueryRow = {
+  productId: "product-1",
+  name: "Whey Protein 2 lb",
+  referenceCode: "WHEY-2LB-001",
+  branchId: "branch-assigned",
+  branchName: "Sede Centro",
+  currentQuantity: 2,
+  minimumStock: 5,
+  deficit: 3,
+  soldUnits: 0,
+};
+
 const restockRow = {
   productId: "product-1",
   name: "Whey Protein 2 lb",
@@ -138,6 +151,8 @@ const restockRow = {
   currentQuantity: 2,
   minimumStock: 5,
   deficit: 3,
+  projectedDemand7d: 0,
+  suggestedUnits: 3,
 };
 
 describe("ReportsService.getRestockReport", () => {
@@ -145,7 +160,7 @@ describe("ReportsService.getRestockReport", () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
-    prismaMock.$queryRaw.mockResolvedValueOnce([restockRow]);
+    prismaMock.$queryRaw.mockResolvedValueOnce([restockQueryRow]);
 
     const module = await Test.createTestingModule({
       providers: [
@@ -159,7 +174,7 @@ describe("ReportsService.getRestockReport", () => {
   it("returns restock rows for superadmin without branchId filter", async () => {
     const result = await service.getRestockReport({}, superadmin);
 
-    expect(result).toEqual({ data: [restockRow] });
+    expect(result).toEqual([restockRow]);
     expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
@@ -169,8 +184,8 @@ describe("ReportsService.getRestockReport", () => {
       superadmin,
     );
 
-    expect(result.data).toHaveLength(1);
-    expect(result.data[0].deficit).toBe(3);
+    expect(result).toHaveLength(1);
+    expect(result[0].deficit).toBe(3);
   });
 
   it("allows a branch leader to query their assigned branch", async () => {
@@ -179,7 +194,7 @@ describe("ReportsService.getRestockReport", () => {
       branchLeader,
     );
 
-    expect(result.data).toHaveLength(1);
+    expect(result).toHaveLength(1);
     expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
@@ -192,10 +207,49 @@ describe("ReportsService.getRestockReport", () => {
   });
 
   it("forbids a branch leader when no branchId is provided", async () => {
-    await expect(
-      service.getRestockReport({}, branchLeader),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(service.getRestockReport({}, branchLeader)).rejects.toThrow(
+      ForbiddenException,
+    );
 
     expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe("toRestockReportRow", () => {
+  it("projects 7 days of demand from the last 30 days of sales", () => {
+    expect(
+      toRestockReportRow({
+        ...restockQueryRow,
+        currentQuantity: 5,
+        minimumStock: 10,
+        deficit: 5,
+        soldUnits: 60,
+      }),
+    ).toMatchObject({ projectedDemand7d: 14, suggestedUnits: 9 });
+  });
+
+  it("rounds the projected demand up", () => {
+    expect(
+      toRestockReportRow({ ...restockQueryRow, soldUnits: 1 }),
+    ).toMatchObject({
+      projectedDemand7d: 1,
+      suggestedUnits: 3,
+    });
+  });
+
+  it("suggests at least the deficit when the demand is low", () => {
+    expect(
+      toRestockReportRow({
+        ...restockQueryRow,
+        currentQuantity: 0,
+        minimumStock: 20,
+        deficit: 20,
+        soldUnits: 0,
+      }),
+    ).toMatchObject({ projectedDemand7d: 0, suggestedUnits: 20 });
+  });
+
+  it("does not expose the raw sold units", () => {
+    expect(toRestockReportRow(restockQueryRow)).not.toHaveProperty("soldUnits");
   });
 });

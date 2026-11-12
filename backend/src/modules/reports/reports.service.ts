@@ -10,6 +10,21 @@ import { PrismaService } from "../../database/prisma/prisma.service.js";
 import { ListSalesReportQueryDto } from "./dto/list-sales-report-query.dto.js";
 import { RestockReportQueryDto } from "./dto/restock-report-query.dto.js";
 
+export const DEMAND_HISTORY_DAYS = 30;
+export const DEMAND_PROJECTION_DAYS = 7;
+
+interface RestockQueryRow {
+  productId: string;
+  name: string;
+  referenceCode: string;
+  branchId: string;
+  branchName: string;
+  currentQuantity: number;
+  minimumStock: number;
+  deficit: number;
+  soldUnits: number;
+}
+
 export interface RestockReportRow {
   productId: string;
   name: string;
@@ -19,6 +34,21 @@ export interface RestockReportRow {
   currentQuantity: number;
   minimumStock: number;
   deficit: number;
+  projectedDemand7d: number;
+  suggestedUnits: number;
+}
+
+export function toRestockReportRow(row: RestockQueryRow): RestockReportRow {
+  const { soldUnits, ...rest } = row;
+  const projectedDemand7d = Math.ceil(
+    (soldUnits * DEMAND_PROJECTION_DAYS) / DEMAND_HISTORY_DAYS,
+  );
+  const target = Math.max(row.minimumStock, projectedDemand7d);
+  return {
+    ...rest,
+    projectedDemand7d,
+    suggestedUnits: Math.max(target - row.currentQuantity, 0),
+  };
 }
 
 interface SalesReportGroup {
@@ -143,7 +173,11 @@ export class ReportsService {
       filters.push(Prisma.sql`bi.branch_id = ${branchId}::uuid`);
     }
 
-    const rows = await this.prisma.$queryRaw<RestockReportRow[]>`
+    const demandSince = new Date(
+      Date.now() - DEMAND_HISTORY_DAYS * 24 * 60 * 60 * 1000,
+    );
+
+    const rows = await this.prisma.$queryRaw<RestockQueryRow[]>`
       SELECT
         p.id                                        AS "productId",
         p.name                                      AS "name",
@@ -152,10 +186,18 @@ export class ReportsService {
         b.name                                      AS "branchName",
         SUM(bi.quantity)::int                       AS "currentQuantity",
         MAX(bi.minimum_stock)::int                  AS "minimumStock",
-        (MAX(bi.minimum_stock) - SUM(bi.quantity))::int AS "deficit"
+        (MAX(bi.minimum_stock) - SUM(bi.quantity))::int AS "deficit",
+        COALESCE(MAX(demand.sold_units), 0)::int    AS "soldUnits"
       FROM branch_inventory bi
       INNER JOIN product p ON p.id = bi.product_id
       INNER JOIN branch b  ON b.id = bi.branch_id
+      LEFT JOIN (
+        SELECT sd.product_id, s.branch_id, SUM(sd.quantity) AS sold_units
+        FROM sale_detail sd
+        INNER JOIN sale s ON s.id = sd.sale_id
+        WHERE s.status = 'COMPLETED' AND s.sale_at >= ${demandSince}
+        GROUP BY sd.product_id, s.branch_id
+      ) demand ON demand.product_id = p.id AND demand.branch_id = b.id
       WHERE ${Prisma.join(filters, " AND ")}
       GROUP BY p.id, p.name, p.reference_code, b.id, b.name
       HAVING SUM(bi.quantity) < MAX(bi.minimum_stock)
@@ -163,6 +205,6 @@ export class ReportsService {
       LIMIT 100
     `;
 
-    return { data: rows };
+    return rows.map(toRestockReportRow);
   }
 }
