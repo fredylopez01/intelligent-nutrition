@@ -426,6 +426,29 @@
   font-weight: 600;
 }
 
+.pos-checkout__figure {
+  font-family: var(--font-mono);
+}
+
+.pos-checkout__discount dt,
+.pos-checkout__discount dd {
+  color: var(--color-success);
+}
+
+.pos-checkout__pending {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.pos-checkout__promotion-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
 .pos-checkout__actions {
   display: flex;
   justify-content: flex-end;

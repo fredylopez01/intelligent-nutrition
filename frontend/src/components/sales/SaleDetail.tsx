@@ -97,6 +97,12 @@ export function SaleDetail({ sale }: SaleDetailProps) {
               </div>
             </>
           )}
+          {Number(sale.promotionDiscount ?? 0) > 0 && (
+            <div>
+              <dt>Promoción</dt>
+              <dd>−{formatPrice(sale.promotionDiscount ?? 0)}</dd>
+            </div>
+          )}
           <div className="sale-detail__grand">
             <dt>Total</dt>
             <dd>{formatPrice(sale.total)}</dd>

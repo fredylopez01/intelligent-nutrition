@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { categoriesService } from '../../services/categories.service'
 import { ApiError } from '../../services/http'
 import { paymentMethodsService } from '../../services/paymentMethods.service'
+import { promotionsService } from '../../services/promotions.service'
 import { salesService } from '../../services/sales.service'
 import { unitsService } from '../../services/units.service'
 import { CASH, NEQUI, paymentMethodsPage } from '../../test-utils/paymentMethods'
@@ -26,6 +27,10 @@ vi.mock('../../services/sales.service', () => ({
 
 vi.mock('../../services/paymentMethods.service', () => ({
   paymentMethodsService: { list: vi.fn() },
+}))
+
+vi.mock('../../services/promotions.service', () => ({
+  promotionsService: { getActive: vi.fn() },
 }))
 
 vi.mock('../../services/categories.service', () => ({
@@ -96,6 +101,7 @@ beforeEach(() => {
   sellable.mockResolvedValue(page([whey, creatine]))
   listMethods.mockResolvedValue(paymentMethodsPage([CASH, NEQUI]))
   createSale.mockResolvedValue(buildSale())
+  vi.mocked(promotionsService.getActive).mockResolvedValue(null)
   const empty = { data: [], meta: { page: 1, limit: 100, total: 0, totalPages: 0 } }
   vi.mocked(categoriesService.list).mockResolvedValue({
     data: [{ id: 'cat-protein', name: 'Proteínas', description: null, active: true }],
@@ -210,7 +216,7 @@ describe('PosPage', () => {
     )
     await waitFor(() => expect(screen.getByLabelText('Método de pago')).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Finalizar venta' }))
-    await user.click(screen.getByRole('button', { name: /Cobrar/ }))
+    await user.click(await screen.findByRole('button', { name: /Cobrar\s\$/ }))
 
     await waitFor(() =>
       expect(createSale).toHaveBeenCalledWith(
@@ -249,7 +255,7 @@ describe('PosPage', () => {
 
     const dialog = within(screen.getByRole('dialog', { name: 'Confirmar venta' }))
     expect(dialog.getByText('Nequi · Ref. NQ-123')).toBeInTheDocument()
-    await user.click(dialog.getByRole('button', { name: /Cobrar\s\$\s290\.000/ }))
+    await user.click(await dialog.findByRole('button', { name: /Cobrar\s\$\s290\.000/ }))
 
     expect(createSale).toHaveBeenCalledWith(
       {
@@ -282,7 +288,7 @@ describe('PosPage', () => {
     )
     await waitFor(() => expect(screen.getByLabelText('Método de pago')).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Finalizar venta' }))
-    await user.click(screen.getByRole('button', { name: /Cobrar\s\$\s145\.000/ }))
+    await user.click(await screen.findByRole('button', { name: /Cobrar\s\$\s145\.000/ }))
 
     expect(await screen.findByText('Whey Protein 2 lb: pediste 1, quedan 0.')).toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: 'Confirmar venta' })).toBeInTheDocument()

@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '../services/http'
 
-import { centsToAmount, selectionTotalCents, stockShortages, toCents } from './sales'
+import {
+  centsToAmount,
+  promotionDiscountCents,
+  selectionTotalCents,
+  stockShortages,
+  toCents,
+} from './sales'
 
 describe('sale helpers', () => {
   it('adds the lines in cents to avoid rounding errors', () => {
@@ -14,6 +20,13 @@ describe('sale helpers', () => {
     expect(selectionTotalCents(lines)).toBe(6017)
     expect(centsToAmount(6017)).toBe('60.17')
     expect(toCents('145000.00')).toBe(14500000)
+  })
+
+  it('computes the promotion discount in cents rounded like the server', () => {
+    expect(promotionDiscountCents(29000000, '15.00')).toBe(4350000)
+    expect(promotionDiscountCents(9999999, '12.50')).toBe(1250000)
+    expect(promotionDiscountCents(29000000, null)).toBe(0)
+    expect(promotionDiscountCents(29000000, undefined)).toBe(0)
   })
 
   it('reads the products without enough stock from the api error', () => {
