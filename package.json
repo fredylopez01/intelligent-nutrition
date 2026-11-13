@@ -3,7 +3,9 @@
   "private": true,
   "description": "Scripts de conveniencia para el monorepo (frontend + backend).",
   "scripts": {
-    "test:docker": "docker compose -f docker-compose.yml -f docker-compose.test.yml --profile test up --build --abort-on-container-exit --exit-code-from test-runner test-runner",
+    "test:docker": "node scripts/docker-test.mjs",
+    "test:docker:frontend": "docker compose -f docker-compose.yml -f docker-compose.test.yml --profile test up --build --abort-on-container-exit --exit-code-from frontend-test frontend-test",
+    "test:docker:backend": "docker compose -f docker-compose.yml -f docker-compose.test.yml --profile test up --build --abort-on-container-exit --exit-code-from test-runner test-runner",
     "smoke:docker": "docker compose -f docker-compose.yml -f docker-compose.test.yml --profile smoke up --build --abort-on-container-exit --exit-code-from smoke-test smoke-test"
   }
 }

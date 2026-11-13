@@ -5,6 +5,8 @@ node_modules/
 .env
 .env.*
 !.env.example
+# Sin secretos: solo activa los mocks de Playwright en CI.
+!frontend/.env.test
 
 # Build
 dist/
@@ -31,6 +33,7 @@ blob-report/
 
 # AI tooling
 .commandcode/
+AGENTS.md
 
 # OS
 .DS_Store

@@ -1,17 +1,29 @@
-# Perfil "test": runner de pruebas del backend.
+# Perfil "test": runners de pruebas del backend y del frontend.
 #
 # Uso obligatorio con ambos archivos, porque test-runner depende de postgres
 # (definido en docker-compose.yml):
 #
 #   docker compose -f docker-compose.yml -f docker-compose.test.yml --profile test up --build
 #
-# El runner corre los specs unitarios (config jest en backend/package.json) y
+# test-runner corre los specs unitarios (config jest en backend/package.json) y
 # luego los e2e (backend/test/jest-e2e.json) contra la base intelligent_nutrition_test.
+# frontend-test corre vitest (jsdom) y no necesita base de datos ni S3.
+#
+# Los scripts de la raiz (`npm run test:docker`) levantan cada runner por separado,
+# porque `--exit-code-from` solo devuelve el veredicto de un servicio.
 #
 # Incluye un S3 mock (adobe/s3mock) porque product-images-storage.e2e-spec.ts
 # necesita un endpoint S3 real. MinIO ya no publica imagenes comunitarias, por
 # eso se usa s3mock (soporta CreateBucket, URLs firmadas, HeadObject y Delete).
 services:
+  frontend-test:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.test
+    container_name: intelligent-nutrition-frontend-test
+    profiles: ["test"]
+    cpus: "2"
+
   smoke-test:
     build:
       context: .
@@ -40,6 +52,7 @@ services:
       dockerfile: Dockerfile.test
     container_name: intelligent-nutrition-test-runner
     profiles: ["test"]
+    cpus: "2"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-intelligent_nutrition}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
@@ -79,4 +92,4 @@ services:
       sh -c "until node -e \"require('http').get('http://s3mock:9090/favicon.ico',r=>{r.resume();process.exit(0)}).on('error',()=>process.exit(1))\";
       do echo 'esperando s3mock...'; sleep 1; done;
       PGPASSWORD=$$POSTGRES_PASSWORD createdb -h postgres -U $$POSTGRES_USER intelligent_nutrition_test || true;
-      npm test; unit=$$?; npm run test:e2e; e2e=$$?; [ $$unit -eq 0 ] && [ $$e2e -eq 0 ]"
+      npm test -- --maxWorkers=2; unit=$$?; npm run test:e2e; e2e=$$?; [ $$unit -eq 0 ] && [ $$e2e -eq 0 ]"
