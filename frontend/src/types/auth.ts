@@ -50,4 +50,5 @@ export interface AuthState {
   login: (credentials: LoginCredentials) => Promise<SessionUser>
   loginWithToken: (accessToken: string) => Promise<SessionUser>
   logout: () => void
+  updateSessionUser: (changes: Partial<Pick<SessionUser, 'fullName' | 'email'>>) => void
 }
