@@ -128,7 +128,7 @@ export class PurchasesController {
   @ApiResponse({
     status: 404,
     description:
-      "Purchase, purchase line or branch not found (PURCHASE_NOT_FOUND, PURCHASE_DETAIL_NOT_FOUND, BRANCH_NOT_FOUND).",
+      "Purchase, purchase line, branch not found, or product not assigned to the branch (PURCHASE_NOT_FOUND, PURCHASE_DETAIL_NOT_FOUND, BRANCH_NOT_FOUND, PRODUCT_NOT_ASSIGNED).",
   })
   @ApiResponse({
     status: 409,
