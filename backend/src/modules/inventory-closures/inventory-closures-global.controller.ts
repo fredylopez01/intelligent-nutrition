@@ -15,6 +15,7 @@ import { InventoryClosuresService } from "./inventory-closures.service.js";
 import { Roles } from "../../common/decorators/roles.decorator.js";
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
+import { ConfirmClosureDto } from "./dto/confirm-closure.dto.js";
 import { UpdateCountsDto } from "./dto/update-counts.dto.js";
 import { ListClosuresQueryDto } from "./dto/list-closures-query.dto.js";
 import { BranchScopeGuard } from "../../common/guards/branch-scope.guard.js";
@@ -63,6 +64,7 @@ export class InventoryClosuresGlobalController {
   @Roles("SUPERADMIN", "BRANCH_LEADER", "BRANCH_ASSISTANT")
   confirm(
     @Param("closureId", new ParseUUIDPipe()) closureId: string,
+    @Body() dto: ConfirmClosureDto,
     @CurrentUser() currentUser: AuthenticatedUser,
     @Ip() ipAddress: string,
   ) {
@@ -70,6 +72,7 @@ export class InventoryClosuresGlobalController {
       closureId,
       currentUser,
       ipAddress,
+      dto,
     );
   }
 }

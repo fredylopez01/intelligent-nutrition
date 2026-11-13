@@ -92,4 +92,66 @@ describe('ClosureResult', () => {
     expect(within(counted).getByText('0 de 1')).toBeInTheDocument()
     expect(screen.getByText('Sin contar')).toBeInTheDocument()
   })
+
+  describe('supplies', () => {
+    const withSupplies = {
+      ...confirmed,
+      supplyItems: [
+        {
+          supplyId: 'supply-milk',
+          supplyName: 'Leche entera',
+          unit: 'ml',
+          systemQuantity: '1500',
+          physicalQuantity: '1480.5',
+          observation: 'Derrame',
+          difference: '-19.5',
+        },
+        {
+          supplyId: 'supply-oats',
+          supplyName: 'Avena',
+          unit: 'g',
+          systemQuantity: '800',
+          physicalQuantity: '800',
+          observation: null,
+          difference: '0',
+        },
+      ],
+      totalSupplyDifferences: 1,
+    }
+
+    it('shows the leader the difference of each supply', () => {
+      render(<ClosureResult closure={withSupplies} showDifferences />)
+
+      const table = screen.getByRole('table', { name: 'Diferencias de los insumos' })
+      const milk = within(screen.getByText('Leche entera').closest('tr') as HTMLElement)
+      expect(milk.getByText('1.480,5 ml')).toBeInTheDocument()
+      expect(milk.getByText('−19,5 ml')).toBeInTheDocument()
+      expect(milk.getByText('Derrame')).toBeInTheDocument()
+      expect(within(table).getByText('Sin diferencia')).toBeInTheDocument()
+      expect(screen.getByText('Insumos con diferencia').nextElementSibling).toHaveTextContent(
+        '1 de 2',
+      )
+    })
+
+    it('shows the assistant the supply counts without differences', () => {
+      const milk = {
+        supplyId: 'supply-milk',
+        supplyName: 'Leche entera',
+        unit: 'ml',
+        systemQuantity: '1500',
+        physicalQuantity: '1480.5',
+        observation: 'Derrame',
+      }
+      render(
+        <ClosureResult
+          closure={{ ...withSupplies, supplyItems: [milk], totalSupplyDifferences: undefined }}
+          showDifferences={false}
+        />,
+      )
+
+      const table = screen.getByRole('table', { name: 'Conteo físico de los insumos' })
+      expect(within(table).getByText('1.500 ml')).toBeInTheDocument()
+      expect(within(table).queryByText(/−/)).not.toBeInTheDocument()
+    })
+  })
 })

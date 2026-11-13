@@ -31,4 +31,12 @@ export const cashShiftsService = {
 
   findOne: (shiftId: string, token: string | null) =>
     http.get<CashShift>(`${BASE}/${shiftId}`, { token }),
+
+  active: async (branchId: string, token: string | null): Promise<CashShift | null> => {
+    const result = await http.get<CashShift | { data: null } | null>(
+      `${BASE}/active${buildQuery({ branchId })}`,
+      { token },
+    )
+    return result && 'id' in result ? result : null
+  },
 }

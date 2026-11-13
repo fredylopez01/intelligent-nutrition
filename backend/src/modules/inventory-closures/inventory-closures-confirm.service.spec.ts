@@ -10,6 +10,7 @@ import { BadRequestException } from "@nestjs/common";
 
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 
+import { Prisma } from "../../../generated/prisma/client.js";
 import { InventoryClosuresService } from "./inventory-closures.service.js";
 
 type AsyncMock = (...args: unknown[]) => Promise<unknown>;
@@ -48,6 +49,7 @@ const tx = {
     update: jest.fn<AsyncMock>(),
   },
   inventoryClosureDetail: { update: jest.fn<AsyncMock>() },
+  inventoryClosureSupplyDetail: { update: jest.fn<AsyncMock>() },
   cashShift: { findFirst: jest.fn<AsyncMock>() },
 };
 const prisma = {
@@ -94,6 +96,33 @@ function closure(
     branch: { name: "Centro" },
     user: { person: { firstName: "Laura", lastName: null } },
     details,
+    supplyDetails: [] as SupplyDetail[],
+  };
+}
+
+interface SupplyDetail {
+  id: string;
+  supplyId: string;
+  systemQuantity: Prisma.Decimal;
+  physicalQuantity: Prisma.Decimal | null;
+  difference: Prisma.Decimal | null;
+  observation: string | null;
+  supply: { name: string; unitOfMeasure: { abreviation: string } };
+}
+
+function supplyLine(
+  system: string,
+  physical: string | null,
+  difference: string | null = null,
+): SupplyDetail {
+  return {
+    id: "supply-detail-milk",
+    supplyId: "supply-milk",
+    systemQuantity: new Prisma.Decimal(system),
+    physicalQuantity: physical === null ? null : new Prisma.Decimal(physical),
+    difference: difference === null ? null : new Prisma.Decimal(difference),
+    observation: null,
+    supply: { name: "Leche", unitOfMeasure: { abreviation: "ml" } },
   };
 }
 
@@ -207,6 +236,9 @@ describe("InventoryClosuresService.confirm", () => {
           closureDate: "2026-10-26",
           countedLots: 2,
           lotsWithDifference: 2,
+          countedSupplies: 0,
+          suppliesWithDifference: 0,
+          cashShiftId,
         },
         reason: "Inventory closure of Centro confirmed",
         ipAddress: "10.0.0.1",
@@ -302,5 +334,81 @@ describe("InventoryClosuresService.confirm", () => {
     await expect(service.confirm(closureId, leader)).rejects.toThrow(
       "audit down",
     );
+  });
+
+  it("links the closure to the cash shift sent by the client", async () => {
+    tx.inventoryClosure.findUnique.mockResolvedValue(
+      closure([lot("2026-09-30", 2, 2), lot("2027-06-30", 8, 7)]),
+    );
+
+    await service.confirm(closureId, assistant, undefined, { cashShiftId });
+
+    expect(tx.cashShift.findFirst).toHaveBeenCalledWith({
+      where: { id: cashShiftId, branchId, status: "OPEN" },
+      orderBy: { openedAt: "desc" },
+      select: { id: true },
+    });
+  });
+
+  it("rejects a cash shift that is closed or from another branch", async () => {
+    tx.inventoryClosure.findUnique.mockResolvedValue(
+      closure([lot("2026-09-30", 2, 2), lot("2027-06-30", 8, 7)]),
+    );
+    tx.cashShift.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.confirm(closureId, assistant, undefined, { cashShiftId }),
+    ).rejects.toMatchObject({
+      response: { code: "CASH_SHIFT_NOT_ACTIVE", details: { cashShiftId } },
+    });
+    expect(tx.inventoryClosure.update).not.toHaveBeenCalled();
+  });
+
+  it("asks for the supplies still missing a count", async () => {
+    const pendingClosure = closure([lot("2026-09-30", 2, 2)]);
+    pendingClosure.supplyDetails = [supplyLine("500", null)];
+    tx.inventoryClosure.findUnique.mockResolvedValue(pendingClosure);
+
+    await expect(service.confirm(closureId, leader)).rejects.toMatchObject({
+      response: {
+        code: "INCOMPLETE_COUNT",
+        details: {
+          pending: [],
+          pendingSupplies: [{ supplyId: "supply-milk", supplyName: "Leche" }],
+        },
+      },
+    });
+  });
+
+  it("stores the difference of every supply and reveals it to the leader", async () => {
+    const counted = closure([lot("2026-09-30", 2, 2)]);
+    counted.supplyDetails = [supplyLine("500", "480.5")];
+    tx.inventoryClosure.findUnique.mockResolvedValue(counted);
+    const confirmed = closure([lot("2026-09-30", 2, 2, 0)], "CONFIRMED");
+    confirmed.supplyDetails = [supplyLine("500", "480.5", "-19.5")];
+    tx.inventoryClosure.update.mockResolvedValue(confirmed);
+
+    const result = await service.confirm(closureId, leader);
+
+    const [args] = tx.inventoryClosureSupplyDetail.update.mock.calls[0] as [
+      { where: { id: string }; data: { difference: Prisma.Decimal } },
+    ];
+    expect(args.where).toEqual({ id: "supply-detail-milk" });
+    expect(args.data.difference.toString()).toBe("-19.5");
+    expect(result.supplyItems).toEqual([
+      {
+        supplyId: "supply-milk",
+        supplyName: "Leche",
+        unit: "ml",
+        systemQuantity: "500",
+        physicalQuantity: "480.5",
+        observation: null,
+        difference: "-19.5",
+      },
+    ]);
+    expect(result).toMatchObject({
+      totalSupplyDifferences: 1,
+      countedSupplies: 1,
+    });
   });
 });

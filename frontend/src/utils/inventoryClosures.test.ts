@@ -7,7 +7,10 @@ import {
   countError,
   differenceLabel,
   formatClosureDay,
+  parseSupplyCount,
   resolveClosureError,
+  supplyCountError,
+  supplyDifferenceLabel,
 } from './inventoryClosures'
 
 describe('inventory closure helpers', () => {
@@ -42,5 +45,27 @@ describe('inventory closure helpers', () => {
     expect(
       resolveClosureError(new ApiError('Locked', 422, {}, 'CLOSURE_LOCKED'), 'fallback'),
     ).toContain('ya se confirmó o se bloqueó')
+  })
+
+  it('validates and formats the supply counts', () => {
+    expect(supplyCountError('12,5')).toBeNull()
+    expect(supplyCountError('0')).toBeNull()
+    expect(supplyCountError('1.2345')).toBe(
+      'Escribe un número de 0 en adelante, con máximo 3 decimales.',
+    )
+    expect(parseSupplyCount('12,5')).toBe(12.5)
+    expect(supplyDifferenceLabel('-19.5', 'ml')).toBe('−19,5 ml')
+    expect(supplyDifferenceLabel('2', 'g')).toBe('+2 g')
+    expect(supplyDifferenceLabel('0.000', 'g')).toBe('Sin diferencia')
+    expect(supplyDifferenceLabel(null, 'g')).toBe('—')
+  })
+
+  it('explains the cash shift errors of the confirmation', () => {
+    expect(
+      resolveClosureError(new ApiError('x', 400, {}, 'ACTIVE_CASH_SHIFT_REQUIRED'), 'fallback'),
+    ).toMatch(/turno de caja abierto/)
+    expect(
+      resolveClosureError(new ApiError('x', 422, {}, 'CASH_SHIFT_NOT_ACTIVE'), 'fallback'),
+    ).toMatch(/turno de caja ya se cerró/)
   })
 })
