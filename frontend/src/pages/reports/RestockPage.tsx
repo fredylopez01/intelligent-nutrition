@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { RestockTable } from '../../components/reports/RestockTable'
 import { Alert } from '../../components/ui/Alert'
 import { Button } from '../../components/ui/Button'
+import { DownloadPdfButton } from '../../components/ui/DownloadPdfButton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ReloadButton } from '../../components/ui/ReloadButton'
 import { TableSkeleton } from '../../components/ui/TableSkeleton'
@@ -10,6 +11,8 @@ import { useAuth } from '../../hooks/useAuth'
 import { useInventoryBranches } from '../../hooks/useInventoryBranches'
 import { useRestockReport } from '../../hooks/useRestockReport'
 import { AppLayout } from '../../layouts/AppLayout'
+import { businessToday } from '../../utils/inventoryClosures'
+import { downloadRestockReport } from '../../utils/pdf/reportsPdf'
 
 import '../inventory/InventoryPage.css'
 import '../../components/reports/Reports.css'
@@ -114,6 +117,11 @@ export function RestockPage() {
           </select>
         </div>
         <ReloadButton onReload={refetch} loading={status === 'loading'} />
+        <DownloadPdfButton
+          label="Descargar PDF"
+          onDownload={() => downloadRestockReport({ rows, branch, today: businessToday() })}
+          disabled={status !== 'success' || rows.length === 0}
+        />
       </div>
 
       {status === 'success' && rows.length > 0 && (

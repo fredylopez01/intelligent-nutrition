@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { SalesReportTable } from '../../components/reports/SalesReportTable'
 import { Alert } from '../../components/ui/Alert'
 import { Button } from '../../components/ui/Button'
+import { DownloadPdfButton } from '../../components/ui/DownloadPdfButton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Pagination } from '../../components/ui/Pagination'
 import { ReloadButton } from '../../components/ui/ReloadButton'
@@ -12,6 +13,9 @@ import { useInventoryBranches } from '../../hooks/useInventoryBranches'
 import { usePagination } from '../../hooks/usePagination'
 import { useSalesReport } from '../../hooks/useSalesReport'
 import { AppLayout } from '../../layouts/AppLayout'
+import { reportsService } from '../../services/reports.service'
+import type { SalesReportRow } from '../../types/report'
+import { downloadSalesReport } from '../../utils/pdf/reportsPdf'
 import { formatPrice } from '../../utils/products'
 import { defaultReportRange, summarizeSalesReport } from '../../utils/reports'
 
@@ -22,9 +26,10 @@ import '../../components/reports/Reports.css'
 const ALL_BRANCHES = 'todas'
 const FILTER_DEFAULTS = { sede: '', desde: '', hasta: '' }
 const LIMIT_OPTIONS = [20, 50, 100]
+const EXPORT_PAGE_SIZE = 100
 
 export function ReportsPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const isSuperadmin = user?.role.name === 'SUPERADMIN'
   const branchOptions = useInventoryBranches()
   const [, setSearchParams] = useSearchParams()
@@ -47,6 +52,19 @@ export function ReportsPage() {
   )
   const summary = summarizeSalesReport(rows)
   const partial = meta !== null && meta.totalPages > 1
+
+  const downloadPdf = async () => {
+    const allRows: SalesReportRow[] = []
+    for (let page = 1, totalPages = 1; page <= totalPages; page += 1) {
+      const response = await reportsService.sales(
+        { page, limit: EXPORT_PAGE_SIZE, branchId: branch?.id, from, to },
+        token,
+      )
+      allRows.push(...response.data)
+      totalPages = response.meta.totalPages
+    }
+    await downloadSalesReport({ rows: allRows, branch, from, to })
+  }
 
   const changeBranch = (value: string) =>
     setSearchParams(
@@ -161,6 +179,11 @@ export function ReportsPage() {
           </label>
         </div>
         <ReloadButton onReload={refetch} loading={status === 'loading'} />
+        <DownloadPdfButton
+          label="Descargar PDF"
+          onDownload={downloadPdf}
+          disabled={status !== 'success' || rows.length === 0}
+        />
       </div>
 
       {status === 'success' && rows.length > 0 && (

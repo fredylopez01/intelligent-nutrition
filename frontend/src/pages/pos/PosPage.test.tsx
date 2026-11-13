@@ -14,6 +14,7 @@ import { CASH, NEQUI, paymentMethodsPage } from '../../test-utils/paymentMethods
 import { buildPromotion } from '../../test-utils/promotions'
 import { buildSale, buildSellable } from '../../test-utils/sales'
 import type { SellableProduct } from '../../types/sale'
+import { downloadSaleReceipt } from '../../utils/pdf/saleReceiptPdf'
 
 import { PosPage } from './PosPage'
 
@@ -40,6 +41,10 @@ vi.mock('../../services/categories.service', () => ({
 
 vi.mock('../../services/units.service', () => ({
   unitsService: { list: vi.fn() },
+}))
+
+vi.mock('../../utils/pdf/saleReceiptPdf', () => ({
+  downloadSaleReceipt: vi.fn(),
 }))
 
 vi.mock('../../services/branches.service', () => ({
@@ -269,6 +274,12 @@ describe('PosPage', () => {
     )
     const ticket = within(await screen.findByRole('dialog', { name: 'Venta registrada' }))
     expect(ticket.getByText('V-20261026-0001')).toBeInTheDocument()
+    await user.click(ticket.getByRole('button', { name: 'Descargar comprobante' }))
+    await waitFor(() =>
+      expect(downloadSaleReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ saleNumber: 'V-20261026-0001' }),
+      ),
+    )
     await user.click(ticket.getByRole('button', { name: 'Nueva venta' }))
 
     expect(screen.getByText(/Agrega productos desde el panel/)).toBeInTheDocument()

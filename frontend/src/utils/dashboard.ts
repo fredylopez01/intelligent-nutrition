@@ -56,6 +56,18 @@ export function salesChange(today: number, yesterday: number): number | null {
   return ((today - yesterday) / yesterday) * 100
 }
 
+export function averageTicket(total: number, count: number): number | null {
+  return count > 0 ? total / count : null
+}
+
+export function salesShare(value: number, total: number): number {
+  return total > 0 ? (value / total) * 100 : 0
+}
+
+export function formatShare(share: number): string {
+  return `${Math.round(share)}%`
+}
+
 export function formatChange(change: number): string {
   const sign = change > 0 ? '+' : change < 0 ? '−' : ''
   return `${sign}${percentFormatter.format(Math.abs(change))}%`

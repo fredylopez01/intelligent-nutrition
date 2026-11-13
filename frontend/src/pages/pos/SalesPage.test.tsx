@@ -8,6 +8,7 @@ import { ApiError } from '../../services/http'
 import { salesService } from '../../services/sales.service'
 import { buildSale, buildSaleSummary } from '../../test-utils/sales'
 import type { SaleSummary, SalesListParams } from '../../types/sale'
+import { downloadSaleReceipt } from '../../utils/pdf/saleReceiptPdf'
 
 import { SalesPage } from './SalesPage'
 
@@ -18,6 +19,10 @@ const auth = vi.hoisted(() => ({
 
 vi.mock('../../services/sales.service', () => ({
   salesService: { list: vi.fn(), get: vi.fn(), reverse: vi.fn() },
+}))
+
+vi.mock('../../utils/pdf/saleReceiptPdf', () => ({
+  downloadSaleReceipt: vi.fn(),
 }))
 
 vi.mock('../../services/branches.service', () => ({
@@ -116,6 +121,19 @@ describe('SalesPage', () => {
         status: 'REVERSED',
         from: '2026-10-01',
       }),
+    )
+  })
+
+  it('downloads the receipt of the open sale', async () => {
+    const { user } = renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Ver la venta V-20261026-0001' }))
+    await user.click(await screen.findByRole('button', { name: 'Descargar comprobante' }))
+
+    await waitFor(() =>
+      expect(downloadSaleReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ saleNumber: 'V-20261026-0001' }),
+      ),
     )
   })
 

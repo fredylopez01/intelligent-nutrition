@@ -42,8 +42,8 @@
 
 .settings-page__tab--active,
 .settings-page__tab--active:hover {
-  color: var(--color-text);
-  background: var(--color-primary);
+  color: var(--color-on-primary);
+  background: var(--color-primary-strong);
 }
 
 .settings-page__tab-icon {
@@ -57,22 +57,4 @@
     flex: 1 1 0;
     justify-content: center;
   }
-}
-
-.settings-page__profile-link {
-  display: inline-flex;
-  align-items: center;
-  height: 42px;
-  padding: 0 1.125rem;
-  background: var(--color-primary-strong);
-  border-radius: 10px;
-  color: var(--color-on-primary);
-  font-size: 0.845rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.settings-page__profile-link:hover {
-  background: var(--color-hover);
-  color: var(--color-on-primary);
 }
