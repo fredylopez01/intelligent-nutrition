@@ -56,7 +56,7 @@ describe('inventoryClosuresService', () => {
     vi.mocked(http.put).mockResolvedValue({})
     const items = [{ productId: 'product-whey', expirationDate: '2027-06-30', physicalQuantity: 7 }]
 
-    await inventoryClosuresService.saveCounts('closure-1', items, 'token')
+    await inventoryClosuresService.saveCounts('closure-1', { items }, 'token')
 
     expect(http.put).toHaveBeenCalledWith(
       '/inventory-closures/closure-1/counts',
@@ -67,13 +67,38 @@ describe('inventoryClosuresService', () => {
     )
   })
 
-  it('confirms the closure', async () => {
+  it('saves the counts of the supplies', async () => {
+    vi.mocked(http.put).mockResolvedValue({})
+    const supplyItems = [{ supplyId: 'supply-milk', physicalQuantity: 480.5 }]
+
+    await inventoryClosuresService.saveCounts('closure-1', { supplyItems }, 'token')
+
+    expect(http.put).toHaveBeenCalledWith(
+      '/inventory-closures/closure-1/counts',
+      { supplyItems },
+      { token: 'token' },
+    )
+  })
+
+  it('confirms the closure with the active cash shift', async () => {
     vi.mocked(http.post).mockResolvedValue({})
 
-    await inventoryClosuresService.confirm('closure-1', 'token')
+    await inventoryClosuresService.confirm('closure-1', 'shift-1', 'token')
+    await inventoryClosuresService.confirm('closure-1', null, 'token')
 
-    expect(http.post).toHaveBeenCalledWith('/inventory-closures/closure-1/confirm', undefined, {
-      token: 'token',
-    })
+    expect(http.post).toHaveBeenNthCalledWith(
+      1,
+      '/inventory-closures/closure-1/confirm',
+      { cashShiftId: 'shift-1' },
+      { token: 'token' },
+    )
+    expect(http.post).toHaveBeenNthCalledWith(
+      2,
+      '/inventory-closures/closure-1/confirm',
+      undefined,
+      {
+        token: 'token',
+      },
+    )
   })
 })

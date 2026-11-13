@@ -1,5 +1,5 @@
 import type {
-  ClosureCount,
+  ClosureCountsPayload,
   ClosuresListParams,
   ClosuresListResponse,
   InventoryClosure,
@@ -28,9 +28,13 @@ export const inventoryClosuresService = {
   list: (params: ClosuresListParams, token: string | null) =>
     http.get<ClosuresListResponse>(`${CLOSURES_PATH}${buildClosuresQuery(params)}`, { token }),
 
-  saveCounts: (closureId: string, items: ClosureCount[], token: string | null) =>
-    http.put<InventoryClosure>(`${CLOSURES_PATH}/${closureId}/counts`, { items }, { token }),
+  saveCounts: (closureId: string, payload: ClosureCountsPayload, token: string | null) =>
+    http.put<InventoryClosure>(`${CLOSURES_PATH}/${closureId}/counts`, payload, { token }),
 
-  confirm: (closureId: string, token: string | null) =>
-    http.post<InventoryClosure>(`${CLOSURES_PATH}/${closureId}/confirm`, undefined, { token }),
+  confirm: (closureId: string, cashShiftId: string | null, token: string | null) =>
+    http.post<InventoryClosure>(
+      `${CLOSURES_PATH}/${closureId}/confirm`,
+      cashShiftId ? { cashShiftId } : undefined,
+      { token },
+    ),
 }

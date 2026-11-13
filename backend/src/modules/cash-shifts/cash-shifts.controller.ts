@@ -17,6 +17,7 @@ import { Roles } from "../../common/decorators/roles.decorator.js";
 import { BranchScopeGuard } from "../../common/guards/branch-scope.guard.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 import { CashShiftsService } from "./cash-shifts.service.js";
+import { ActiveCashShiftQueryDto } from "./dto/active-cash-shift-query.dto.js";
 import { CloseCashShiftDto } from "./dto/close-cash-shift.dto.js";
 import { ListCashShiftsQueryDto } from "./dto/list-cash-shifts-query.dto.js";
 import { OpenCashShiftDto } from "./dto/open-cash-shift.dto.js";
@@ -28,7 +29,7 @@ export class CashShiftsController {
 
   @Post()
   @HttpCode(201)
-  @Roles("BRANCH_LEADER", "BRANCH_ASSISTANT")
+  @Roles("SUPERADMIN", "BRANCH_LEADER", "BRANCH_ASSISTANT")
   open(
     @Body() dto: OpenCashShiftDto,
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -38,7 +39,7 @@ export class CashShiftsController {
   }
 
   @Patch(":shiftId/close")
-  @Roles("BRANCH_LEADER", "BRANCH_ASSISTANT")
+  @Roles("SUPERADMIN", "BRANCH_LEADER", "BRANCH_ASSISTANT")
   close(
     @Param("shiftId", new ParseUUIDPipe()) shiftId: string,
     @Body() dto: CloseCashShiftDto,
@@ -56,6 +57,13 @@ export class CashShiftsController {
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
     return this.cashShiftsService.findAll(query, currentUser);
+  }
+
+  @Get("active")
+  @Roles("SUPERADMIN", "BRANCH_LEADER", "BRANCH_ASSISTANT")
+  @BranchScope("query.branchId")
+  findActive(@Query() query: ActiveCashShiftQueryDto) {
+    return this.cashShiftsService.findActive(query.branchId);
   }
 
   @Get(":shiftId")

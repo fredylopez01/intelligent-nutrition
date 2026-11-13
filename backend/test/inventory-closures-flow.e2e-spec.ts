@@ -18,13 +18,28 @@ interface ClosureItem {
   difference?: number | null;
 }
 
+interface SupplyItem {
+  supplyId: string;
+  supplyName: string;
+  unit: string;
+  systemQuantity: string;
+  physicalQuantity: string | null;
+  observation: string | null;
+  difference?: string | null;
+}
+
 interface ClosureBody {
   id: string;
   status: string;
+  cashShiftId: string | null;
   countedItems: number;
   totalItems: number;
   totalDifferences?: number;
+  totalSupplyDifferences?: number;
+  countedSupplies: number;
+  totalSupplies: number;
   items: ClosureItem[];
+  supplyItems: SupplyItem[];
 }
 
 interface ErrorBody {
@@ -50,6 +65,9 @@ describe("Inventory closure flow (e2e)", () => {
   let productId = "";
   let branchId = "";
   let closureId = "";
+  let supplyId = "";
+  let cashShiftId = "";
+  let supplyItems: SupplyItem[] = [];
   const personIds: string[] = [];
   const tokens = {} as Record<RoleName, string>;
 
@@ -62,10 +80,16 @@ describe("Inventory closure flow (e2e)", () => {
       .put(`/api/v1/inventory-closures/${closureId}/counts`)
       .set(auth(token))
       .send({ items });
-  const confirm = (token: string) =>
+  const putSupplyCounts = (token: string, items: Record<string, unknown>[]) =>
+    http()
+      .put(`/api/v1/inventory-closures/${closureId}/counts`)
+      .set(auth(token))
+      .send({ supplyItems: items });
+  const confirm = (token: string, body: Record<string, unknown> = {}) =>
     http()
       .post(`/api/v1/inventory-closures/${closureId}/confirm`)
-      .set(auth(token));
+      .set(auth(token))
+      .send(body);
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -160,13 +184,23 @@ describe("Inventory closure flow (e2e)", () => {
         },
       ],
     });
-    await prisma.cashShift.create({
-      data: {
-        branchId,
-        userId: personIds[1],
-        openingAmount: "0.00",
-      },
+    supplyId = (
+      await prisma.supply.create({
+        data: { name: `${runId} Leche cierre`, unitOfMeasureId: unitId },
+      })
+    ).id;
+    await prisma.supplyStock.create({
+      data: { branchId, supplyId, quantity: "500.000" },
     });
+    cashShiftId = (
+      await prisma.cashShift.create({
+        data: {
+          branchId,
+          userId: personIds[1],
+          openingAmount: "50000.00",
+        },
+      })
+    ).id;
   }, 30000);
 
   afterAll(async () => {
@@ -182,8 +216,13 @@ describe("Inventory closure flow (e2e)", () => {
       await prisma?.auditLog.deleteMany({
         where: { userId: { in: personIds } },
       });
+      await prisma?.inventoryClosureSupplyDetail.deleteMany({
+        where: { closureId: { in: (closures ?? []).map(({ id }) => id) } },
+      });
       await prisma?.inventoryClosure.deleteMany({ where: { branchId } });
       await prisma?.cashShift.deleteMany({ where: { branchId } });
+      await prisma?.supplyStock.deleteMany({ where: { supplyId } });
+      await prisma?.supply.deleteMany({ where: { id: supplyId } });
       await prisma?.inventoryMovement.deleteMany({ where: { productId } });
       await prisma?.notification.deleteMany({
         where: { OR: [{ productId }, { branchId }] },
@@ -214,10 +253,32 @@ describe("Inventory closure flow (e2e)", () => {
 
     const closure = closureOf(response.body);
     closureId = closure.id;
+    supplyItems = closure.supplyItems;
     expect(closure.items.map((item) => item.expirationDate)).toEqual([
       "2026-09-30",
       "2027-06-30",
     ]);
+    expect(closure.supplyItems).toContainEqual({
+      supplyId,
+      supplyName: `${runId} Leche cierre`,
+      unit: `F${runId.slice(-8)}`,
+      systemQuantity: "500",
+      physicalQuantity: null,
+      observation: null,
+    });
+    expect(closure.countedSupplies).toBe(0);
+  });
+
+  it("shows the open cash shift of the branch to the assistant", async () => {
+    const response = await http()
+      .get("/api/v1/cash-shifts/active")
+      .query({ branchId })
+      .set(auth(tokens.BRANCH_ASSISTANT))
+      .expect(200);
+
+    expect(
+      (response.body as { data: { id: string; status: string } }).data,
+    ).toMatchObject({ id: cashShiftId, status: "OPEN" });
   });
 
   it("saves a partial count and shows the expected quantity without differences while pending", async () => {
@@ -282,6 +343,27 @@ describe("Inventory closure flow (e2e)", () => {
     ]);
   });
 
+  it("counts the supplies of the branch with decimals", async () => {
+    const response = await putSupplyCounts(
+      tokens.BRANCH_ASSISTANT,
+      supplyItems.map((item) =>
+        item.supplyId === supplyId
+          ? { supplyId, physicalQuantity: 480.5, observation: "Derrame" }
+          : {
+              supplyId: item.supplyId,
+              physicalQuantity: Number(item.systemQuantity),
+            },
+      ),
+    ).expect(200);
+
+    const closure = closureOf(response.body);
+    expect(closure.countedSupplies).toBe(closure.totalSupplies);
+    expect(
+      closure.supplyItems.find((item) => item.supplyId === supplyId),
+    ).toMatchObject({ physicalQuantity: "480.5", observation: "Derrame" });
+    expect(JSON.stringify(closure)).not.toContain("difference");
+  });
+
   it("lets the superadmin register counts", async () => {
     const response = await putCounts(tokens.SUPERADMIN, [
       { productId, expirationDate: "2027-06-30", physicalQuantity: 8 },
@@ -293,11 +375,14 @@ describe("Inventory closure flow (e2e)", () => {
     });
   });
 
-  it("the assistant confirms without seeing the differences", async () => {
-    const response = await confirm(tokens.BRANCH_ASSISTANT).expect(200);
+  it("the assistant confirms with the active cash shift without seeing the differences", async () => {
+    const response = await confirm(tokens.BRANCH_ASSISTANT, {
+      cashShiftId,
+    }).expect(200);
 
     const closure = closureOf(response.body);
     expect(closure.status).toBe("CONFIRMED");
+    expect(closure.cashShiftId).toBe(cashShiftId);
     expect(JSON.stringify(closure)).not.toContain("difference");
   });
 
@@ -307,6 +392,14 @@ describe("Inventory closure flow (e2e)", () => {
     );
 
     expect(closure.totalDifferences).toBe(1);
+    expect(closure.totalSupplyDifferences).toBe(1);
+    expect(
+      closure.supplyItems.find((item) => item.supplyId === supplyId),
+    ).toMatchObject({
+      systemQuantity: "500",
+      physicalQuantity: "480.5",
+      difference: "-19.5",
+    });
     expect(closure.items).toEqual([
       expect.objectContaining({
         expirationDate: "2026-09-30",

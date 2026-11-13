@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import { CashShiftStatus } from "../../../generated/prisma/enums.js";
 import { PrismaService } from "../../database/prisma/prisma.service.js";
@@ -78,6 +79,23 @@ export class CashShiftsService {
         code: "SHIFT_ALREADY_OPEN",
         message: "You already have an open cash shift.",
         details: { shiftId: existing.id },
+      });
+    }
+
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { active: true },
+    });
+    if (!branch) {
+      throw new NotFoundException({
+        code: "BRANCH_NOT_FOUND",
+        message: "Branch not found.",
+      });
+    }
+    if (!branch.active) {
+      throw new UnprocessableEntityException({
+        code: "BRANCH_INACTIVE",
+        message: "The branch is inactive.",
       });
     }
 
@@ -261,5 +279,14 @@ export class CashShiftsService {
       throw new NotFoundException("Cash shift not found.");
     }
     return toShiftResponse(shift);
+  }
+
+  async findActive(branchId: string) {
+    const shift = await this.prisma.cashShift.findFirst({
+      where: { branchId, status: CashShiftStatus.OPEN },
+      orderBy: { openedAt: "desc" },
+      select: SHIFT_SELECT,
+    });
+    return shift ? toShiftResponse(shift) : null;
   }
 }

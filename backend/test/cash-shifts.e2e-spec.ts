@@ -172,9 +172,16 @@ describe("POST /api/v1/cash-shifts (open) (e2e)", () => {
     await openShift(validPayload()).expect(401);
   });
 
-  it("returns 403 when SUPERADMIN tries to open (role not allowed)", async () => {
-    const response = await openShift(validPayload(), tokens.SUPERADMIN).expect(403);
-    expect(errorOf(response.body).code).toBe("INSUFFICIENT_PERMISSIONS");
+  it("lets the SUPERADMIN open a shift to work in an existing branch", async () => {
+    const missing = await openShift(
+      { branchId: randomUUID(), openingAmount: "1000.00" },
+      tokens.SUPERADMIN,
+    ).expect(404);
+    expect(errorOf(missing.body).code).toBe("BRANCH_NOT_FOUND");
+
+    const response = await openShift(validPayload(), tokens.SUPERADMIN).expect(201);
+    const shift = (response.body as ApiResponse<ShiftResponse>).data!;
+    expect(shift).toMatchObject({ branch: { id: branchId }, status: "OPEN" });
   });
 });
 
@@ -337,7 +344,7 @@ describe("PATCH /api/v1/cash-shifts/:id/close (e2e)", () => {
     expect(errorOf(response.body).code).toBe("SHIFT_OWNER_REQUIRED");
   });
 
-  it("returns 403 when SUPERADMIN tries to close (endpoint only allows BRANCH_LEADER and BRANCH_ASSISTANT)", async () => {
+  it("lets the SUPERADMIN close any open shift", async () => {
     const leaderActorId = actorIds[1];
     const shift = await createOpenShift(leaderActorId);
 
@@ -345,8 +352,11 @@ describe("PATCH /api/v1/cash-shifts/:id/close (e2e)", () => {
       shift.id,
       { closingAmount: "250000.00" },
       tokens.SUPERADMIN,
-    ).expect(403);
-    expect(errorOf(response.body).code).toBe("INSUFFICIENT_PERMISSIONS");
+    ).expect(200);
+    expect((response.body as ApiResponse<ShiftResponse>).data).toMatchObject({
+      id: shift.id,
+      status: "CLOSED",
+    });
   });
 
   it("returns 404 when the shift does not exist", async () => {

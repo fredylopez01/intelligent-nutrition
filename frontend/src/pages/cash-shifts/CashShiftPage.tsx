@@ -9,6 +9,7 @@ import { TableSkeleton } from '../../components/ui/TableSkeleton'
 import { TextAreaField } from '../../components/ui/TextAreaField'
 import { TextField } from '../../components/ui/TextField'
 import { useAuth } from '../../hooks/useAuth'
+import { useInventoryBranches } from '../../hooks/useInventoryBranches'
 import { usePagination } from '../../hooks/usePagination'
 import { AppLayout } from '../../layouts/AppLayout'
 import { ApiError } from '../../services/http'
@@ -72,7 +73,13 @@ export function CashShiftPage() {
   const { user, token } = useAuth()
   const roleName = user?.role.name
   const isBranchRole = roleName === 'BRANCH_LEADER' || roleName === 'BRANCH_ASSISTANT'
+  const isSuperadmin = roleName === 'SUPERADMIN'
+  const canWorkShift = isBranchRole || isSuperadmin
   const userBranches = user?.branches ?? []
+  const branchOptions = useInventoryBranches()
+  const openableBranches = isSuperadmin
+    ? branchOptions.branches.filter((branch) => branch.active)
+    : userBranches
   const defaultBranchId = userBranches.length === 1 ? userBranches[0].id : ''
 
   const [openShift, setOpenShift] = useState<CashShift | null | undefined>(undefined)
@@ -183,7 +190,9 @@ export function CashShiftPage() {
     event.preventDefault()
     let valid = true
 
-    if (!openBranchId) {
+    const branchToOpen =
+      openBranchId || (openableBranches.length === 1 ? openableBranches[0].id : '')
+    if (!branchToOpen) {
       setOpenBranchError('Elige una sede para abrir el turno.')
       valid = false
     } else {
@@ -207,7 +216,7 @@ export function CashShiftPage() {
     try {
       const shift = await cashShiftsService.open(
         {
-          branchId: openBranchId,
+          branchId: branchToOpen,
           openingAmount: normalizedOpening,
           observation: openObservation.trim() || undefined,
         },
@@ -267,7 +276,7 @@ export function CashShiftPage() {
       : null
 
   const renderCurrentShift = () => {
-    if (!isBranchRole) return null
+    if (!canWorkShift) return null
 
     if (openShift === undefined) {
       return (
@@ -293,7 +302,7 @@ export function CashShiftPage() {
         <div className="cash-shift-page__card">
           <p className="cash-shift-page__meta-label">No hay turno abierto</p>
           <form onSubmit={handleOpenShift} noValidate className="cash-shift-page__form">
-            {userBranches.length > 1 && (
+            {openableBranches.length > 1 && (
               <div className="ui-field">
                 <label className="ui-field__label" htmlFor="shift-branch">
                   Sede
@@ -305,7 +314,7 @@ export function CashShiftPage() {
                   onChange={(e) => setOpenBranchId(e.target.value)}
                 >
                   <option value="">— Elige una sede —</option>
-                  {userBranches.map((b) => (
+                  {openableBranches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
                     </option>
@@ -513,7 +522,7 @@ export function CashShiftPage() {
 
   return (
     <AppLayout title="Turno de caja">
-      {isBranchRole && (
+      {canWorkShift && (
         <section className="cash-shift-page__current" aria-labelledby="current-shift-title">
           <div className="cash-shift-page__section-head">
             <h2 id="current-shift-title" className="cash-shift-page__section-title">

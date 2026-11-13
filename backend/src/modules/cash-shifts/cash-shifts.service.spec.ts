@@ -12,6 +12,9 @@ const prismaMock = {
     create: jest.fn<AsyncMock>(),
     update: jest.fn<AsyncMock>(),
   },
+  branch: {
+    findUnique: jest.fn<AsyncMock>(),
+  },
   $transaction: jest.fn<SyncMock>(),
 };
 
@@ -74,6 +77,7 @@ describe("CashShiftsService.open", () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    prismaMock.branch.findUnique.mockResolvedValue({ active: true });
     prismaMock.$transaction.mockImplementation(
       async (fn: (tx: typeof prismaMock) => Promise<unknown>) => fn(prismaMock),
     );
@@ -101,6 +105,37 @@ describe("CashShiftsService.open", () => {
     expect(result.id).toBe("shift-1");
     expect(result.status).toBe("OPEN");
     expect(prismaMock.cashShift.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the superadmin open a shift in any active branch", async () => {
+    prismaMock.cashShift.findFirst.mockResolvedValueOnce(null);
+    prismaMock.cashShift.create.mockResolvedValueOnce(shiftRow);
+
+    const result = await service.open(
+      { branchId: "branch-9", openingAmount: "20000.00" },
+      superadmin,
+    );
+
+    expect(result.status).toBe("OPEN");
+    expect(prismaMock.branch.findUnique).toHaveBeenCalledWith({
+      where: { id: "branch-9" },
+      select: { active: true },
+    });
+  });
+
+  it("rejects a branch that does not exist or is inactive", async () => {
+    prismaMock.cashShift.findFirst.mockResolvedValue(null);
+    prismaMock.branch.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      service.open({ branchId: "missing", openingAmount: "1.00" }, superadmin),
+    ).rejects.toMatchObject({ response: { code: "BRANCH_NOT_FOUND" } });
+
+    prismaMock.branch.findUnique.mockResolvedValueOnce({ active: false });
+    await expect(
+      service.open({ branchId: "closed", openingAmount: "1.00" }, superadmin),
+    ).rejects.toMatchObject({ response: { code: "BRANCH_INACTIVE" } });
+    expect(prismaMock.cashShift.create).not.toHaveBeenCalled();
   });
 
   it("returns the opening amount in the response", async () => {
@@ -427,5 +462,42 @@ describe("CashShiftsService.findOne", () => {
     prismaMock.cashShift.findUnique.mockResolvedValueOnce(null);
 
     await expect(service.findOne("non-existent")).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe("CashShiftsService.findActive", () => {
+  let service: InstanceType<typeof CashShiftsService>;
+
+  beforeEach(async () => {
+    jest.resetAllMocks();
+
+    const module = await Test.createTestingModule({
+      providers: [
+        CashShiftsService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(CashShiftsService);
+  });
+
+  it("returns the latest open shift of the branch", async () => {
+    prismaMock.cashShift.findFirst.mockResolvedValueOnce(shiftRow);
+
+    const result = await service.findActive("branch-1");
+
+    expect(prismaMock.cashShift.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { branchId: "branch-1", status: "OPEN" },
+        orderBy: { openedAt: "desc" },
+      }),
+    );
+    expect(result?.id).toBe("shift-1");
+  });
+
+  it("returns null when the branch has no open shift", async () => {
+    prismaMock.cashShift.findFirst.mockResolvedValueOnce(null);
+
+    await expect(service.findActive("branch-1")).resolves.toBeNull();
   });
 });
