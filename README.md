@@ -390,7 +390,7 @@ El archivo `azure-pipelines.yml` en la raíz define tres etapas:
 2. **Test:** levanta PostgreSQL 17 como servicio y corre las pruebas del backend (unitarias con cobertura y de integración contra una base aparte) y del frontend (componentes con Vitest y flujo completo con Playwright). Publica la cobertura de Jest y los reportes de Playwright como artefactos, incluso cuando la etapa falla. El umbral de cobertura vive en `coverageThreshold` (`backend/package.json`), así que bajarlo hace fallar el paso. El spec de almacenamiento se excluye porque necesita un endpoint S3 real.
 3. **Sync:** solo se ejecuta en `main` después de que Build y Test terminen correctamente. Usa el PAT del Variable Group `github-sync-secrets` para sincronizar `main` con GitHub.
 
-Los secretos de la etapa Test (`postgresPassword`, `jwtSecret`) deben existir como variables del pipeline; el resto de valores son fijos de prueba.
+Todas las variables de la etapa Test son ficticias y viven en el propio YAML, igual que los `STORAGE_*`: la base de datos existe solo durante el job. El único Variable Group que el pipeline necesita es `github-sync-secrets`, que aporta `GH_PAT` a la etapa Sync.
 
 ### Despliegue en Render y etapa Deploy
 
