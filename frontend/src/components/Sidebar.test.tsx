@@ -152,17 +152,29 @@ describe('Sidebar catalog submenu', () => {
       .map((link) => link.textContent)
   }
 
-  it('shows products, categories and units inside the catalog', () => {
+  it('shows products, categories, units and recipes inside the catalog', () => {
     renderSidebar('/catalogo/categorias')
 
-    expect(catalogSubs()).toEqual(['Catálogo', 'Productos', 'Categorías', 'Unidades de medida'])
+    expect(catalogSubs()).toEqual([
+      'Catálogo',
+      'Productos',
+      'Categorías',
+      'Unidades de medida',
+      'Recetas',
+    ])
   })
 
   it.each(['BRANCH_LEADER', 'BRANCH_ASSISTANT'])('shows the catalog submenu to the %s', (role) => {
     auth.role = role
     renderSidebar('/catalogo')
 
-    expect(catalogSubs()).toEqual(['Catálogo', 'Productos', 'Categorías', 'Unidades de medida'])
+    expect(catalogSubs()).toEqual([
+      'Catálogo',
+      'Productos',
+      'Categorías',
+      'Unidades de medida',
+      'Recetas',
+    ])
   })
 
   it('hides the whole catalog from DEV, as the contract does not include it', () => {
