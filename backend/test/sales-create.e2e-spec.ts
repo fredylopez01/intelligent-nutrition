@@ -19,6 +19,8 @@ interface SaleResponse {
     status: string;
     subtotal: string;
     discountAmount: string;
+    promotionId: string | null;
+    promotionDiscount: string | null;
     taxAmount: string;
     total: string;
     saleAt: string;
@@ -90,6 +92,8 @@ describe("POST /api/v1/sales (e2e)", () => {
   let otherAssistantId: string;
   const tokens = {} as Record<ActorName, string>;
   const actorIds: string[] = [];
+  const previouslyActivePromotionIds: string[] = [];
+  let promotionId = "";
 
   const branchIds = () => [
     branchId,
@@ -386,6 +390,15 @@ describe("POST /api/v1/sales (e2e)", () => {
         where: { saleId: { in: saleIds } },
       });
       await prisma.sale.deleteMany({ where: { id: { in: saleIds } } });
+      if (promotionId) {
+        await prisma.promotion.deleteMany({ where: { id: promotionId } });
+      }
+      if (previouslyActivePromotionIds.length > 0) {
+        await prisma.promotion.updateMany({
+          where: { id: { in: previouslyActivePromotionIds } },
+          data: { active: true },
+        });
+      }
       await prisma.inventoryClosure.deleteMany({
         where: { branchId: { in: branchIds() } },
       });
@@ -643,5 +656,58 @@ describe("POST /api/v1/sales (e2e)", () => {
 
     expect(firstLot.quantity).toBe(0);
     expect(secondLot.quantity).toBe(3);
+  });
+
+  it("persists the active promotion discount and the sale total", async () => {
+    const activePromotions = await prisma.promotion.findMany({
+      where: { active: true },
+      select: { id: true },
+    });
+    previouslyActivePromotionIds.push(...activePromotions.map(({ id }) => id));
+    if (previouslyActivePromotionIds.length > 0) {
+      await prisma.promotion.updateMany({
+        where: { id: { in: previouslyActivePromotionIds } },
+        data: { active: false },
+      });
+    }
+
+    const promotion = await prisma.promotion.create({
+      data: {
+        createdById: actorIds[0],
+        name: `E2E promoción venta ${runId}`,
+        discountPercentage: "15.00",
+        active: true,
+      },
+      select: { id: true },
+    });
+    promotionId = promotion.id;
+
+    const response = await postSale(
+      {
+        ...salePayload({
+          payments: [{ paymentMethodId: cashMethodId, amount: "19.49" }],
+        }),
+        discountAmount: "1.50",
+      },
+      tokens.BRANCH_ASSISTANT,
+    ).expect(201);
+    const sale = (response.body as SaleResponse).data;
+
+    expect(sale).toMatchObject({
+      subtotal: "24.70",
+      discountAmount: "1.50",
+      promotionId,
+      promotionDiscount: "3.71",
+      total: "19.49",
+    });
+
+    const persistedSale = await prisma.sale.findUniqueOrThrow({
+      where: { id: sale.id },
+    });
+    expect(persistedSale.subtotal.toFixed(2)).toBe("24.70");
+    expect(persistedSale.discountAmount.toFixed(2)).toBe("1.50");
+    expect(persistedSale.promotionId).toBe(promotionId);
+    expect(persistedSale.promotionDiscount?.toFixed(2)).toBe("3.71");
+    expect(persistedSale.total.toFixed(2)).toBe("19.49");
   });
 });
