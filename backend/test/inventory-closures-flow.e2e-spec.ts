@@ -160,6 +160,13 @@ describe("Inventory closure flow (e2e)", () => {
         },
       ],
     });
+    await prisma.cashShift.create({
+      data: {
+        branchId,
+        userId: personIds[1],
+        openingAmount: "0.00",
+      },
+    });
   }, 30000);
 
   afterAll(async () => {
@@ -176,6 +183,7 @@ describe("Inventory closure flow (e2e)", () => {
         where: { userId: { in: personIds } },
       });
       await prisma?.inventoryClosure.deleteMany({ where: { branchId } });
+      await prisma?.cashShift.deleteMany({ where: { branchId } });
       await prisma?.inventoryMovement.deleteMany({ where: { productId } });
       await prisma?.notification.deleteMany({
         where: { OR: [{ productId }, { branchId }] },

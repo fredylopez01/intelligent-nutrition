@@ -125,6 +125,14 @@ describe("POST /api/v1/inventory-closures/:id/confirm (e2e)", () => {
       });
     }
 
+    await prisma.cashShift.create({
+      data: {
+        branchId: branch.id,
+        userId: actorIds.BRANCH_LEADER,
+        openingAmount: "0.00",
+      },
+    });
+
     const closure = await prisma.inventoryClosure.create({
       data: {
         branchId: branch.id,
@@ -324,6 +332,9 @@ describe("POST /api/v1/inventory-closures/:id/confirm (e2e)", () => {
       });
       await prisma.inventoryClosure.deleteMany({
         where: { id: { in: closureIds } },
+      });
+      await prisma.cashShift.deleteMany({
+        where: { branchId: { in: testBranchIds } },
       });
       await prisma.userBranch.deleteMany({
         where: { userId: { in: personIds } },

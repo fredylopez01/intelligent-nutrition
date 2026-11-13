@@ -150,7 +150,7 @@ describe('ReceiptForm', () => {
     await user.click(confirm())
 
     expect(
-      await screen.findByText('El lote ya está vencido: no puede entrar al stock general.'),
+      await screen.findByText('El lote ya está vencido: no puede entrar al inventario.'),
     ).toBeInTheDocument()
     expect(screen.getByText('Solo faltan 15 por recibir en esta línea.')).toBeInTheDocument()
   })
@@ -191,7 +191,7 @@ describe('ReceiptForm', () => {
     await user.click(confirm())
 
     expect(
-      await screen.findByText('Dos lotes tienen el mismo vencimiento: súmalos en una sola fila.'),
+      await screen.findByText('Dos filas tienen el mismo vencimiento y destino: combínalas en una sola.'),
     ).toBeInTheDocument()
   })
 

@@ -107,9 +107,20 @@
     "moduleNameMapper": {
       "^(\\.\\.?\\/.*)\\.js$": "$1"
     },
+    "setupFiles": [
+      "reflect-metadata"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 77,
+        "branches": 69,
+        "functions": 62,
+        "lines": 78
+      }
+    },
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }

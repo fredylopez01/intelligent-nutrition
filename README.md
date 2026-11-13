@@ -381,12 +381,15 @@ Render detecta el cambio en GitHub (Webhook automático)
 Render construye y despliega el backend
 ```
 
-### Pipeline de Build y sincronización
+### Pipeline de Build, Test y sincronización
 
-El archivo `azure-pipelines.yml` en la raíz define dos etapas:
+El archivo `azure-pipelines.yml` en la raíz define tres etapas:
 
 1. **Build:** usa Node.js 22, instala dependencias con `npm ci` y compila backend y frontend. Para el backend también genera el cliente Prisma.
-2. **Sync:** solo se ejecuta en `main` después de que Build termine correctamente. Usa el PAT del Variable Group `github-sync-secrets` para sincronizar `main` con GitHub.
+2. **Test:** levanta PostgreSQL 17 como servicio y corre las pruebas del backend (unitarias con cobertura y de integración contra una base aparte) y del frontend (componentes con Vitest y flujo completo con Playwright). Publica la cobertura de Jest y los reportes de Playwright como artefactos, incluso cuando la etapa falla. El umbral de cobertura vive en `coverageThreshold` (`backend/package.json`), así que bajarlo hace fallar el paso. El spec de almacenamiento se excluye porque necesita un endpoint S3 real.
+3. **Sync:** solo se ejecuta en `main` después de que Build y Test terminen correctamente. Usa el PAT del Variable Group `github-sync-secrets` para sincronizar `main` con GitHub.
+
+Los secretos de la etapa Test (`postgresPassword`, `jwtSecret`) deben existir como variables del pipeline; el resto de valores son fijos de prueba.
 
 ### Validación requerida de PR
 
