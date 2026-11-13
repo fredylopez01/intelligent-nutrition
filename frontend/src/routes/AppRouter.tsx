@@ -28,6 +28,7 @@ import { ResetPasswordPage } from '../pages/password-reset/ResetPasswordPage'
 import { PaymentMethodsPage } from '../pages/pos/PaymentMethodsPage'
 import { PosPage } from '../pages/pos/PosPage'
 import { SalesPage } from '../pages/pos/SalesPage'
+import { ProfilePage } from '../pages/profile/ProfilePage'
 import { PromotionsPage } from '../pages/promotions/PromotionsPage'
 import { ReportsPage } from '../pages/reports/ReportsPage'
 import { RestockPage } from '../pages/reports/RestockPage'
@@ -279,6 +280,15 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/caja/turno']}>
             <CashShiftPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/perfil"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
           </ProtectedRoute>
         }
       />

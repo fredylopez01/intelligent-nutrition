@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 
 import { ChangePasswordForm } from '../../components/settings/ChangePasswordForm'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -113,10 +114,11 @@ export function SettingsPage() {
           className="settings-page__panel"
         >
           {activeTab === 'cuenta' ? (
-            <EmptyState
-              eyebrow="Coming next"
-              title="Los datos de tu cuenta llegan en un próximo sprint"
-            />
+            <EmptyState eyebrow="Cuenta" title="Tus datos personales están en Mi perfil">
+              <Link className="settings-page__profile-link" to="/perfil">
+                Ir a Mi perfil
+              </Link>
+            </EmptyState>
           ) : (
             <ChangePasswordForm />
           )}
