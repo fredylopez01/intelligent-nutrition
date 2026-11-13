@@ -20,6 +20,7 @@ Plataforma integral para la gestión nutricional inteligente. Monorepo que conti
 - [Flujo de trabajo](#flujo-de-trabajo)
 - [Documentación adicional](#documentación-adicional)
 - [Equipo](#equipo)
+- [Licencia](#licencia)
 
 ---
 
@@ -391,6 +392,12 @@ El archivo `azure-pipelines.yml` en la raíz define tres etapas:
 
 Los secretos de la etapa Test (`postgresPassword`, `jwtSecret`) deben existir como variables del pipeline; el resto de valores son fijos de prueba.
 
+### Despliegue en Render y etapa Deploy
+
+No se agrega una etapa `Deploy` de Azure para el servicio Render actual: Render ya detecta los cambios de `main` en el repositorio espejo de GitHub y despliega automáticamente. Como la etapa `Sync` solo se ejecuta después de que Build y Test pasan, ese despliegue ya queda condicionado por ambas etapas. Añadir otro disparador de despliegue para el mismo servicio sería redundante y podría iniciar despliegues duplicados.
+
+Actualmente no hay un servicio Render separado para staging ni un Variable Group con sus credenciales. Por eso, el pipeline no puede desplegar a staging sin definir primero ese destino. Si se requiere un ambiente independiente, se debe crear un Web Service de staging en Render, desactivar su Auto-Deploy y guardar su Deploy Hook como variable secreta en un Variable Group de Azure. Entonces se podrá agregar una etapa `Deploy` dependiente de Build, Test y Sync, condicionada a la rama `main`, para activar ese servicio sin exponer el hook en el YAML. El servicio Render actual puede conservar su despliegue automático.
+
 ### Validación requerida de PR
 
 Azure Repos no activa la validación de PR con `pr:` en YAML. Para bloquear merges cuando Build falla, configura **Build Validation** en `Repos > Branches > main > Branch policies`, selecciona este pipeline y déjalo como requerido y automático. Si ya hay otra política que ejecuta los smoke tests de bootstrap, revisa si se debe conservar para evitar validaciones duplicadas. La expiración inmediata de validaciones cuando cambia `main` ofrece mayor frescura, pero puede volver a ejecutar builds de PR abiertos.
@@ -504,7 +511,9 @@ docs(readme): update installation guide AB#139
 
 ## Licencia
 
-Proyecto privado. Todos los derechos reservados.
+El proyecto está bajo una licencia propietaria. Los cinco integrantes indicados en [`LICENSE`](./LICENSE) pueden usar, clonar, modificar y crear versiones derivadas del proyecto. No se concede permiso de reutilización a terceros ni una excepción general para uso académico.
+
+El espejo de GitHub es público para permitir el despliegue. Su visibilidad y los permisos de visualización o fork que apliquen según los términos de GitHub no se pueden revocar mediante este archivo. Para restringir también el acceso técnico al código, el repositorio tendría que ser privado y habría que confirmar que Render puede desplegar desde él.
 
 ---
 
