@@ -38,11 +38,21 @@ interface Dashboard {
       name: string;
       open: boolean;
       salesToday: number;
+      salesCount: number;
+      lowStockProducts: number;
     }[];
   };
+  criticalStockProducts: number;
   alerts: { total: number; lowStockProducts: number; items: Alert[] };
   topProducts: unknown[];
-  branchesActive?: number;
+}
+
+interface GlobalDashboard extends Dashboard {
+  totalSalesToday: string;
+  totalSalesCount: number;
+  branchesActive: number;
+  lowStockAlerts: number;
+  topBranch: { branchId: string; name: string; total: string } | null;
 }
 
 const runId = Date.now().toString(36);
@@ -56,6 +66,7 @@ describe("Dashboard (e2e)", () => {
   const tokens = {} as Record<TestRole, string>;
   let branchId = "";
   let otherBranchId = "";
+  let inactiveBranchId = "";
   let categoryId = "";
   let unitId = "";
   const productIds: string[] = [];
@@ -96,6 +107,16 @@ describe("Dashboard (e2e)", () => {
           name: `${runId} Otra sede dashboard`,
           address: "Calle 2",
           phone: "3002",
+        },
+      })
+    ).id;
+    inactiveBranchId = (
+      await prisma.branch.create({
+        data: {
+          name: `${runId} Sede inactiva dashboard`,
+          address: "Calle 3",
+          phone: "3003",
+          active: false,
         },
       })
     ).id;
@@ -187,17 +208,54 @@ describe("Dashboard (e2e)", () => {
           minimumStock: 0,
           expirationDate: soon,
         },
+        {
+          branchId: otherBranchId,
+          productId: productIds[0],
+          quantity: 1,
+          minimumStock: 3,
+          expirationDate: new Date("2028-01-01T00:00:00Z"),
+        },
+        {
+          branchId: inactiveBranchId,
+          productId: productIds[1],
+          quantity: 0,
+          minimumStock: 4,
+          expirationDate: new Date("2028-01-01T00:00:00Z"),
+        },
       ],
     });
     await prisma.cashShift.create({
       data: { branchId, userId: personIds[1], openingAmount: "0.00" },
     });
+    const saleAt = new Date(Date.now() - 60_000);
+    const sales: [string, string, "COMPLETED" | "REVERSED"][] = [
+      [branchId, "100000.00", "COMPLETED"],
+      [branchId, "50000.00", "COMPLETED"],
+      [branchId, "70000.00", "REVERSED"],
+      [otherBranchId, "200000.00", "COMPLETED"],
+      [inactiveBranchId, "900000.00", "COMPLETED"],
+    ];
+    await prisma.sale.createMany({
+      data: sales.map(([saleBranchId, total, status], index) => ({
+        saleNumber: `DSH-${runId}-${index}`,
+        branchId: saleBranchId,
+        userId: personIds[1],
+        saleAt,
+        subtotal: total,
+        discountAmount: "0.00",
+        taxAmount: "0.00",
+        total,
+        status,
+      })),
+    });
   }, 30000);
 
   afterAll(async () => {
     if (prisma) {
+      const branchIds = [branchId, otherBranchId, inactiveBranchId];
+      await prisma.sale.deleteMany({ where: { branchId: { in: branchIds } } });
       await prisma.cashShift.deleteMany({
-        where: { branchId: { in: [branchId, otherBranchId] } },
+        where: { branchId: { in: branchIds } },
       });
       await prisma.branchInventory.deleteMany({
         where: { productId: { in: productIds } },
@@ -213,7 +271,7 @@ describe("Dashboard (e2e)", () => {
       });
       await prisma.person.deleteMany({ where: { id: { in: personIds } } });
       await prisma.branch.deleteMany({
-        where: { id: { in: [branchId, otherBranchId] } },
+        where: { id: { in: [branchId, otherBranchId, inactiveBranchId] } },
       });
       await prisma.documentType.deleteMany({ where: { code: DOCUMENT_CODE } });
       await app.close();
@@ -229,7 +287,7 @@ describe("Dashboard (e2e)", () => {
       id: branchId,
       name: `${runId} Sede dashboard`,
     });
-    expect(body.salesToday).toEqual({ count: 0, totalAmount: 0 });
+    expect(body.salesToday).toEqual({ count: 2, totalAmount: 150000 });
     expect(body.salesLast7Days).toHaveLength(7);
     expect(body.salesLast7Days[6].date).toBe(body.date);
     expect(body.stock).toEqual({
@@ -246,7 +304,9 @@ describe("Dashboard (e2e)", () => {
           branchId,
           name: `${runId} Sede dashboard`,
           open: true,
-          salesToday: 0,
+          salesToday: 150000,
+          salesCount: 2,
+          lowStockProducts: 1,
         },
       ],
     });
@@ -274,14 +334,65 @@ describe("Dashboard (e2e)", () => {
     const response = await get("/global", tokens.SUPERADMIN);
 
     expect(response.status).toBe(200);
-    const body = (response.body as { data: Dashboard }).data;
+    const body = (response.body as { data: GlobalDashboard }).data;
     expect(body.branch).toBeNull();
-    expect(body.branches.items.map((item) => item.branchId)).toEqual(
-      expect.arrayContaining([branchId, otherBranchId]),
-    );
+    expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const ids = body.branches.items.map((item) => item.branchId);
+    expect(ids).toEqual(expect.arrayContaining([branchId, otherBranchId]));
+    expect(ids).not.toContain(inactiveBranchId);
     expect(body.branchesActive).toBe(body.branches.active);
-    expect(body).toHaveProperty("totalSalesToday");
-    expect(body).toHaveProperty("topBranch");
+    expect(body.branchesActive).toBe(body.branches.items.length);
+    expect(body.branches.items).toEqual(
+      expect.arrayContaining([
+        {
+          branchId,
+          name: `${runId} Sede dashboard`,
+          open: true,
+          salesToday: 150000,
+          salesCount: 2,
+          lowStockProducts: 1,
+        },
+        {
+          branchId: otherBranchId,
+          name: `${runId} Otra sede dashboard`,
+          open: false,
+          salesToday: 200000,
+          salesCount: 1,
+          lowStockProducts: 1,
+        },
+      ]),
+    );
+  });
+
+  it("consolidates the sales and the stock alerts of every active branch", async () => {
+    const response = await get("/global", tokens.SUPERADMIN);
+
+    const body = (response.body as { data: GlobalDashboard }).data;
+    const items = body.branches.items;
+    const sum = (pick: (item: (typeof items)[number]) => number) =>
+      items.reduce((total, item) => total + pick(item), 0);
+    expect(Number(body.totalSalesToday)).toBeCloseTo(
+      sum((item) => item.salesToday),
+      2,
+    );
+    expect(body.totalSalesToday).toMatch(/^\d+\.\d{2}$/);
+    expect(body.salesToday.totalAmount).toBeCloseTo(
+      Number(body.totalSalesToday),
+      2,
+    );
+    expect(body.totalSalesCount).toBe(sum((item) => item.salesCount));
+    expect(body.totalSalesCount).toBe(body.salesToday.count);
+    expect(body.lowStockAlerts).toBe(sum((item) => item.lowStockProducts));
+    const best = [...items].sort((a, b) => b.salesToday - a.salesToday)[0];
+    expect(body.topBranch).toEqual({
+      branchId: best.branchId,
+      name: best.name,
+      total: best.salesToday.toFixed(2),
+    });
+    const alert = body.alerts.items.find(
+      (item) => item.productId === productIds[0],
+    );
+    expect(alert?.branches.map((branch) => branch.id)).toEqual([branchId]);
   });
 
   it.each(["BRANCH_LEADER", "BRANCH_ASSISTANT"] as const)(

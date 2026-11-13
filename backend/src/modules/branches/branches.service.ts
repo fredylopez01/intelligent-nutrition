@@ -15,6 +15,29 @@ import { ListBranchesQueryDto } from "./dto/list-branches-query.dto.js";
 import { ListSellableProductsQueryDto } from "./dto/list-sellable-products-query.dto.js";
 import { startOfTodayUtc } from "../../common/utils/expiration.util.js";
 import { UpdateBranchDto } from "./dto/update-branch.dto.js";
+import { UpdateBranchScheduleDto } from "./dto/update-branch-schedule.dto.js";
+import {
+  groupSchedule,
+  isOpenAt,
+  toMinutes,
+  type ScheduleRow,
+} from "../../common/utils/branch-schedule.util.js";
+
+const SCHEDULE_SELECT = {
+  select: { dayOfWeek: true, opensAt: true, closesAt: true },
+} as const;
+
+function withSchedule<T extends { active: boolean; schedules: ScheduleRow[] }>(
+  branch: T,
+  now = new Date(),
+) {
+  const { schedules, ...rest } = branch;
+  return {
+    ...rest,
+    schedule: groupSchedule(schedules),
+    openNow: branch.active && isOpenAt(schedules, now),
+  };
+}
 
 @Injectable()
 export class BranchesService {
@@ -62,12 +85,14 @@ export class BranchesService {
           address: true,
           phone: true,
           active: true,
+          schedules: SCHEDULE_SELECT,
         },
       }),
     ]);
 
+    const now = new Date();
     return {
-      data: branches,
+      data: branches.map((branch) => withSchedule(branch, now)),
       meta: {
         page,
         limit,
@@ -86,6 +111,7 @@ export class BranchesService {
         address: true,
         phone: true,
         active: true,
+        schedules: SCHEDULE_SELECT,
       },
     });
 
@@ -93,7 +119,89 @@ export class BranchesService {
       throw new NotFoundException("Branch not found");
     }
 
-    return branch;
+    return withSchedule(branch);
+  }
+
+  async updateSchedule(
+    id: string,
+    dto: UpdateBranchScheduleDto,
+    currentUser: AuthenticatedUser,
+    ipAddress?: string,
+  ) {
+    const seenDays = new Set<number>();
+    const rows: ScheduleRow[] = [];
+    for (const day of dto.days) {
+      if (seenDays.has(day.dayOfWeek)) {
+        throw new BadRequestException({
+          code: "DUPLICATED_DAY",
+          message: `Day ${day.dayOfWeek} is repeated.`,
+        });
+      }
+      seenDays.add(day.dayOfWeek);
+      const intervals = [...day.intervals].sort(
+        (a, b) => toMinutes(a.opensAt) - toMinutes(b.opensAt),
+      );
+      intervals.forEach((interval, index) => {
+        if (toMinutes(interval.opensAt) >= toMinutes(interval.closesAt)) {
+          throw new BadRequestException({
+            code: "INVALID_INTERVAL",
+            message: `The interval ${interval.opensAt}-${interval.closesAt} must close after it opens.`,
+          });
+        }
+        const previous = intervals[index - 1];
+        if (
+          previous &&
+          toMinutes(interval.opensAt) < toMinutes(previous.closesAt)
+        ) {
+          throw new BadRequestException({
+            code: "OVERLAPPING_INTERVALS",
+            message: `The intervals of day ${day.dayOfWeek} overlap.`,
+          });
+        }
+        rows.push({ dayOfWeek: day.dayOfWeek, ...interval });
+      });
+    }
+
+    return this.prisma.$transaction(async (transaction) => {
+      const branch = await transaction.branch.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          phone: true,
+          active: true,
+          schedules: SCHEDULE_SELECT,
+        },
+      });
+
+      if (!branch) {
+        throw new NotFoundException("Branch not found");
+      }
+
+      await transaction.branchSchedule.deleteMany({ where: { branchId: id } });
+      if (rows.length > 0) {
+        await transaction.branchSchedule.createMany({
+          data: rows.map((row) => ({ branchId: id, ...row })),
+        });
+      }
+
+      await this.auditService.createAuditLog(
+        {
+          userId: currentUser.id,
+          action: "UPDATE",
+          entity: "BRANCH",
+          entityId: id,
+          oldData: { schedule: groupSchedule(branch.schedules) },
+          newData: { schedule: groupSchedule(rows) },
+          reason: `Actualización del horario de la sede ${branch.name}`,
+          ipAddress,
+        },
+        transaction,
+      );
+
+      return withSchedule({ ...branch, schedules: rows });
+    });
   }
 
   async update(

@@ -162,15 +162,29 @@ describe("DashboardService", () => {
     ]);
   });
 
-  it("reports the branches with an open cash shift and their sales", async () => {
+  it("reports each branch with its cash shift, sales and low stock", async () => {
     const result = await service.getGlobalDashboard();
 
     expect(result.branches).toEqual({
       active: 2,
       open: 1,
       items: [
-        { branchId: centro.id, name: "Centro", open: true, salesToday: 150000 },
-        { branchId: norte.id, name: "Norte", open: false, salesToday: 200000 },
+        {
+          branchId: centro.id,
+          name: "Centro",
+          open: true,
+          salesToday: 150000,
+          salesCount: 2,
+          lowStockProducts: 1,
+        },
+        {
+          branchId: norte.id,
+          name: "Norte",
+          open: false,
+          salesToday: 200000,
+          salesCount: 1,
+          lowStockProducts: 0,
+        },
       ],
     });
     expect(result.topBranch).toEqual({
@@ -193,7 +207,39 @@ describe("DashboardService", () => {
         { categoryId: creatine.id, name: "Creatina", units: 9 },
       ],
     });
+    expect(result.criticalStockProducts).toBe(2);
+  });
+
+  it("counts a product as critical when any branch has less than 5 units", async () => {
+    prismaMock.branchInventory.findMany.mockResolvedValue([
+      lot(centro.id, "whey", 2),
+      lot(norte.id, "whey", 40),
+      lot(norte.id, "vitamin", 30),
+    ]);
+
+    const result = await service.getGlobalDashboard();
+
     expect(result.criticalStockProducts).toBe(1);
+  });
+
+  it("adds the products below the minimum of every branch to lowStockAlerts", async () => {
+    prismaMock.branchInventory.findMany.mockResolvedValue([
+      lot(centro.id, "whey", 1, { minimumStock: 4 }),
+      lot(norte.id, "whey", 2, { minimumStock: 4 }),
+      lot(norte.id, "omega", 3, { minimumStock: 5 }),
+      lot(centro.id, "vitamin", 9, { minimumStock: 5 }),
+    ]);
+
+    const result = await service.getGlobalDashboard();
+
+    expect(result.lowStockAlerts).toBe(3);
+    expect(result.alerts.lowStockProducts).toBe(2);
+    expect(
+      result.branches.items.map((item) => [item.name, item.lowStockProducts]),
+    ).toEqual([
+      ["Centro", 1],
+      ["Norte", 2],
+    ]);
   });
 
   it("lists the inventory alerts by severity", async () => {

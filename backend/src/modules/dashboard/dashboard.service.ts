@@ -85,7 +85,10 @@ export class DashboardService {
       totalSalesToday: overview.salesToday.totalAmount.toFixed(2),
       totalSalesCount: overview.salesToday.count,
       branchesActive: branches.length,
-      lowStockAlerts: overview.alerts.lowStockProducts,
+      lowStockAlerts: overview.branches.items.reduce(
+        (sum, item) => sum + item.lowStockProducts,
+        0,
+      ),
       topBranch:
         topBranch && topBranch.salesToday > 0
           ? {
@@ -163,7 +166,9 @@ export class DashboardService {
       dayKey(new Date(historyStart.getTime() + index * DAY_MS + DAY_MS / 2)),
     );
     const totalsByDay = new Map(days.map((day) => [day, 0]));
-    const salesByBranch = new Map(branchIds.map((id) => [id, 0]));
+    const salesByBranch = new Map(
+      branchIds.map((id) => [id, { count: 0, total: 0 }]),
+    );
     const customers = new Set<string>();
     let todayCount = 0;
     let todayTotal = 0;
@@ -176,10 +181,11 @@ export class DashboardService {
       if (sale.saleAt >= dayStart) {
         todayCount += 1;
         todayTotal += total;
-        salesByBranch.set(
-          sale.branchId,
-          (salesByBranch.get(sale.branchId) ?? 0) + total,
-        );
+        const branchSales = salesByBranch.get(sale.branchId);
+        if (branchSales) {
+          branchSales.count += 1;
+          branchSales.total += total;
+        }
         if (sale.customerId) customers.add(sale.customerId);
       } else if (
         sale.saleAt >= yesterdayStart &&
@@ -193,6 +199,11 @@ export class DashboardService {
     const branchNames = new Map(
       branches.map((branch) => [branch.id, branch.name]),
     );
+    const { lowStockByBranch, ...inventorySummary } = this.summarizeInventory(
+      inventory,
+      branchNames,
+      now,
+    );
 
     return {
       date: todayKey,
@@ -204,7 +215,7 @@ export class DashboardService {
       })),
       uniqueCustomersToday: customers.size,
       monthlyRevenue: Number(monthlySales._sum.total ?? 0),
-      ...this.summarizeInventory(inventory, branchNames, now),
+      ...inventorySummary,
       branches: {
         active: branches.length,
         open: branchIds.filter((id) => openBranchIds.has(id)).length,
@@ -212,7 +223,9 @@ export class DashboardService {
           branchId: branch.id,
           name: branch.name,
           open: openBranchIds.has(branch.id),
-          salesToday: round2(salesByBranch.get(branch.id) ?? 0),
+          salesToday: round2(salesByBranch.get(branch.id)?.total ?? 0),
+          salesCount: salesByBranch.get(branch.id)?.count ?? 0,
+          lowStockProducts: lowStockByBranch.get(branch.id) ?? 0,
         })),
       },
       topProducts: await this.topProducts(topGroups),
@@ -241,7 +254,6 @@ export class DashboardService {
       {
         name: string;
         referenceCode: string;
-        total: number;
         perBranch: Map<string, { quantity: number; minimum: number }>;
         expiring: { branchId: string; date: Date; quantity: number }[];
       }
@@ -263,11 +275,9 @@ export class DashboardService {
       const product = products.get(row.productId) ?? {
         name: row.product.name,
         referenceCode: row.product.referenceCode,
-        total: 0,
         perBranch: new Map<string, { quantity: number; minimum: number }>(),
         expiring: [] as { branchId: string; date: Date; quantity: number }[],
       };
-      product.total += row.quantity;
       const branch = product.perBranch.get(row.branchId) ?? {
         quantity: 0,
         minimum: 0,
@@ -292,18 +302,26 @@ export class DashboardService {
     const toBranches = (ids: string[]): ScopeBranch[] =>
       ids.map((id) => ({ id, name: branchNames.get(id) ?? "" }));
     const alerts: DashboardAlert[] = [];
+    const lowStockByBranch = new Map<string, number>();
     let criticalStockProducts = 0;
     let lowStockProducts = 0;
 
     for (const [productId, product] of products) {
-      if (product.total < CRITICAL_STOCK_THRESHOLD) criticalStockProducts += 1;
       const entries = [...product.perBranch.entries()];
+      if (
+        entries.some(([, value]) => value.quantity < CRITICAL_STOCK_THRESHOLD)
+      ) {
+        criticalStockProducts += 1;
+      }
       const out = entries.filter(([, value]) => value.quantity === 0);
       const last = entries.filter(([, value]) => value.quantity === 1);
       const below = entries.filter(
         ([, value]) => value.minimum > 0 && value.quantity < value.minimum,
       );
       if (below.length > 0) lowStockProducts += 1;
+      for (const [id] of below) {
+        lowStockByBranch.set(id, (lowStockByBranch.get(id) ?? 0) + 1);
+      }
       const base = {
         productId,
         productName: product.name,
@@ -356,6 +374,7 @@ export class DashboardService {
     );
 
     return {
+      lowStockByBranch,
       criticalStockProducts,
       stock: {
         totalUnits,
