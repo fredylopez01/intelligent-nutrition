@@ -37,11 +37,6 @@ const FEATURED_PRODUCTS = [
     availability: '3 sedes',
   },
 ]
-const ADVISORY_STEPS = [
-  'Revisamos objetivo, peso y frecuencia de entrenamiento',
-  'Comparamos etiquetas, gramaje real y precio por servicio',
-  'Dejamos la dosificación por escrito al entregar el producto',
-]
 const STORES = [
   { city: 'Tunja', name: 'Sede Makro' },
   { city: 'Tunja', name: 'Sede Viva' },
@@ -55,7 +50,6 @@ export function LandingPage() {
         <img className="landing__logo" src={logo} alt="Intelligent Nutrition" />
         <nav className="landing__nav" aria-label="Navegación del sitio">
           <a href="#productos">Productos</a>
-          <a href="#asesoria">Asesoría</a>
           <a href="#sedes">Sedes</a>
           <a href="#contacto">Contacto</a>
           <Link className="landing__login" to="/login">
@@ -138,28 +132,6 @@ export function LandingPage() {
             </li>
           ))}
         </ul>
-      </section>
-      <section className="landing__advisory" id="asesoria" aria-labelledby="asesoria-title">
-        <div className="landing__advisory-media">
-          <MediaPlaceholder label="Foto de asesoría en sede" />
-        </div>
-        <div>
-          <h2 className="landing__section-title" id="asesoria-title">
-            Alguien que sabe, del otro lado del mostrador
-          </h2>
-          <p className="landing__advisory-copy">
-            Cada sede tiene personal formado para revisar tu objetivo, tu rutina y lo que ya estás
-            tomando antes de recomendarte algo. Si no lo necesitas, te lo decimos.
-          </p>
-          <ol className="landing__steps">
-            {ADVISORY_STEPS.map((step, index) => (
-              <li className="landing__step" key={step}>
-                <span className="landing__step-number">{String(index + 1).padStart(2, '0')}</span>
-                <p>{step}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
       </section>
       <section
         className="landing__section landing__section--tight"

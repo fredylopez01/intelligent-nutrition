@@ -302,61 +302,6 @@
   color: var(--color-warning);
 }
 
-.landing__advisory {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  gap: 4rem;
-  align-items: center;
-  padding: 0 var(--landing-gutter) 6rem;
-}
-
-.landing__advisory-media {
-  height: 27.5rem;
-  border: 1px solid var(--color-border-chip);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.landing__advisory-copy {
-  max-width: 28.75rem;
-  margin: 1.25rem 0 1.875rem;
-  font-size: 1.03rem;
-  line-height: 1.65;
-  color: var(--color-text-muted);
-  text-wrap: pretty;
-}
-
-.landing__steps {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.landing__step {
-  display: flex;
-  gap: 1.125rem;
-  padding: 1rem 0;
-  border-top: 1px solid var(--color-border);
-}
-
-.landing__step:last-child {
-  border-bottom: 1px solid var(--color-border);
-}
-
-.landing__step-number {
-  min-width: 1.625rem;
-  padding-top: 0.1875rem;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  color: var(--color-text-faint);
-}
-
-.landing__step p {
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--color-text-secondary);
-}
-
 .landing__stores {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -462,16 +407,14 @@
 }
 
 @media (max-width: 1023px) {
-  .landing__hero,
-  .landing__advisory {
+  .landing__hero {
     grid-template-columns: minmax(0, 1fr);
     gap: 2.5rem;
   }
   .landing__hero {
     padding-block: 3.5rem;
   }
-  .landing__hero-image,
-  .landing__advisory-media {
+  .landing__hero-image {
     height: 20rem;
   }
   .landing__hero-card {
