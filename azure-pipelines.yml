@@ -48,9 +48,9 @@ stages:
         displayName: Test backend and frontend
         variables:
           POSTGRES_USER: intelligent_nutrition
-          POSTGRES_PASSWORD: $(postgresPassword)
+          POSTGRES_PASSWORD: test-password
           POSTGRES_DB: intelligent_nutrition
-          JWT_SECRET: $(jwtSecret)
+          JWT_SECRET: test-secret
           RESEND_API_KEY: re_test_dummy
           RESEND_FROM_EMAIL: test@example.com
           FRONTEND_URL: http://localhost:5173
@@ -99,7 +99,6 @@ stages:
             displayName: Create test database
             env:
               PGPASSWORD: $(POSTGRES_PASSWORD)
-            continueOnError: true
 
           # El umbral está en coverageThreshold (backend/package.json).
           - script: npm run test:cov
@@ -142,6 +141,10 @@ stages:
             inputs:
               targetPath: backend/coverage
               artifact: backend-coverage
+
+          - script: mkdir -p frontend/playwright-report
+            displayName: Create Playwright report folder (publish fails if missing)
+            condition: always()
 
           - task: PublishPipelineArtifact@1
             displayName: Publish Playwright report
