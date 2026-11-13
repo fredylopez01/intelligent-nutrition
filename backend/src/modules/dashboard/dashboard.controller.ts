@@ -27,7 +27,7 @@ export class DashboardController {
   @ApiOperation({
     summary: "Get the global dashboard",
     description:
-      "Same indicators as the branch dashboard for every active branch together, plus totalSalesToday, totalSalesCount, branchesActive, lowStockAlerts (products below the minimum in some branch) and topBranch (branch with the highest sales of the day, or null). Roles: SUPERADMIN.",
+      "Same indicators as the branch dashboard for every active branch together (inactive branches are excluded), plus totalSalesToday, totalSalesCount, branchesActive, lowStockAlerts (sum of the products below the minimum of each branch) and topBranch (branch with the highest sales of the day, or null). branches.items lists every active branch with its sales of the day (salesToday, salesCount) and lowStockProducts. Roles: SUPERADMIN.",
   })
   @ApiResponse({
     status: 200,
@@ -44,7 +44,7 @@ export class DashboardController {
   @ApiOperation({
     summary: "Get the dashboard of a branch",
     description:
-      "Indicators of the branch calculated in real time with the Bogota business day: salesToday, salesYesterdayUntilNow (yesterday until the same hour), salesLast7Days, uniqueCustomersToday, monthlyRevenue, criticalStockProducts (products with less than 5 units), stock (units and top 3 categories), branches (open = with an open cash shift, and sales of the day), alerts (out of stock, last unit, below the minimum, expiring in 60 days; top 5) and topProducts (top 5 of the day by units). Roles: SUPERADMIN, BRANCH_LEADER, BRANCH_ASSISTANT.",
+      "Indicators of the branch calculated in real time with the Bogota business day: salesToday, salesYesterdayUntilNow (yesterday until the same hour), salesLast7Days, uniqueCustomersToday, monthlyRevenue, criticalStockProducts (products with less than 5 units in some branch), stock (units and top 3 categories), branches (open = with an open cash shift, salesToday, salesCount and lowStockProducts), alerts (out of stock, last unit, below the minimum, expiring in 60 days; top 5) and topProducts (top 5 of the day by units). Roles: SUPERADMIN, BRANCH_LEADER, BRANCH_ASSISTANT.",
   })
   @ApiResponse({ status: 200, description: "Indicators of the branch." })
   @ApiResponse({ status: 400, description: "The branchId is not a UUID." })
