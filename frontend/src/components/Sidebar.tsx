@@ -32,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Productos', to: '/catalogo' },
       { label: 'Categorías', to: '/catalogo/categorias' },
       { label: 'Unidades de medida', to: '/catalogo/unidades' },
+      { label: 'Recetas', to: '/catalogo/recetas' },
     ],
   },
   {

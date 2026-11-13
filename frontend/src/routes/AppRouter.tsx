@@ -7,6 +7,7 @@ import { BranchesPage } from '../pages/branches/BranchesPage'
 import { CategoriesPage } from '../pages/catalog/CategoriesPage'
 import { ProductDetailPage } from '../pages/catalog/ProductDetailPage'
 import { ProductsPage } from '../pages/catalog/ProductsPage'
+import { RecipesPage } from '../pages/catalog/RecipesPage'
 import { UnitsPage } from '../pages/catalog/UnitsPage'
 import { ComingSoonPage } from '../pages/ComingSoonPage'
 import { CustomerDetailPage } from '../pages/customers/CustomerDetailPage'
@@ -151,6 +152,15 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/catalogo/unidades']}>
             <UnitsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/catalogo/recetas"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/catalogo/recetas']}>
+            <RecipesPage />
           </ProtectedRoute>
         }
       />
