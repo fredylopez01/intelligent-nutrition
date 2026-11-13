@@ -25,6 +25,12 @@ const prismaMock = {
   unitMeasure: {
     findUnique: jest.fn<AsyncMock>(),
   },
+  branch: {
+    findMany: jest.fn<AsyncMock>(),
+  },
+  supplyStock: {
+    createMany: jest.fn<AsyncMock>(),
+  },
   $transaction: jest.fn<TransactionMock>(),
 };
 
@@ -74,6 +80,11 @@ const supplyRow = {
   updatedAt: new Date(),
 };
 
+const formattedRow = {
+  ...supplyRow,
+  unitOfMeasure: { id: "unit-1", name: "Gramo", abbreviation: "g" },
+};
+
 describe("SuppliesService.create", () => {
   let service: InstanceType<typeof SuppliesService>;
 
@@ -97,6 +108,7 @@ describe("SuppliesService.create", () => {
     prismaMock.supply.findFirst.mockResolvedValueOnce(null);
     prismaMock.unitMeasure.findUnique.mockResolvedValueOnce(unitActive);
     prismaMock.supply.create.mockResolvedValueOnce(supplyRow);
+    prismaMock.branch.findMany.mockResolvedValueOnce([]);
 
     const result = await service.create(
       { name: "Whey Protein", unitOfMeasureId: "unit-1" },
@@ -104,7 +116,7 @@ describe("SuppliesService.create", () => {
       "127.0.0.1",
     );
 
-    expect(result).toEqual(supplyRow);
+    expect(result).toEqual(formattedRow);
     expect(prismaMock.supply.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: { name: "Whey Protein", unitOfMeasureId: "unit-1" },
@@ -116,11 +128,39 @@ describe("SuppliesService.create", () => {
         action: "CREATE",
         entity: "SUPPLY",
         entityId: supplyRow.id,
-        newData: supplyRow,
+        newData: formattedRow,
         ipAddress: "127.0.0.1",
       }),
       prismaMock,
     );
+    expect(prismaMock.supplyStock.createMany).not.toHaveBeenCalled();
+  });
+
+  it("assigns the new supply with stock 0 to every active branch", async () => {
+    prismaMock.supply.findFirst.mockResolvedValueOnce(null);
+    prismaMock.unitMeasure.findUnique.mockResolvedValueOnce(unitActive);
+    prismaMock.supply.create.mockResolvedValueOnce(supplyRow);
+    prismaMock.branch.findMany.mockResolvedValueOnce([
+      { id: "branch-1" },
+      { id: "branch-2" },
+    ]);
+
+    await service.create(
+      { name: "Whey Protein", unitOfMeasureId: "unit-1" },
+      superadmin,
+    );
+
+    expect(prismaMock.branch.findMany).toHaveBeenCalledWith({
+      where: { active: true },
+      select: { id: true },
+    });
+    expect(prismaMock.supplyStock.createMany).toHaveBeenCalledWith({
+      data: [
+        { branchId: "branch-1", supplyId: "supply-1" },
+        { branchId: "branch-2", supplyId: "supply-1" },
+      ],
+      skipDuplicates: true,
+    });
   });
 
   it("throws ConflictException when name already exists", async () => {
@@ -183,6 +223,7 @@ describe("SuppliesService.findAll", () => {
     const result = await service.findAll({ page: 1, limit: 10 });
 
     expect(result.data).toHaveLength(1);
+    expect(result.data[0].unitOfMeasure.abbreviation).toBe("g");
     expect(result.meta.total).toBe(1);
     expect(result.meta.totalPages).toBe(1);
   });
@@ -218,7 +259,7 @@ describe("SuppliesService.findOne", () => {
 
     const result = await service.findOne("supply-1");
 
-    expect(result).toEqual(supplyRow);
+    expect(result).toEqual(formattedRow);
   });
 
   it("throws NotFoundException when supply does not exist", async () => {

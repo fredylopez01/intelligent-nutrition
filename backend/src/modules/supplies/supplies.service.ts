@@ -12,6 +12,15 @@ import { CreateSupplyDto } from "./dto/create-supply.dto.js";
 import { UpdateSupplyDto } from "./dto/update-supply.dto.js";
 import { ListSuppliesQueryDto } from "./dto/list-supplies-query.dto.js";
 
+interface SupplyWithUnit {
+  unitOfMeasure: { id: string; name: string; abreviation: string };
+}
+
+export function formatSupply<T extends SupplyWithUnit>(supply: T) {
+  const { abreviation, ...unit } = supply.unitOfMeasure;
+  return { ...supply, unitOfMeasure: { ...unit, abbreviation: abreviation } };
+}
+
 @Injectable()
 export class SuppliesService {
   constructor(
@@ -64,20 +73,35 @@ export class SuppliesService {
         },
       });
 
+      const branches = await tx.branch.findMany({
+        where: { active: true },
+        select: { id: true },
+      });
+      if (branches.length > 0) {
+        await tx.supplyStock.createMany({
+          data: branches.map((branch) => ({
+            branchId: branch.id,
+            supplyId: supply.id,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      const response = formatSupply(supply);
       await this.auditService.createAuditLog(
         {
           userId: currentUser.id,
           action: "CREATE",
           entity: "SUPPLY",
           entityId: supply.id,
-          newData: supply,
+          newData: response,
           reason: `Creación del insumo ${supply.name}`,
           ipAddress,
         },
         tx,
       );
 
-      return supply;
+      return response;
     });
   }
 
@@ -112,7 +136,7 @@ export class SuppliesService {
     ]);
 
     return {
-      data: supplies,
+      data: supplies.map(formatSupply),
       meta: {
         page,
         limit,
@@ -137,7 +161,7 @@ export class SuppliesService {
     if (!supply) {
       throw new NotFoundException("Supply not found.");
     }
-    return supply;
+    return formatSupply(supply);
   }
 
   async update(
@@ -209,14 +233,14 @@ export class SuppliesService {
           entity: "SUPPLY",
           entityId: supplyId,
           oldData: existing,
-          newData: updated,
+          newData: formatSupply(updated),
           reason: `Actualización del insumo ${updated.name}`,
           ipAddress,
         },
         tx,
       );
 
-      return updated;
+      return formatSupply(updated);
     });
   }
 

@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Ip,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -14,6 +15,7 @@ import { Roles } from "../../common/decorators/roles.decorator.js";
 import { BranchScopeGuard } from "../../common/guards/branch-scope.guard.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 import { CreateSupplyStockMovementDto } from "./dto/create-supply-stock-movement.dto.js";
+import { UpdateSupplyMinimumDto } from "./dto/update-supply-minimum.dto.js";
 import { ListSupplyStockQueryDto } from "./dto/list-supply-stock-query.dto.js";
 import { SupplyStockService } from "./supply-stock.service.js";
 
@@ -38,8 +40,18 @@ export class SupplyStockController {
   createMovement(
     @Body() dto: CreateSupplyStockMovementDto,
     @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return this.supplyStockService.createMovement(dto, currentUser);
+  }
+
+  @Patch("minimum")
+  @Roles("SUPERADMIN", "BRANCH_LEADER")
+  @BranchScope("body.branchId")
+  updateMinimum(
+    @Body() dto: UpdateSupplyMinimumDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
     @Ip() ipAddress: string,
   ) {
-    return this.supplyStockService.createMovement(dto, currentUser, ipAddress);
+    return this.supplyStockService.updateMinimum(dto, currentUser, ipAddress);
   }
 }

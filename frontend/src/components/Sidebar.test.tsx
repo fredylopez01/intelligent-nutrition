@@ -203,6 +203,7 @@ describe('Sidebar inventory submenu', () => {
       'Consolidado',
       'Movimientos',
       'Cierre diario',
+      'Insumos',
     ])
   })
 

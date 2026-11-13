@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Consolidado', to: '/inventario/consolidado' },
       { label: 'Movimientos', to: '/inventario/movimientos' },
       { label: 'Cierre diario', to: '/inventario/cierre' },
+      { label: 'Insumos', to: '/inventario/insumos' },
     ],
   },
   {
