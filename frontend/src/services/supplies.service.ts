@@ -1,9 +1,22 @@
-import type { Supply, SuppliesListParams, SuppliesListResponse, SupplyUnit } from '../types/supply'
+import type {
+  CreateSupplyPayload,
+  Supply,
+  SuppliesListParams,
+  SuppliesListResponse,
+  SupplyMovement,
+  SupplyMovementPayload,
+  SupplyStockParams,
+  SupplyStockResponse,
+  SupplyStockRow,
+  SupplyUnit,
+  UpdateSupplyMinimumPayload,
+} from '../types/supply'
 import type { PaginationMeta } from '../types/user'
 
 import { http } from './http'
 
 const SUPPLIES_PATH = '/supplies'
+const SUPPLY_STOCK_PATH = '/supply-stock'
 
 interface ApiSupplyUnit {
   id: string
@@ -28,6 +41,21 @@ export function normalizeSupply(supply: ApiSupply): Supply {
   return { ...supply, unitOfMeasure: normalizeSupplyUnit(supply.unitOfMeasure) }
 }
 
+interface ApiSupplyStockRow extends Omit<SupplyStockRow, 'supply'> {
+  supply: { name: string; unitOfMeasure: ApiSupplyUnit }
+}
+
+function normalizeStockRow(row: ApiSupplyStockRow): SupplyStockRow {
+  const unit = normalizeSupplyUnit(row.supply.unitOfMeasure)
+  return {
+    ...row,
+    supply: {
+      name: row.supply.name,
+      unitOfMeasure: { id: unit.id, abbreviation: unit.abbreviation },
+    },
+  }
+}
+
 export function buildQuery(params: object): string {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -45,4 +73,26 @@ export const suppliesService = {
     )
     return { data: response.data.map(normalizeSupply), meta: response.meta }
   },
+
+  create: async (payload: CreateSupplyPayload, token: string | null): Promise<Supply> =>
+    normalizeSupply(await http.post<ApiSupply>(SUPPLIES_PATH, payload, { token })),
+
+  stock: async (params: SupplyStockParams, token: string | null): Promise<SupplyStockResponse> => {
+    const response = await http.get<{ data: ApiSupplyStockRow[]; meta: PaginationMeta }>(
+      `${SUPPLY_STOCK_PATH}${buildQuery(params)}`,
+      { token },
+    )
+    return { data: response.data.map(normalizeStockRow), meta: response.meta }
+  },
+
+  move: (payload: SupplyMovementPayload, token: string | null) =>
+    http.post<SupplyMovement>(`${SUPPLY_STOCK_PATH}/movement`, payload, { token }),
+
+  setMinimum: async (
+    payload: UpdateSupplyMinimumPayload,
+    token: string | null,
+  ): Promise<SupplyStockRow> =>
+    normalizeStockRow(
+      await http.patch<ApiSupplyStockRow>(`${SUPPLY_STOCK_PATH}/minimum`, payload, { token }),
+    ),
 }

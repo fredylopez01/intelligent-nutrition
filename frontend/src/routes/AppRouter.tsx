@@ -20,6 +20,7 @@ import { ClosurePage } from '../pages/inventory/ClosurePage'
 import { ConsolidatedInventoryPage } from '../pages/inventory/ConsolidatedInventoryPage'
 import { InventoryPage } from '../pages/inventory/InventoryPage'
 import { MovementsPage } from '../pages/inventory/MovementsPage'
+import { SuppliesPage } from '../pages/inventory/SuppliesPage'
 import { LandingPage } from '../pages/LandingPage'
 import { PrivacyPolicyPage } from '../pages/legal/PrivacyPolicyPage'
 import { TermsOfServicePage } from '../pages/legal/TermsOfServicePage'
@@ -119,6 +120,15 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/inventario/cierre']}>
             <ClosurePage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/inventario/insumos"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/inventario/insumos']}>
+            <SuppliesPage />
           </ProtectedRoute>
         }
       />

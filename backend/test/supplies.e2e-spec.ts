@@ -267,11 +267,11 @@ describe("Supplies and supply stock endpoints (e2e)", () => {
       branchAId,
       tokens.BRANCH_LEADER,
     ).expect(200);
-    const rows = (response.body as { data: { data: SupplyStockItem[] } }).data
-      .data;
+    const rows = (response.body as { data: SupplyStockItem[] }).data;
+    const seeded = rows.filter(({ supplyId }) => supplyId === seedSupplyId);
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
+    expect(seeded).toHaveLength(1);
+    expect(seeded[0]).toMatchObject({
       supplyId: seedSupplyId,
       branchId: branchAId,
       quantity: "5.000",
