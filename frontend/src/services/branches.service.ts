@@ -4,6 +4,7 @@ import type {
   BranchesListResponse,
   CreateBranchPayload,
   UpdateBranchPayload,
+  UpdateBranchSchedulePayload,
   UpdateBranchStatusPayload,
 } from '../types/branch'
 
@@ -34,4 +35,10 @@ export const branchesService = {
     payload: UpdateBranchStatusPayload,
     token: string | null,
   ): Promise<Branch> => http.patch<Branch>(`/branches/${id}/status`, payload, { token }),
+
+  updateSchedule: (
+    id: string,
+    payload: UpdateBranchSchedulePayload,
+    token: string | null,
+  ): Promise<Branch> => http.put<Branch>(`/branches/${id}/schedule`, payload, { token }),
 }

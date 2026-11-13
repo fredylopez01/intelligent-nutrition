@@ -1,32 +1,12 @@
 import { useId, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 
 import { ChangePasswordForm } from '../../components/settings/ChangePasswordForm'
-import { EmptyState } from '../../components/ui/EmptyState'
 import { AppLayout } from '../../layouts/AppLayout'
 
 import './SettingsPage.css'
 
-type SettingsTab = 'cuenta' | 'seguridad'
-
-function AccountIcon() {
-  return (
-    <svg
-      className="settings-page__tab-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" />
-    </svg>
-  )
-}
+type SettingsTab = 'seguridad'
 
 function LockIcon() {
   return (
@@ -48,12 +28,11 @@ function LockIcon() {
 }
 
 const TABS: { id: SettingsTab; label: string; icon: ReactNode }[] = [
-  { id: 'cuenta', label: 'Cuenta', icon: <AccountIcon /> },
   { id: 'seguridad', label: 'Seguridad', icon: <LockIcon /> },
 ]
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('cuenta')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('seguridad')
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
   const baseId = useId()
 
@@ -113,15 +92,7 @@ export function SettingsPage() {
           aria-labelledby={`${baseId}-tab-${activeTab}`}
           className="settings-page__panel"
         >
-          {activeTab === 'cuenta' ? (
-            <EmptyState eyebrow="Cuenta" title="Tus datos personales están en Mi perfil">
-              <Link className="settings-page__profile-link" to="/perfil">
-                Ir a Mi perfil
-              </Link>
-            </EmptyState>
-          ) : (
-            <ChangePasswordForm />
-          )}
+          <ChangePasswordForm />
         </div>
       </div>
     </AppLayout>

@@ -32,6 +32,8 @@ import { PosPage } from '../pages/pos/PosPage'
 import { SalesPage } from '../pages/pos/SalesPage'
 import { ProfilePage } from '../pages/profile/ProfilePage'
 import { PromotionsPage } from '../pages/promotions/PromotionsPage'
+import { PublicCatalogPage } from '../pages/public/PublicCatalogPage'
+import { PublicProductPage } from '../pages/public/PublicProductPage'
 import { ReportsPage } from '../pages/reports/ReportsPage'
 import { RestockPage } from '../pages/reports/RestockPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
@@ -70,6 +72,8 @@ export function AppRouter() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/terminos" element={<TermsOfServicePage />} />
       <Route path="/privacidad" element={<PrivacyPolicyPage />} />
+      <Route path="/productos" element={<PublicCatalogPage />} />
+      <Route path="/productos/:productId" element={<PublicProductPage />} />
 
       <Route
         path="/dashboard"

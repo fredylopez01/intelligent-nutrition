@@ -57,6 +57,27 @@
   white-space: nowrap;
 }
 
+.branches-table__schedule {
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branches-table__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 0.5rem;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+  vertical-align: 2px;
+}
+
+.branches-table__dot--open {
+  background: var(--color-success);
+}
+
 .branches-table__cell-muted {
   color: var(--color-text-muted);
   overflow: hidden;

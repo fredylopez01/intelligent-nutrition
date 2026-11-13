@@ -7,6 +7,7 @@ import { SaleDetail } from '../../components/sales/SaleDetail'
 import { SellableProductCard } from '../../components/sales/SellableProductCard'
 import { Alert } from '../../components/ui/Alert'
 import { Button } from '../../components/ui/Button'
+import { DownloadPdfButton } from '../../components/ui/DownloadPdfButton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Modal } from '../../components/ui/Modal'
 import { Pagination } from '../../components/ui/Pagination'
@@ -22,6 +23,7 @@ import { useSellableProducts } from '../../hooks/useSellableProducts'
 import { AppLayout } from '../../layouts/AppLayout'
 import type { DiscountChoice, PaymentDraft, Sale, SellableProduct } from '../../types/sale'
 import { hasRole } from '../../utils/categories'
+import { downloadSaleReceipt } from '../../utils/pdf/saleReceiptPdf'
 import {
   SALE_REGISTER_ROLES,
   createPaymentDraft,
@@ -366,6 +368,10 @@ export function PosPage() {
           <div className="pos-ticket">
             <SaleDetail sale={completedSale} />
             <div className="pos-checkout__actions">
+              <DownloadPdfButton
+                label="Descargar comprobante"
+                onDownload={() => downloadSaleReceipt(completedSale)}
+              />
               <Button onClick={() => setCompletedSale(null)}>Nueva venta</Button>
             </div>
           </div>

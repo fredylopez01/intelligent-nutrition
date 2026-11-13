@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../services/http'
 import { reportsService } from '../../services/reports.service'
 import type { SalesReportParams, SalesReportRow } from '../../types/report'
+import { downloadSalesReport } from '../../utils/pdf/reportsPdf'
 import { defaultReportRange } from '../../utils/reports'
 
 import { ReportsPage } from './ReportsPage'
@@ -18,6 +19,10 @@ const auth = vi.hoisted(() => ({
 
 vi.mock('../../services/reports.service', () => ({
   reportsService: { sales: vi.fn() },
+}))
+
+vi.mock('../../utils/pdf/reportsPdf', () => ({
+  downloadSalesReport: vi.fn(),
 }))
 
 vi.mock('../../services/branches.service', () => ({
@@ -107,6 +112,43 @@ beforeEach(() => {
 })
 
 describe('ReportsPage', () => {
+  it('downloads the whole period as PDF, not only the visible page', async () => {
+    const first = row('2026-11-12', centro, 2, '410291.00')
+    const second = row('2026-11-10', centro, 1, '312700.00')
+    sales.mockImplementation(async (params) =>
+      params.limit === 100
+        ? {
+            data: params.page === 1 ? [first] : [second],
+            meta: { page: params.page ?? 1, limit: 100, total: 101, totalPages: 2 },
+          }
+        : page([first], { total: 2, totalPages: 2 }),
+    )
+    const { user } = renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Descargar PDF' }))
+
+    await waitFor(() =>
+      expect(downloadSalesReport).toHaveBeenCalledWith({
+        rows: [first, second],
+        branch: { ...centro, active: true },
+        from: '2026-11-01',
+        to: '2026-11-12',
+      }),
+    )
+    expect(sales).toHaveBeenCalledWith(
+      { page: 2, limit: 100, branchId: 'branch-centro', from: '2026-11-01', to: '2026-11-12' },
+      'test-token',
+    )
+  })
+
+  it('does not offer the PDF when the period has no sales', async () => {
+    sales.mockResolvedValue(page([]))
+    renderPage()
+
+    await screen.findByText('No hay ventas en este período')
+    expect(screen.getByRole('button', { name: 'Descargar PDF' })).toBeDisabled()
+  })
+
   it('shows the sales of the period by day with the summary', async () => {
     renderPage()
 

@@ -4,11 +4,14 @@ import { ApiError } from '../services/http'
 
 import {
   alertDescription,
+  averageTicket,
   daysUntil,
   formatChange,
+  formatShare,
   greetingName,
   resolveDashboardError,
   salesChange,
+  salesShare,
   shortBranchName,
   todayLabel,
   weekdayLabel,
@@ -27,6 +30,13 @@ describe('dashboard utils', () => {
     expect(formatChange(salesChange(2418600, 2106300) ?? 0)).toBe('+14,8%')
     expect(formatChange(salesChange(50, 100) ?? 0)).toBe('−50,0%')
     expect(salesChange(100, 0)).toBeNull()
+  })
+
+  it('calculates the average ticket and the share of each branch', () => {
+    expect(averageTicket(150000, 2)).toBe(75000)
+    expect(averageTicket(0, 0)).toBeNull()
+    expect(formatShare(salesShare(1104200, 1976600))).toBe('56%')
+    expect(salesShare(100, 0)).toBe(0)
   })
 
   it('shortens the branch names and describes each alert', () => {

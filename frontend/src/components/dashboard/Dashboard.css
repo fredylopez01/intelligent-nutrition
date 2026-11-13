@@ -10,7 +10,7 @@
 }
 
 .dashboard__row--cards {
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
 }
 
 .dashboard__row--lists {
@@ -443,6 +443,177 @@
   }
 }
 
+.dashboard-branches__scroll {
+  overflow-x: auto;
+}
+
+.dashboard-branches__table {
+  width: 100%;
+  min-width: 40rem;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.dashboard-branches__table th,
+.dashboard-branches__table td {
+  padding: 0.8125rem 1.375rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.dashboard-branches__table thead th {
+  padding-block: 0.625rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.dashboard-branches__table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.dashboard-branches__table .dashboard-branches__numeric {
+  text-align: right;
+}
+
+.dashboard-branches__name {
+  font-weight: 400;
+  color: var(--color-text);
+}
+
+.dashboard-branches__label {
+  margin-right: 0.5rem;
+}
+
+.dashboard-branches__tag {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--color-primary-strong);
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  color: var(--color-primary-strong);
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.dashboard-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.dashboard-status--open {
+  color: var(--color-text-secondary);
+}
+
+.dashboard-branches__sales {
+  white-space: nowrap;
+}
+
+.dashboard-branches__amount {
+  display: block;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.dashboard-branches__sub {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.dashboard-branches__ticket {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.dashboard-branches__share {
+  min-width: 9rem;
+}
+
+.dashboard-branches__share:not(:empty) {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dashboard-branches__track {
+  flex: 1;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border-soft);
+}
+
+.dashboard-branches__fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-primary-strong);
+}
+
+.dashboard-branches__percent {
+  min-width: 2.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+
+.dashboard-branches__stock {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-branches__cell-label {
+  display: none;
+  margin-right: 0.5rem;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.dashboard-branches__warning {
+  color: var(--color-warning);
+}
+
+a.dashboard-branches__warning {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+a.dashboard-branches__warning:hover,
+a.dashboard-branches__warning:focus-visible {
+  color: var(--color-text);
+}
+
+.dashboard-branches__muted {
+  color: var(--color-text-faint);
+}
+
+.dashboard-branches__total > * {
+  background: var(--color-surface-muted);
+}
+
+.dashboard-branches__table .dashboard-branches__total > * {
+  border-top: 1px solid var(--color-border-soft);
+  border-bottom: 0;
+}
+
+.dashboard-branches__total .dashboard-branches__name {
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dashboard-skeleton {
     animation: none;
@@ -454,24 +625,110 @@
 }
 
 @media (max-width: 1199px) {
-  .dashboard__row--cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .dashboard-sales {
-    grid-column: 1 / -1;
-  }
-
   .dashboard__row--lists {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@media (max-width: 599px) {
+@media (max-width: 899px) {
   .dashboard__row--cards {
     grid-template-columns: minmax(0, 1fr);
   }
+}
 
+@media (max-width: 767px) {
+  .dashboard-branches .dashboard-panel__header {
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    padding-inline: 1rem;
+  }
+
+  .dashboard-branches .dashboard-panel__link {
+    white-space: nowrap;
+  }
+
+  .dashboard-branches__table,
+  .dashboard-branches__table tbody,
+  .dashboard-branches__table tfoot {
+    display: block;
+    min-width: 0;
+  }
+
+  .dashboard-branches__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .dashboard-branches__table .dashboard-branches__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name status'
+      'sales stock'
+      'share share';
+    gap: 0.5rem 1rem;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .dashboard-branches__table .dashboard-branches__row > * {
+    padding: 0;
+    border: 0;
+  }
+
+  .dashboard-branches__table .dashboard-branches__name {
+    grid-area: name;
+  }
+
+  .dashboard-branches__table .dashboard-branches__status {
+    grid-area: status;
+    justify-self: end;
+  }
+
+  .dashboard-branches__table .dashboard-branches__sales {
+    grid-area: sales;
+    text-align: left;
+  }
+
+  .dashboard-branches__table .dashboard-branches__stock {
+    grid-area: stock;
+    align-self: end;
+    justify-self: end;
+  }
+
+  .dashboard-branches__table .dashboard-branches__share {
+    grid-area: share;
+  }
+
+  .dashboard-branches__table .dashboard-branches__ticket {
+    display: none;
+  }
+
+  .dashboard-branches__cell-label {
+    display: inline;
+  }
+
+  .dashboard-branches__table .dashboard-branches__total {
+    grid-template-areas: 'name name' 'sales stock';
+    border-bottom: 0;
+    background: var(--color-surface-muted);
+  }
+
+  .dashboard-branches__table .dashboard-branches__total > * {
+    background: transparent;
+  }
+
+  .dashboard-branches__total .dashboard-branches__status,
+  .dashboard-branches__total .dashboard-branches__share {
+    display: none;
+  }
+}
+
+@media (max-width: 599px) {
   .dashboard__actions {
     flex: 1 1 100%;
     min-width: 0;

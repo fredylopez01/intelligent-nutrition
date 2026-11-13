@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../services/http'
 import { reportsService } from '../../services/reports.service'
 import type { RestockReportRow } from '../../types/report'
+import { downloadRestockReport } from '../../utils/pdf/reportsPdf'
 
 import { RestockPage } from './RestockPage'
 
@@ -17,6 +18,10 @@ const auth = vi.hoisted(() => ({
 
 vi.mock('../../services/reports.service', () => ({
   reportsService: { restock: vi.fn() },
+}))
+
+vi.mock('../../utils/pdf/reportsPdf', () => ({
+  downloadRestockReport: vi.fn(),
 }))
 
 vi.mock('../../services/branches.service', () => ({
@@ -94,6 +99,20 @@ beforeEach(() => {
 })
 
 describe('RestockPage', () => {
+  it('downloads the suggestion as PDF', async () => {
+    const { user } = renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Descargar PDF' }))
+
+    await waitFor(() =>
+      expect(downloadRestockReport).toHaveBeenCalledWith({
+        rows: [row(), creatine],
+        branch: { ...centro, active: true },
+        today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      }),
+    )
+  })
+
   it('lists the products below their minimum with stock, demand and units to restock', async () => {
     renderPage()
 

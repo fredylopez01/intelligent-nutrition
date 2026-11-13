@@ -2,7 +2,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 
 import {
   AlertsPanel,
-  BranchesCard,
+  BranchesPanel,
   SalesCard,
   StockCard,
   TopProductsPanel,
@@ -22,11 +22,11 @@ import '../../components/dashboard/Dashboard.css'
 
 const BRANCH_PARAM = 'sede'
 
-function DashboardSkeleton() {
+function DashboardSkeleton({ withBranches }: { withBranches: boolean }) {
   return (
     <div className="dashboard" role="status" aria-label="Cargando indicadores...">
       <div className="dashboard__row dashboard__row--cards">
-        {[0, 1, 2].map((index) => (
+        {[0, 1].map((index) => (
           <div key={index} className="dashboard-panel dashboard-panel--skeleton" aria-hidden="true">
             <span className="dashboard-skeleton dashboard-skeleton--label" />
             <span className="dashboard-skeleton dashboard-skeleton--value" />
@@ -34,6 +34,13 @@ function DashboardSkeleton() {
           </div>
         ))}
       </div>
+      {withBranches && (
+        <div className="dashboard-panel dashboard-panel--skeleton" aria-hidden="true">
+          <span className="dashboard-skeleton dashboard-skeleton--label" />
+          <span className="dashboard-skeleton dashboard-skeleton--line" />
+          <span className="dashboard-skeleton dashboard-skeleton--line" />
+        </div>
+      )}
       <div className="dashboard__row dashboard__row--lists">
         {[0, 1].map((index) => (
           <div key={index} className="dashboard-panel dashboard-panel--skeleton" aria-hidden="true">
@@ -63,6 +70,7 @@ export function DashboardPage() {
   const { status, dashboard, error, refetch } = useBranchDashboard(
     branchOptions.status === 'success' ? scope : null,
   )
+  const isGlobal = scope === GLOBAL_SCOPE
   const today = dashboard?.date ?? businessToday()
   const canUse = (path: string) => canAccess(path, roleName)
   const branchQuery = scope && scope !== GLOBAL_SCOPE ? `?${BRANCH_PARAM}=${scope}` : ''
@@ -129,14 +137,14 @@ export function DashboardPage() {
         </div>
       )
     }
-    if (status !== 'success' || !dashboard) return <DashboardSkeleton />
+    if (status !== 'success' || !dashboard) return <DashboardSkeleton withBranches={isGlobal} />
     return (
       <div className="dashboard">
         <div className="dashboard__row dashboard__row--cards">
           <SalesCard dashboard={dashboard} />
           <StockCard dashboard={dashboard} />
-          <BranchesCard dashboard={dashboard} />
         </div>
+        {isGlobal && <BranchesPanel dashboard={dashboard} canUse={canUse} />}
         <div className="dashboard__row dashboard__row--lists">
           <AlertsPanel
             dashboard={dashboard}

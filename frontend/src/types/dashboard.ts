@@ -23,6 +23,21 @@ export interface DashboardTopProduct {
   total: number
 }
 
+export interface DashboardBranchSummary {
+  branchId: string
+  name: string
+  open: boolean
+  salesToday: number
+  salesCount: number
+  lowStockProducts: number
+}
+
+export interface DashboardTopBranch {
+  branchId: string
+  name: string
+  total: string
+}
+
 export interface BranchDashboard {
   date: string
   branch: DashboardBranchRef | null
@@ -42,7 +57,7 @@ export interface BranchDashboard {
   branches: {
     active: number
     open: number
-    items: { branchId: string; name: string; open: boolean; salesToday: number }[]
+    items: DashboardBranchSummary[]
   }
   alerts: {
     total: number
@@ -50,4 +65,9 @@ export interface BranchDashboard {
     items: DashboardAlert[]
   }
   topProducts: DashboardTopProduct[]
+  totalSalesToday?: string
+  totalSalesCount?: number
+  branchesActive?: number
+  lowStockAlerts?: number
+  topBranch?: DashboardTopBranch | null
 }

@@ -2,11 +2,10 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useBrandAssets } from '../hooks/useBrandAssets'
+import { usePublicBranches } from '../hooks/usePublicBranches'
+import { activeBranchNames, inventoryTagline } from '../utils/landing'
 
 import './AuthLayout.css'
-
-const DEFAULT_TAGLINE =
-  'Un solo inventario para tres sedes. Lo que ves en pantalla es lo que hay en el estante.'
 
 interface AuthLayoutProps {
   children: ReactNode
@@ -14,8 +13,10 @@ interface AuthLayoutProps {
   tagline?: string
 }
 
-export function AuthLayout({ children, back, tagline = DEFAULT_TAGLINE }: AuthLayoutProps) {
+export function AuthLayout({ children, back, tagline }: AuthLayoutProps) {
   const { logo, isotipo } = useBrandAssets()
+  const { status, branches } = usePublicBranches()
+  const names = status === 'success' ? activeBranchNames(branches) : ''
   return (
     <div className="auth-layout">
       <aside className="auth-layout__brand">
@@ -36,8 +37,8 @@ export function AuthLayout({ children, back, tagline = DEFAULT_TAGLINE }: AuthLa
         <img className="auth-layout__logo" src={logo} alt="Intelligent Nutrition" />
 
         <div className="auth-layout__brand-copy">
-          <p className="auth-layout__tagline">{tagline}</p>
-          <p className="auth-layout__sedes">Tunja Makro, Tunja Viva, Sogamoso</p>
+          <p className="auth-layout__tagline">{tagline ?? inventoryTagline(status, branches)}</p>
+          {names && <p className="auth-layout__sedes">{names}</p>}
         </div>
       </aside>
 

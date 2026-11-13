@@ -92,7 +92,16 @@ function dashboard(overrides: Partial<BranchDashboard> = {}): BranchDashboard {
     branches: {
       active: 1,
       open: 1,
-      items: [{ branchId: makro.id, name: makro.name, open: true, salesToday: 2418600 }],
+      items: [
+        {
+          branchId: makro.id,
+          name: makro.name,
+          open: true,
+          salesToday: 2418600,
+          salesCount: 12,
+          lowStockProducts: 1,
+        },
+      ],
     },
     alerts: {
       total: 4,
@@ -166,7 +175,7 @@ function renderPage(path = '/dashboard') {
   return { user, url: () => screen.getByTestId('location').textContent }
 }
 
-async function panel(name: string) {
+async function panel(name: string | RegExp) {
   return within(await screen.findByRole('region', { name }))
 }
 
@@ -178,14 +187,34 @@ beforeEach(() => {
   globalDashboard.mockResolvedValue(
     dashboard({
       branch: null,
+      salesToday: { count: 14, totalAmount: 1976600 },
       branches: {
         active: 2,
         open: 1,
         items: [
-          { branchId: viva.id, name: viva.name, open: false, salesToday: 872400 },
-          { branchId: makro.id, name: makro.name, open: true, salesToday: 1104200 },
+          {
+            branchId: viva.id,
+            name: viva.name,
+            open: false,
+            salesToday: 872400,
+            salesCount: 6,
+            lowStockProducts: 2,
+          },
+          {
+            branchId: makro.id,
+            name: makro.name,
+            open: true,
+            salesToday: 1104200,
+            salesCount: 8,
+            lowStockProducts: 0,
+          },
         ],
       },
+      totalSalesToday: '1976600.00',
+      totalSalesCount: 14,
+      branchesActive: 2,
+      lowStockAlerts: 2,
+      topBranch: { branchId: makro.id, name: makro.name, total: '1104200.00' },
     }),
   )
 })
@@ -216,7 +245,7 @@ describe('DashboardPage', () => {
     expect(labels).toEqual(['Vie', 'Sáb', 'Dom', 'Lun', 'Mar', 'Mié', 'Hoy'])
   })
 
-  it('shows the stock by category and the branch with its cash shift', async () => {
+  it('shows the stock by category without the branches table for a branch role', async () => {
     renderPage()
 
     const stock = await panel('Stock total')
@@ -224,9 +253,8 @@ describe('DashboardPage', () => {
     expect(stock.getByText('unidades en Makro')).toBeInTheDocument()
     expect(stock.getByText('2 productos con menos de 5 unidades')).toBeInTheDocument()
     expect(stock.getByText('Proteína').nextElementSibling).toHaveTextContent('612')
-    const branch = await panel('Sede')
-    expect(branch.getByText('1 / 1')).toBeInTheDocument()
-    expect(branch.getByText('Makro')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /Sedes hoy/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
   it('lists the inventory alerts with the action each role can take', async () => {
@@ -281,10 +309,11 @@ describe('DashboardPage', () => {
     const { user, url } = renderPage()
 
     await waitFor(() => expect(globalDashboard).toHaveBeenCalledWith('test-token'))
-    const branches = await panel('Sedes')
-    expect(await branches.findByText('1 / 2')).toBeInTheDocument()
-    const names = branches.getAllByRole('term').map((term) => term.textContent)
-    expect(names).toEqual(['Makro (abierta)', 'Sede Viva (sin turno)'])
+    expect(await panel('Sedes hoy · 1 de 2 abiertas')).toBeTruthy()
+    expect(
+      (await panel('Stock total')).getByText('2 productos con menos de 5 unidades en alguna sede'),
+    ).toBeInTheDocument()
+    expect(branchDashboard).not.toHaveBeenCalled()
     expect(
       (await panel('Alertas de inventario')).getByRole('link', {
         name: 'Promover: Insane Labz Psychotic Gold',
@@ -295,6 +324,82 @@ describe('DashboardPage', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Sede' }), viva.id)
     await waitFor(() => expect(branchDashboard).toHaveBeenCalledWith(viva.id, 'test-token'))
     expect(url()).toBe(`/dashboard?sede=${viva.id}`)
+    await screen.findByText('1.284')
+    expect(screen.queryByRole('region', { name: /Sedes hoy/ })).not.toBeInTheDocument()
+  })
+
+  it('compares the sales of every branch in the superadmin table', async () => {
+    auth.role = 'SUPERADMIN'
+    listBranches.mockResolvedValue({
+      data: [
+        { ...makro, active: true },
+        { ...viva, active: true },
+      ],
+      meta: { page: 1, limit: 100, total: 2, totalPages: 1 },
+    } as never)
+    renderPage()
+
+    const branches = await panel(/Sedes hoy/)
+    const rows = branches.getAllByRole('row').slice(1)
+    expect(rows.map((row) => within(row).getByRole('rowheader').textContent)).toEqual([
+      'MakroLíder del día',
+      'Sede Viva',
+      'Total',
+    ])
+    const [makroRow, vivaRow, totalRow] = rows.map((row) => within(row))
+    expect(makroRow.getByText('Abierta')).toBeInTheDocument()
+    expect(makroRow.getByText(/1\.104\.200/)).toBeInTheDocument()
+    expect(makroRow.getByText('8 ventas')).toBeInTheDocument()
+    expect(makroRow.getByText(/138\.025/)).toBeInTheDocument()
+    expect(makroRow.getByText('56%')).toBeInTheDocument()
+    expect(makroRow.queryByRole('link')).not.toBeInTheDocument()
+    expect(vivaRow.getByText('Sin turno')).toBeInTheDocument()
+    expect(vivaRow.getByText('44%')).toBeInTheDocument()
+    expect(
+      vivaRow.getByRole('link', { name: '2 productos bajo el mínimo en Sede Viva' }),
+    ).toHaveAttribute('href', `/reportes/reposicion?sede=${viva.id}`)
+    expect(totalRow.getByText(/1\.976\.600/)).toBeInTheDocument()
+    expect(totalRow.getByText('14 ventas')).toBeInTheDocument()
+    expect(branches.getByRole('link', { name: 'Ver reporte de ventas' })).toHaveAttribute(
+      'href',
+      '/reportes',
+    )
+  })
+
+  it('shows the branches without sales in the superadmin table', async () => {
+    auth.role = 'SUPERADMIN'
+    listBranches.mockResolvedValue({
+      data: [{ ...makro, active: true }],
+      meta: { page: 1, limit: 100, total: 1, totalPages: 1 },
+    } as never)
+    globalDashboard.mockResolvedValue(
+      dashboard({
+        branch: null,
+        salesToday: { count: 0, totalAmount: 0 },
+        branches: {
+          active: 1,
+          open: 0,
+          items: [
+            {
+              branchId: makro.id,
+              name: makro.name,
+              open: false,
+              salesToday: 0,
+              salesCount: 0,
+              lowStockProducts: 0,
+            },
+          ],
+        },
+        topBranch: null,
+        lowStockAlerts: 0,
+      }),
+    )
+    renderPage()
+
+    const branches = await panel('Sedes hoy · 0 de 1 abierta')
+    expect(branches.getAllByText('Sin ventas')).toHaveLength(2)
+    expect(branches.getByText('0%')).toBeInTheDocument()
+    expect(branches.queryByText('Líder del día')).not.toBeInTheDocument()
   })
 
   it('shows a red badge when the sales are below yesterday', async () => {
