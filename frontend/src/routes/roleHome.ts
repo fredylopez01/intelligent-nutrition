@@ -3,7 +3,7 @@ export const roleHome: Record<RoleName, string> = {
   SUPERADMIN: '/dashboard',
   BRANCH_LEADER: '/dashboard',
   BRANCH_ASSISTANT: '/pos',
-  DEV: '/dashboard',
+  DEV: '/usuarios',
 }
 
 export function getRoleHome(role: RoleName): string {
