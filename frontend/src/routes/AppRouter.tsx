@@ -11,6 +11,7 @@ import { UnitsPage } from '../pages/catalog/UnitsPage'
 import { ComingSoonPage } from '../pages/ComingSoonPage'
 import { CustomerDetailPage } from '../pages/customers/CustomerDetailPage'
 import { CustomersPage } from '../pages/customers/CustomersPage'
+import { DashboardPage } from '../pages/dashboard/DashboardPage'
 import { ForbiddenPage } from '../pages/ForbiddenPage'
 import { GoogleAuthCallbackPage } from '../pages/GoogleAuthCallbackPage'
 import { CashShiftPage } from '../pages/cash-shifts/CashShiftPage'
@@ -66,6 +67,15 @@ export function AppRouter() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/terminos" element={<TermsOfServicePage />} />
       <Route path="/privacidad" element={<PrivacyPolicyPage />} />
+
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/dashboard']}>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/sedes"

@@ -14,6 +14,12 @@ import { DashboardService } from "./dashboard.service.js";
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
+  @Get("global")
+  @Roles("SUPERADMIN")
+  getGlobalDashboard() {
+    return this.dashboardService.getGlobalDashboard();
+  }
+
   @Get("branch/:branchId")
   @Roles("SUPERADMIN", "BRANCH_LEADER", "BRANCH_ASSISTANT")
   getBranchDashboard(@Param("branchId", new ParseUUIDPipe()) branchId: string) {

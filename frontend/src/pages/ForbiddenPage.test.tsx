@@ -71,7 +71,17 @@ describe('ForbiddenPage from the route guard', () => {
 
     await user.click(await screen.findByRole('link', { name: 'Volver al dashboard' }))
 
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Hola, Yulieth' })).toBeInTheDocument()
+  })
+
+  it('sends DEV to its own home, since it has no dashboard', async () => {
+    auth.role = 'DEV'
+    renderAt('/sedes')
+
+    expect(await screen.findByRole('link', { name: 'Volver al inicio' })).toHaveAttribute(
+      'href',
+      '/usuarios',
+    )
   })
 
   it('hides "Volver atrás" when there is no previous page', async () => {

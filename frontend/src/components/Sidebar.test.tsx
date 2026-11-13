@@ -86,13 +86,20 @@ describe('Sidebar menu by role', () => {
     }
   })
 
-  it('shows users and audit but not the branch modules, the inventory, the catalog nor the POS to DEV', () => {
+  it('only shows users and audit to DEV', () => {
+    auth.role = 'DEV'
+    renderSidebar()
+
+    expect(menuLabels()).toEqual(['Usuarios', 'Auditoría'])
+  })
+
+  it('hides the branch modules, the dashboard, the inventory, the catalog and the POS from DEV', () => {
     auth.role = 'DEV'
     renderSidebar()
 
     const labels = menuLabels()
-    expect(labels).toEqual(expect.arrayContaining(['Dashboard', 'Usuarios', 'Auditoría']))
     for (const hidden of [
+      'Dashboard',
       'Sedes',
       'Inventario',
       'Catálogo',
