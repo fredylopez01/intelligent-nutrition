@@ -9,6 +9,12 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { BranchScope } from "../../common/decorators/branch-scope.decorator.js";
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import { Roles } from "../../common/decorators/roles.decorator.js";
@@ -19,6 +25,8 @@ import { UpdateSupplyMinimumDto } from "./dto/update-supply-minimum.dto.js";
 import { ListSupplyStockQueryDto } from "./dto/list-supply-stock-query.dto.js";
 import { SupplyStockService } from "./supply-stock.service.js";
 
+@ApiTags("Supply stock")
+@ApiBearerAuth()
 @Controller("supply-stock")
 @UseGuards(BranchScopeGuard)
 export class SupplyStockController {
@@ -27,6 +35,19 @@ export class SupplyStockController {
   @Get()
   @Roles("SUPERADMIN", "BRANCH_LEADER", "BRANCH_ASSISTANT")
   @BranchScope("query.branchId")
+  @ApiOperation({
+    summary: "List the supply stock",
+    description:
+      "Paginated stock of every active supply in every active branch, 0 when the branch has never received it. lowStock is quantity < minimumQuantity. branchId is required for branch roles. Roles: SUPERADMIN, BRANCH_LEADER, BRANCH_ASSISTANT.",
+  })
+  @ApiResponse({ status: 200, description: "Paginated stock rows." })
+  @ApiResponse({ status: 400, description: "Invalid query parameters." })
+  @ApiResponse({ status: 401, description: "Missing or invalid access token." })
+  @ApiResponse({
+    status: 403,
+    description:
+      "Role not allowed, or the branch is outside the user's assignments (BRANCH_SCOPE_VIOLATION).",
+  })
   findAll(
     @Query() query: ListSupplyStockQueryDto,
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -37,6 +58,35 @@ export class SupplyStockController {
   @Post("movement")
   @HttpCode(201)
   @Roles("BRANCH_LEADER", "BRANCH_ASSISTANT")
+  @ApiOperation({
+    summary: "Register a supply movement",
+    description:
+      "Adds (ENTRY) or removes (EXIT) whole units of a supply in a branch and records the movement. EXIT requires an observation and cannot exceed the stock. Roles: BRANCH_LEADER, BRANCH_ASSISTANT.",
+  })
+  @ApiResponse({
+    status: 201,
+    description: "Movement registered with the resulting quantity.",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid body, or EXIT without observation.",
+  })
+  @ApiResponse({ status: 401, description: "Missing or invalid access token." })
+  @ApiResponse({
+    status: 403,
+    description:
+      "Role not allowed, or the branch is outside the user's assignments (BRANCH_SCOPE_VIOLATION).",
+  })
+  @ApiResponse({
+    status: 404,
+    description:
+      "Supply or branch not found (SUPPLY_NOT_FOUND, BRANCH_NOT_FOUND).",
+  })
+  @ApiResponse({
+    status: 422,
+    description:
+      "Not enough stock (INSUFFICIENT_SUPPLY_STOCK), inactive supply (SUPPLY_INACTIVE) or inactive branch (BRANCH_INACTIVE).",
+  })
   createMovement(
     @Body() dto: CreateSupplyStockMovementDto,
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -47,6 +97,29 @@ export class SupplyStockController {
   @Patch("minimum")
   @Roles("SUPERADMIN", "BRANCH_LEADER")
   @BranchScope("body.branchId")
+  @ApiOperation({
+    summary: "Set the minimum stock of a supply in a branch",
+    description:
+      "Saves the minimum quantity used to flag the low stock of the supply in the branch. Generates an audit log. Roles: SUPERADMIN, BRANCH_LEADER.",
+  })
+  @ApiResponse({ status: 200, description: "Stock row updated." })
+  @ApiResponse({ status: 400, description: "Invalid request body." })
+  @ApiResponse({ status: 401, description: "Missing or invalid access token." })
+  @ApiResponse({
+    status: 403,
+    description:
+      "Role not allowed, or the branch is outside the user's assignments (BRANCH_SCOPE_VIOLATION).",
+  })
+  @ApiResponse({
+    status: 404,
+    description:
+      "Supply or branch not found (SUPPLY_NOT_FOUND, BRANCH_NOT_FOUND).",
+  })
+  @ApiResponse({
+    status: 422,
+    description:
+      "Inactive supply (SUPPLY_INACTIVE) or inactive branch (BRANCH_INACTIVE).",
+  })
   updateMinimum(
     @Body() dto: UpdateSupplyMinimumDto,
     @CurrentUser() currentUser: AuthenticatedUser,
