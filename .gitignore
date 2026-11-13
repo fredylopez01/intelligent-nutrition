@@ -33,6 +33,7 @@ blob-report/
 
 # AI tooling
 .commandcode/
+AGENTS.md
 
 # OS
 .DS_Store
