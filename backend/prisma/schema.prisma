@@ -134,6 +134,7 @@ model Branch {
   inventoryMovements    InventoryMovement[] @relation("InventoryMovementDestinationBranch")
   originMovements       InventoryMovement[] @relation("InventoryMovementOriginBranch")
   inventoryClosures     InventoryClosure[]
+  purchaseDetails      PurchaseDetail[]
   sales                 Sale[]
   notifications         Notification[]
   supplyStocks          SupplyStock[]
@@ -375,6 +376,7 @@ model PurchaseDetail {
   id                String  @id @default(uuid()) @db.Uuid
   purchaseId        String  @map("purchase_id") @db.Uuid
   productId         String  @map("product_id") @db.Uuid
+  branchId          String? @map("branch_id") @db.Uuid
   requestedQuantity Int     @map("requested_quantity")
   receivedQuantity  Int     @default(0) @map("received_quantity")
   unitPrice         Decimal @map("unit_price") @db.Decimal(12, 2)
@@ -384,9 +386,11 @@ model PurchaseDetail {
 
   purchase Purchase @relation(fields: [purchaseId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
+  branch   Branch?  @relation(fields: [branchId], references: [id])
 
   @@index([purchaseId])
   @@index([productId])
+  @@index([branchId])
   @@map("purchase_detail")
 }
 
