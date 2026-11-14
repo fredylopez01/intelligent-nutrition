@@ -50,7 +50,20 @@ const saleSelect = {
     },
   },
   customer: {
-    select: { personId: true, fullName: true },
+    select: {
+      personId: true,
+      fullName: true,
+      person: {
+        select: {
+          documentNumber: true,
+          email: true,
+          phone: true,
+          address: true,
+          businessName: true,
+          documentType: { select: { code: true, name: true } },
+        },
+      },
+    },
   },
   details: {
     select: {
@@ -107,6 +120,12 @@ function formatSaleResponse(sale: SaleWithRelations) {
       ? {
           id: sale.customer.personId,
           fullName: sale.customer.fullName,
+          documentType: sale.customer.person.documentType,
+          documentNumber: sale.customer.person.documentNumber,
+          email: sale.customer.person.email,
+          phone: sale.customer.person.phone,
+          address: sale.customer.person.address,
+          isCompany: Boolean(sale.customer.person.businessName),
         }
       : null,
     saleAt: sale.saleAt,

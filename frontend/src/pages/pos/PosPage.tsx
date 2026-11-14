@@ -24,6 +24,7 @@ import { AppLayout } from '../../layouts/AppLayout'
 import type { DiscountChoice, PaymentDraft, Sale, SellableProduct } from '../../types/sale'
 import { hasRole } from '../../utils/categories'
 import { downloadSaleReceipt } from '../../utils/pdf/saleReceiptPdf'
+import { receiptButtonLabel } from '../../utils/saleDocuments'
 import {
   SALE_REGISTER_ROLES,
   createPaymentDraft,
@@ -340,6 +341,7 @@ export function PosPage() {
         open={checkingOut}
         title="Confirmar venta"
         description="Revisa los productos y el cobro antes de registrar la venta."
+        size="wide"
         onClose={() => setCheckingOut(false)}
       >
         {checkingOut && branch && paymentsReady && (
@@ -369,7 +371,7 @@ export function PosPage() {
             <SaleDetail sale={completedSale} />
             <div className="pos-checkout__actions">
               <DownloadPdfButton
-                label="Descargar comprobante"
+                label={receiptButtonLabel(completedSale)}
                 onDownload={() => downloadSaleReceipt(completedSale)}
               />
               <Button onClick={() => setCompletedSale(null)}>Nueva venta</Button>

@@ -20,6 +20,7 @@ import {
 } from '../../utils/onlineOrders'
 import { downloadSaleReceipt } from '../../utils/pdf/saleReceiptPdf'
 import { formatPrice } from '../../utils/products'
+import { receiptButtonLabel } from '../../utils/saleDocuments'
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
 import { DownloadPdfButton } from '../ui/DownloadPdfButton'
@@ -116,7 +117,7 @@ export function OnlineOrderDetail({
             Cerrar
           </Button>
           <DownloadPdfButton
-            label="Descargar comprobante"
+            label={receiptButtonLabel(completedSale)}
             onDownload={() => downloadSaleReceipt(completedSale)}
           />
         </div>

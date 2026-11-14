@@ -2,8 +2,10 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { customersService } from '../../services/customers.service'
 import { ApiError } from '../../services/http'
 import { salesService } from '../../services/sales.service'
+import { buildNaturalCustomer } from '../../test-utils/customers'
 import { CASH, NEQUI } from '../../test-utils/paymentMethods'
 import { buildPromotion } from '../../test-utils/promotions'
 import { buildSale, buildSellable } from '../../test-utils/sales'
@@ -16,6 +18,14 @@ import type { SelectionLine } from './PosSelection'
 
 vi.mock('../../services/sales.service', () => ({
   salesService: { create: vi.fn() },
+}))
+
+vi.mock('../../services/customers.service', () => ({
+  customersService: { list: vi.fn(), create: vi.fn() },
+}))
+
+vi.mock('../../services/persons.service', () => ({
+  personsService: { search: vi.fn() },
 }))
 
 vi.mock('../../hooks/useAuth', () => ({
@@ -76,6 +86,43 @@ beforeEach(() => {
 })
 
 describe('CheckoutDialog', () => {
+  it('asks for a customer before charging an invoice with customer data', async () => {
+    const laura = buildNaturalCustomer()
+    vi.mocked(customersService.list).mockResolvedValue({
+      data: [laura],
+      meta: { page: 1, limit: 5, total: 1, totalPages: 1 },
+    })
+    const { user } = renderDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: /Factura con datos del cliente/ }))
+    expect(charge()).toBeDisabled()
+    expect(screen.getByText('Elige o registra el cliente para poder cobrar.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Buscar cliente por nombre o documento'), '1049000111')
+    await user.keyboard('{Enter}')
+    await user.click(await screen.findByRole('button', { name: /Laura Pérez/ }))
+
+    expect(customersService.list).toHaveBeenCalledWith(
+      { page: 1, limit: 5, search: '1049000111', active: true },
+      'test-token',
+    )
+    expect(screen.getByText('CC 1049000111 · laura@correo.com')).toBeInTheDocument()
+    await user.click(charge())
+    expect(createSale).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: 'customer-laura' }),
+      'test-token',
+    )
+  })
+
+  it('opens the customer registration from the checkout', async () => {
+    const { user } = renderDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: /Factura con datos del cliente/ }))
+    await user.click(screen.getByRole('button', { name: 'Registrar un cliente nuevo' }))
+
+    expect(screen.queryByLabelText('Buscar cliente por nombre o documento')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Buscar persona')).toBeInTheDocument()
+  })
+
   it('lists each line with its quantity, unit price and total', () => {
     const { container, summary } = renderDialog()
     const lines = within(container.querySelector('.pos-checkout__lines') as HTMLElement)

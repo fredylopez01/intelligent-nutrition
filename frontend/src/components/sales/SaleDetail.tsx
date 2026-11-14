@@ -22,6 +22,9 @@ export function SaleDetail({ sale }: SaleDetailProps) {
           </p>
           <p className="sale-detail__meta">
             Cliente: {sale.customer?.fullName ?? 'venta sin cliente identificado'}
+            {sale.customer?.documentNumber
+              ? ` · ${sale.customer.documentType?.code ?? ''} ${sale.customer.documentNumber}`
+              : ''}
           </p>
         </div>
         <span className={`ui-status ui-status--${SALE_STATUS_TONES[sale.status]}`}>

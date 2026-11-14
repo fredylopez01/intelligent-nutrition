@@ -26,13 +26,24 @@ export interface SellableProductsResponse {
   meta: PaginationMeta
 }
 
+export interface SaleCustomer {
+  id: string
+  fullName: string
+  documentType?: { code: string; name: string }
+  documentNumber?: string
+  email?: string
+  phone?: string
+  address?: string
+  isCompany?: boolean
+}
+
 export interface SaleSummary {
   id: string
   saleNumber: string
   status: SaleStatus
   branch: { id: string; name: string }
   user: { id: string; fullName: string }
-  customer: { id: string; fullName: string } | null
+  customer: SaleCustomer | null
   saleAt: string
   subtotal: string
   discountAmount: string

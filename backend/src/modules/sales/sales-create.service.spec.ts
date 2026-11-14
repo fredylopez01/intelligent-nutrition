@@ -1093,7 +1093,18 @@ describe("SalesService.create", () => {
           discountAmount: "2.00",
           taxAmount: "1.00",
           total: "23.70",
-          customer: { personId: customerId, fullName: "Cliente Prueba" },
+          customer: {
+            personId: customerId,
+            fullName: "Cliente Prueba",
+            person: {
+              documentNumber: "1049632145",
+              email: "cliente@correo.com",
+              phone: "3114827719",
+              address: "Calle 19 # 9-35, Tunja",
+              businessName: null,
+              documentType: { code: "CC", name: "Cédula de ciudadanía" },
+            },
+          },
           details: [
             {
               productId: productAId,
@@ -1139,7 +1150,16 @@ describe("SalesService.create", () => {
         status: "COMPLETED",
         branch: { id: branchId, name: "Sede Centro" },
         user: { id: userId, fullName: "Fabian Correa" },
-        customer: { id: customerId, fullName: "Cliente Prueba" },
+        customer: {
+          id: customerId,
+          fullName: "Cliente Prueba",
+          documentType: { code: "CC", name: "Cédula de ciudadanía" },
+          documentNumber: "1049632145",
+          email: "cliente@correo.com",
+          phone: "3114827719",
+          address: "Calle 19 # 9-35, Tunja",
+          isCompany: false,
+        },
         saleAt: saleDate,
         subtotal: "24.70",
         discountAmount: "2.00",
