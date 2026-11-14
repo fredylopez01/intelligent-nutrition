@@ -395,6 +395,7 @@ describe("Online orders (e2e)", () => {
       documentTypeId: ids.documentType,
       documentNumber: `9${runId}`.slice(0, 20),
       email: `comprador.${runId}@e2e.test`,
+      address: "Calle 19 # 9-35, Tunja",
     });
     const first = await placeOrder({
       fulfillment: "PICKUP",
@@ -423,8 +424,54 @@ describe("Online orders (e2e)", () => {
     expect(conflict.status).toBe(409);
   });
 
+  it("registers a company with its business name and address", async () => {
+    const response = await placeOrder({
+      fulfillment: "PICKUP",
+      branchId: ids.delivery,
+      items: [{ productId: ids.whey, quantity: 1 }],
+      customer: customer({
+        register: true,
+        documentTypeId: ids.documentType,
+        documentNumber: `7${runId}`.slice(0, 20),
+        email: `empresa.${runId}@e2e.test`,
+        businessName: `Gimnasio ${runId} SAS`,
+        address: "Carrera 10 # 20-30, Tunja",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const customerId = data<OrderBody>(response).customer.id;
+    const registered = await prisma.customer.findUnique({
+      where: { personId: customerId ?? "" },
+      select: {
+        fullName: true,
+        person: {
+          select: { businessName: true, firstName: true, address: true },
+        },
+      },
+    });
+    expect(registered).toEqual({
+      fullName: `Gimnasio ${runId} SAS`,
+      person: {
+        businessName: `Gimnasio ${runId} SAS`,
+        firstName: null,
+        address: "Carrera 10 # 20-30, Tunja",
+      },
+    });
+  });
+
   it.each([
     [{ customer: customer({ phone: "12345" }) }],
+    [
+      {
+        customer: customer({
+          register: true,
+          documentTypeId: "00000000-0000-4000-8000-000000000000",
+          documentNumber: "123456",
+          email: "sin-direccion@e2e.test",
+        }),
+      },
+    ],
     [{ customer: customer({ register: true }) }],
     [{ fulfillment: "DELIVERY", branchId: undefined }],
     [{ items: [] }],
@@ -463,8 +510,8 @@ describe("Online orders (e2e)", () => {
       data: OrderBody[];
       meta: { openOrders: number };
     };
-    expect(body.data.length).toBe(3);
-    expect(body.meta.openOrders).toBe(3);
+    expect(body.data.length).toBe(4);
+    expect(body.meta.openOrders).toBe(4);
 
     expect((await server().get("/api/v1/orders").set(auth("DEV"))).status).toBe(
       403,

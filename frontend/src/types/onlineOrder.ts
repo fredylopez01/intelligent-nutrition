@@ -53,6 +53,8 @@ export interface CreateOnlineOrderPayload {
     register: boolean
     documentTypeId?: string
     documentNumber?: string
+    businessName?: string
+    address?: string
   }
   delivery?: { address: string; neighborhood: string }
   notes?: string

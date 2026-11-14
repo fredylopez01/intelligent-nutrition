@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { z } from 'zod'
@@ -14,53 +14,74 @@ import { useCartAvailability, useOrderDocumentTypes } from '../../hooks/useOnlin
 import { onlineOrdersService } from '../../services/onlineOrders.service'
 import type { CreateOnlineOrderPayload, OnlineOrder } from '../../types/onlineOrder'
 import { CONTACT, whatsappUrl } from '../../utils/contact'
+import { CUSTOMER_KIND_LABELS, DOCUMENT_CODES_BY_KIND } from '../../utils/customers'
 import { missingInBranch, orderWhatsappMessage, resolveOrderError } from '../../utils/onlineOrders'
+import { validateDocumentNumber } from '../../utils/persons'
 import { formatPrice } from '../../utils/products'
 
 import './OrderPage.css'
 
-const orderSchema = z
-  .object({
-    fulfillment: z.enum(['PICKUP', 'DELIVERY']),
-    branchId: z.string(),
-    address: z.string().trim().max(255, 'Máximo 255 caracteres'),
-    neighborhood: z.string().trim().max(100, 'Máximo 100 caracteres'),
-    firstName: z.string().trim().min(1, 'Ingresa tus nombres').max(100, 'Máximo 100 caracteres'),
-    lastName: z.string().trim().min(1, 'Ingresa tus apellidos').max(100, 'Máximo 100 caracteres'),
-    phone: z
-      .string()
-      .transform((value) => value.replace(/\D/g, ''))
-      .pipe(z.string().regex(/^3\d{9}$/, 'Escribe un celular de 10 dígitos que empiece por 3')),
-    email: z.string().trim().max(150, 'Máximo 150 caracteres'),
-    register: z.boolean(),
-    documentTypeId: z.string(),
-    documentNumber: z.string().trim(),
-    notes: z.string().trim().max(500, 'Máximo 500 caracteres'),
-  })
-  .superRefine((values, context) => {
-    const require = (path: keyof typeof values, message: string) =>
-      context.addIssue({ code: z.ZodIssueCode.custom, path: [path], message })
-    if (values.fulfillment === 'PICKUP' && !values.branchId) {
-      require('branchId', 'Elige la sede donde recoges')
-    }
-    if (values.fulfillment === 'DELIVERY') {
-      if (!values.address) require('address', 'Escribe la dirección de entrega')
-      if (!values.neighborhood) require('neighborhood', 'Escribe el barrio')
-    }
-    if (values.email && !z.string().email().safeParse(values.email).success) {
-      require('email', 'Escribe un correo válido')
-    }
-    if (values.register) {
-      if (!values.email) require('email', 'El correo es necesario para registrarte')
-      if (!values.documentTypeId) require('documentTypeId', 'Elige el tipo de documento')
-      if (!/^[A-Za-z0-9-]{4,20}$/.test(values.documentNumber)) {
-        require('documentNumber', 'Escribe tu número de documento')
+function buildOrderSchema(codeById: Map<string, string>) {
+  return z
+    .object({
+      fulfillment: z.enum(['PICKUP', 'DELIVERY']),
+      branchId: z.string(),
+      address: z.string().trim().max(255, 'Máximo 255 caracteres'),
+      neighborhood: z.string().trim().max(100, 'Máximo 100 caracteres'),
+      firstName: z.string().trim().min(1, 'Ingresa tus nombres').max(100, 'Máximo 100 caracteres'),
+      lastName: z.string().trim().min(1, 'Ingresa tus apellidos').max(100, 'Máximo 100 caracteres'),
+      phone: z
+        .string()
+        .transform((value) => value.replace(/\D/g, ''))
+        .pipe(z.string().regex(/^3\d{9}$/, 'Escribe un celular de 10 dígitos que empiece por 3')),
+      email: z.string().trim().max(150, 'Máximo 150 caracteres'),
+      register: z.boolean(),
+      kind: z.enum(['natural', 'empresa']),
+      documentTypeId: z.string(),
+      documentNumber: z.string().trim().max(50, 'Máximo 50 caracteres'),
+      businessName: z.string().trim().max(200, 'Máximo 200 caracteres'),
+      customerAddress: z.string().trim().max(255, 'Máximo 255 caracteres'),
+      notes: z.string().trim().max(500, 'Máximo 500 caracteres'),
+    })
+    .superRefine((values, context) => {
+      const require = (path: keyof typeof values, message: string) =>
+        context.addIssue({ code: z.ZodIssueCode.custom, path: [path], message })
+      if (values.fulfillment === 'PICKUP' && !values.branchId) {
+        require('branchId', 'Elige la sede donde recoges')
       }
-    }
-  })
+      if (values.fulfillment === 'DELIVERY') {
+        if (!values.address) require('address', 'Escribe la dirección de entrega')
+        if (!values.neighborhood) require('neighborhood', 'Escribe el barrio')
+      }
+      if (values.email && !z.string().email().safeParse(values.email).success) {
+        require('email', 'Escribe un correo válido')
+      }
+      if (values.register) {
+        if (!values.email) require('email', 'El correo es necesario para registrarte')
+        if (!values.documentTypeId) require('documentTypeId', 'Elige el tipo de documento')
+        if (!values.documentNumber) {
+          require('documentNumber', 'Escribe el número de documento')
+        } else {
+          const documentError = validateDocumentNumber(
+            codeById.get(values.documentTypeId),
+            values.documentNumber,
+          )
+          if (documentError) require('documentNumber', documentError)
+        }
+        if (values.kind === 'empresa' && !values.businessName) {
+          require('businessName', 'Escribe la razón social')
+        }
+        if (!values.customerAddress && values.fulfillment !== 'DELIVERY') {
+          require('customerAddress', 'Escribe la dirección para la factura')
+        }
+      }
+    })
+}
 
-type OrderFormInput = z.input<typeof orderSchema>
-type OrderFormValues = z.output<typeof orderSchema>
+type OrderSchema = ReturnType<typeof buildOrderSchema>
+
+type OrderFormInput = z.input<OrderSchema>
+type OrderFormValues = z.output<OrderSchema>
 
 const DEFAULTS: OrderFormInput = {
   fulfillment: 'PICKUP',
@@ -72,8 +93,11 @@ const DEFAULTS: OrderFormInput = {
   phone: '',
   email: '',
   register: true,
+  kind: 'natural',
   documentTypeId: '',
   documentNumber: '',
+  businessName: '',
+  customerAddress: '',
   notes: '',
 }
 
@@ -135,6 +159,11 @@ function OrderContent({ whatsapp }: { whatsapp: string }) {
   const lines = cart.items.map(({ productId, quantity }) => ({ productId, quantity }))
   const { status, availability } = useCartAvailability(lines)
   const documentTypes = useOrderDocumentTypes()
+  const codeById = useMemo(
+    () => new Map(documentTypes.map((type) => [type.id, type.code])),
+    [documentTypes],
+  )
+  const orderSchema = useMemo(() => buildOrderSchema(codeById), [codeById])
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [placed, setPlaced] = useState<OnlineOrder | null>(null)
 
@@ -151,6 +180,10 @@ function OrderContent({ whatsapp }: { whatsapp: string }) {
   const fulfillment = useWatch({ control, name: 'fulfillment' })
   const branchId = useWatch({ control, name: 'branchId' })
   const wantsRegister = useWatch({ control, name: 'register' })
+  const kind = useWatch({ control, name: 'kind' })
+  const kindDocumentTypes = documentTypes.filter((type) =>
+    DOCUMENT_CODES_BY_KIND[kind].includes(type.code),
+  )
 
   const branches = [...(availability?.branches ?? [])].sort(
     (a, b) => Number(b.allAvailable) - Number(a.allAvailable),
@@ -209,7 +242,12 @@ function OrderContent({ whatsapp }: { whatsapp: string }) {
         register: values.register,
         ...(values.email ? { email: values.email } : {}),
         ...(values.register
-          ? { documentTypeId: values.documentTypeId, documentNumber: values.documentNumber }
+          ? {
+              documentTypeId: values.documentTypeId,
+              documentNumber: values.documentNumber,
+              address: values.customerAddress || `${values.address}, ${values.neighborhood}, Tunja`,
+              ...(values.kind === 'empresa' ? { businessName: values.businessName } : {}),
+            }
           : {}),
       },
       ...(values.fulfillment === 'PICKUP'
@@ -450,19 +488,50 @@ function OrderContent({ whatsapp }: { whatsapp: string }) {
             {wantsRegister && (
               <>
                 <SelectField
+                  id="order-customer-kind"
+                  label="Tipo de cliente"
+                  options={(['natural', 'empresa'] as const).map((value) => ({
+                    value,
+                    label: CUSTOMER_KIND_LABELS[value],
+                  }))}
+                  {...register('kind', {
+                    onChange: () => setValue('documentTypeId', ''),
+                  })}
+                />
+                {kind === 'empresa' && (
+                  <TextField
+                    id="order-business-name"
+                    label="Razón social"
+                    autoComplete="organization"
+                    error={errors.businessName?.message}
+                    {...register('businessName')}
+                  />
+                )}
+                <SelectField
                   id="order-document-type"
                   label="Tipo de documento"
                   placeholder="Elige el tipo"
-                  options={documentTypes.map((type) => ({ value: type.id, label: type.name }))}
+                  options={kindDocumentTypes.map((type) => ({ value: type.id, label: type.name }))}
                   error={errors.documentTypeId?.message}
                   {...register('documentTypeId')}
                 />
                 <TextField
                   id="order-document-number"
                   label="Número de documento"
-                  inputMode="numeric"
                   error={errors.documentNumber?.message}
                   {...register('documentNumber')}
+                />
+                <TextField
+                  id="order-customer-address"
+                  label="Dirección para la factura"
+                  autoComplete="street-address"
+                  hint={
+                    fulfillment === 'DELIVERY'
+                      ? 'Si la dejas vacía usamos la dirección de entrega.'
+                      : undefined
+                  }
+                  error={errors.customerAddress?.message}
+                  {...register('customerAddress')}
                 />
               </>
             )}

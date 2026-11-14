@@ -108,6 +108,9 @@ describe('OrderPage', () => {
     await user.selectOptions(screen.getByLabelText('Tipo de documento'), 'cc')
     await user.type(screen.getByLabelText('Número de documento'), '1049632145')
     await user.click(screen.getByRole('button', { name: 'Enviar pedido por WhatsApp' }))
+    expect(await screen.findByText('Escribe la dirección para la factura')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Dirección para la factura'), 'Calle 19 # 9-35, Tunja')
+    await user.click(screen.getByRole('button', { name: 'Enviar pedido por WhatsApp' }))
 
     await waitFor(() =>
       expect(createOrder).toHaveBeenCalledWith(
@@ -117,6 +120,42 @@ describe('OrderPage', () => {
             email: 'camilo@correo.com',
             documentTypeId: 'cc',
             documentNumber: '1049632145',
+            address: 'Calle 19 # 9-35, Tunja',
+          }),
+        }),
+      ),
+    )
+  })
+
+  it('registers a company with its business name and NIT', async () => {
+    vi.mocked(onlineOrdersService.documentTypes).mockResolvedValue([
+      { id: 'cc', code: 'CC', name: 'Cédula de ciudadanía' },
+      { id: 'nit', code: 'NIT', name: 'NIT' },
+    ])
+    const { user } = renderPage()
+
+    await user.click(await screen.findByRole('radio', { name: /Sede Makro/ }))
+    await fillCustomer(user)
+    await user.selectOptions(screen.getByLabelText('Tipo de cliente'), 'empresa')
+    expect(
+      Array.from((screen.getByLabelText('Tipo de documento') as HTMLSelectElement).options).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(['Elige el tipo', 'NIT'])
+    await user.type(screen.getByLabelText('Razón social'), 'Gimnasio Titanes SAS')
+    await user.type(screen.getByLabelText('Correo electrónico'), 'compras@titanes.co')
+    await user.selectOptions(screen.getByLabelText('Tipo de documento'), 'nit')
+    await user.type(screen.getByLabelText('Número de documento'), '900123456-7')
+    await user.type(screen.getByLabelText('Dirección para la factura'), 'Carrera 10 # 20-30')
+    await user.click(screen.getByRole('button', { name: 'Enviar pedido por WhatsApp' }))
+
+    await waitFor(() =>
+      expect(createOrder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customer: expect.objectContaining({
+            businessName: 'Gimnasio Titanes SAS',
+            documentTypeId: 'nit',
+            documentNumber: '900123456-7',
           }),
         }),
       ),

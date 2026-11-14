@@ -355,11 +355,12 @@ export class OnlineOrdersService {
     const person = await this.personsService.findOrCreateByDocument(tx, {
       documentTypeId: customer.documentTypeId,
       documentNumber: customer.documentNumber,
-      firstName: customer.firstName,
-      lastName: customer.lastName,
+      ...(customer.businessName
+        ? { businessName: customer.businessName }
+        : { firstName: customer.firstName, lastName: customer.lastName }),
       email: customer.email.toLowerCase(),
       phone: customer.phone,
-      address,
+      address: customer.address || address,
     });
     if (!person.active) return null;
     const existing = await tx.customer.findUnique({
@@ -368,6 +369,7 @@ export class OnlineOrdersService {
     });
     if (existing) return existing.active ? existing.personId : null;
     const fullName =
+      person.businessName?.trim() ||
       [person.firstName, person.lastName].filter(Boolean).join(" ") ||
       `${customer.firstName} ${customer.lastName}`;
     const created = await tx.customer.create({

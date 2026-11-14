@@ -79,14 +79,38 @@ export class OnlineOrderCustomerDto {
 
   @ApiPropertyOptional({
     example: "1049632145",
+    maxLength: 50,
     description: "Required when register is true.",
   })
   @Transform(trim)
   @ValidateIf((customer: OnlineOrderCustomerDto) => customer.register === true)
-  @Matches(/^[A-Za-z0-9-]{4,20}$/, {
-    message: "documentNumber must have 4 to 20 letters, digits or dashes",
-  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
   documentNumber?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 200,
+    description:
+      "Company name. When sent, the customer is registered as a company (the contact names stay on the order).",
+  })
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  businessName?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 255,
+    description:
+      "Customer address for the invoice. Required when register is true.",
+  })
+  @Transform(trim)
+  @ValidateIf((customer: OnlineOrderCustomerDto) => customer.register === true)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  address?: string;
 }
 
 export class OnlineOrderDeliveryDto {
