@@ -31,6 +31,8 @@ const prisma = {
   branch: { findUnique: jest.fn<AsyncMock>() },
   branchInventory: { groupBy: jest.fn<AsyncMock>() },
   onlineOrderItem: { findMany: jest.fn<AsyncMock>() },
+  recipe: { findMany: jest.fn<AsyncMock>() },
+  supplyStock: { findMany: jest.fn<AsyncMock>() },
   product: {
     count: jest.fn<AsyncMock>(),
     findMany: jest.fn<AsyncMock>(),
@@ -46,6 +48,8 @@ describe("BranchesService.findSellableProducts", () => {
     prisma.branch.findUnique.mockResolvedValue({ id: BRANCH_ID });
     prisma.branchInventory.groupBy.mockResolvedValue([]);
     prisma.onlineOrderItem.findMany.mockResolvedValue([]);
+    prisma.recipe.findMany.mockResolvedValue([]);
+    prisma.supplyStock.findMany.mockResolvedValue([]);
     prisma.product.count.mockResolvedValue(0);
     prisma.product.findMany.mockResolvedValue([]);
     prisma.$transaction.mockImplementation(
@@ -271,6 +275,75 @@ describe("BranchesService.findSellableProducts", () => {
       unit: "kg",
       category: { id: CATEGORY_ID, name: "Suplementos" },
       primaryImageUrl: null,
+    });
+  });
+
+  it("offers a prepared product with the units its supplies allow", async () => {
+    const RECIPE_ID = "eeee0000-0000-0000-0000-000000000009";
+    prisma.recipe.findMany.mockResolvedValue([
+      {
+        id: RECIPE_ID,
+        name: "Batido",
+        active: true,
+        productId: PRODUCT_ID,
+        ingredients: [
+          {
+            quantity: "30.000",
+            unitOfMeasure: { abreviation: "g" },
+            supply: {
+              id: "supply-whey",
+              name: "Proteína",
+              unitOfMeasure: { abreviation: "g" },
+            },
+          },
+          {
+            quantity: "250.000",
+            unitOfMeasure: { abreviation: "ml" },
+            supply: {
+              id: "supply-milk",
+              name: "Leche",
+              unitOfMeasure: { abreviation: "l" },
+            },
+          },
+        ],
+      },
+    ]);
+    prisma.supplyStock.findMany.mockResolvedValue([
+      { supplyId: "supply-whey", quantity: "100.000" },
+      { supplyId: "supply-milk", quantity: "1.000" },
+    ]);
+    prisma.product.count.mockResolvedValue(1);
+    prisma.product.findMany.mockResolvedValue([
+      {
+        id: PRODUCT_ID,
+        name: "Batido de proteína",
+        referenceCode: "BAT-001",
+        price: { toFixed: () => "12000.00" },
+        unitOfMeasure: { abreviation: "und" },
+        images: [],
+        category: { id: CATEGORY_ID, name: "Bebidas" },
+      },
+    ]);
+    const service = new BranchesService(prisma as never, {} as never);
+
+    const result = await service.findSellableProducts(BRANCH_ID, {
+      page: 1,
+      limit: 20,
+    });
+
+    expect(prisma.supplyStock.findMany).toHaveBeenCalledWith({
+      where: {
+        branchId: BRANCH_ID,
+        supplyId: { in: ["supply-whey", "supply-milk"] },
+      },
+      select: { supplyId: true, quantity: true },
+    });
+    expect(result.data[0]).toMatchObject({
+      productId: PRODUCT_ID,
+      availableQuantity: 3,
+      reservedQuantity: 0,
+      prepared: true,
+      recipeId: RECIPE_ID,
     });
   });
 

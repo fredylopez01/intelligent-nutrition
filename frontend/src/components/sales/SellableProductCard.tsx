@@ -20,6 +20,8 @@ export function SellableProductCard({
 }: SellableProductCardProps) {
   const unit = product.unit ?? 'und'
   const remaining = product.availableQuantity - inSelection
+  const prepared = product.prepared === true
+  const noSupplies = prepared && product.availableQuantity <= 0
   return (
     <li className="pos-card">
       <div className="pos-card__media">
@@ -37,12 +39,17 @@ export function SellableProductCard({
       <div className="pos-card__body">
         <span className="pos-card__name">{product.name}</span>
         <span className="pos-card__ref">{product.referenceCode}</span>
+        {prepared && <span className="pos-card__prepared">Preparado con receta</span>}
         <div className="pos-card__footer">
           <span className="pos-card__price">{formatPrice(product.price)}</span>
           <span
             className={`pos-card__stock${product.availableQuantity <= 3 ? ' pos-card__stock--low' : ''}`}
           >
-            {formatQuantity(product.availableQuantity, unit)} disponibles
+            {noSupplies
+              ? 'Sin insumos suficientes'
+              : prepared
+                ? `Insumos para ${formatQuantity(product.availableQuantity, unit)}`
+                : `${formatQuantity(product.availableQuantity, unit)} disponibles`}
           </span>
         </div>
         {(product.reservedQuantity ?? 0) > 0 && (
@@ -57,12 +64,14 @@ export function SellableProductCard({
             onClick={() => onAdd(product)}
             disabled={remaining <= 0}
             aria-label={
-              remaining <= 0
-                ? `${product.name}: ya agregaste todas las unidades disponibles`
-                : `Agregar ${product.name} a la venta`
+              noSupplies
+                ? `${product.name}: no hay insumos suficientes para prepararlo`
+                : remaining <= 0
+                  ? `${product.name}: ya agregaste todas las unidades disponibles`
+                  : `Agregar ${product.name} a la venta`
             }
           >
-            {remaining <= 0 ? 'Sin más unidades' : 'Agregar'}
+            {noSupplies ? 'Sin insumos' : remaining <= 0 ? 'Sin más unidades' : 'Agregar'}
           </button>
         )}
       </div>

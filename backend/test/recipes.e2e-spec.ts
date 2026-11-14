@@ -299,6 +299,7 @@ describe("Recipes endpoints (e2e)", () => {
         name: recipeName("Batido"),
         description: "Batido de proteína con leche y avena",
         active: true,
+        product: null,
         ingredients: expect.any(Array),
         createdAt: expect.any(String),
         updatedAt: expect.any(String),
@@ -463,6 +464,7 @@ describe("Recipes endpoints (e2e)", () => {
           name: recipeName("Batido"),
           description: "Batido de proteína con leche y avena",
           active: true,
+          product: null,
           ingredientsCount: 3,
           createdAt: expect.any(String),
         });

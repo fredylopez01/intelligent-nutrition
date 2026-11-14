@@ -26,6 +26,11 @@ import {
   toMinutes,
   type ScheduleRow,
 } from "../../common/utils/branch-schedule.util.js";
+import {
+  loadRecipes,
+  preparedAvailability,
+  supplyStockMap,
+} from "../recipes/recipe-consumption.js";
 
 const SCHEDULE_SELECT = {
   select: { dayOfWeek: true, opensAt: true, closesAt: true },
@@ -456,17 +461,35 @@ export class BranchesService {
       productIds: grouped.map((g) => g.productId),
       branchIds: [branchId],
     });
+    const preparedRecipes = await loadRecipes(this.prisma, {
+      active: true,
+      productId: { not: null },
+    });
+    const supplyStock = await supplyStockMap(this.prisma, branchId, [
+      ...new Set(
+        preparedRecipes.flatMap((recipe) =>
+          recipe.ingredients.map((ingredient) => ingredient.supplyId),
+        ),
+      ),
+    ]);
+    const preparedByProduct = new Map(
+      preparedRecipes.map((recipe) => [
+        recipe.productId as string,
+        {
+          recipeId: recipe.id,
+          available: preparedAvailability(recipe, supplyStock),
+        },
+      ]),
+    );
 
-    if (grouped.length === 0) {
-      return {
-        data: [],
-        meta: { page, limit, total: 0, totalPages: 0 },
-      };
-    }
-
-    const productIdsWithStock = grouped
-      .filter((g) => (g._sum.quantity ?? 0) > 0)
-      .map((g) => g.productId);
+    const productIdsWithStock = [
+      ...new Set([
+        ...grouped
+          .filter((g) => (g._sum.quantity ?? 0) > 0)
+          .map((g) => g.productId),
+        ...preparedByProduct.keys(),
+      ]),
+    ];
 
     if (productIdsWithStock.length === 0) {
       return {
@@ -522,6 +545,22 @@ export class BranchesService {
     );
 
     const data = products.map((product) => {
+      const prepared = preparedByProduct.get(product.id);
+      if (prepared) {
+        return {
+          productId: product.id,
+          name: product.name,
+          referenceCode: product.referenceCode,
+          primaryImageUrl: this.getPrimaryImageUrl(product.images),
+          price: product.price.toFixed(2),
+          availableQuantity: prepared.available,
+          reservedQuantity: 0,
+          unit: product.unitOfMeasure.abreviation,
+          category: product.category,
+          prepared: true,
+          recipeId: prepared.recipeId,
+        };
+      }
       const reservedQuantity =
         reserved.get(reservationKey(branchId, product.id)) ?? 0;
       return {
@@ -537,6 +576,8 @@ export class BranchesService {
         reservedQuantity,
         unit: product.unitOfMeasure.abreviation,
         category: product.category,
+        prepared: false,
+        recipeId: null,
       };
     });
 

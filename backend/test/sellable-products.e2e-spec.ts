@@ -326,6 +326,8 @@ describe("GET /api/v1/branches/:id/sellable-products (e2e)", () => {
       reservedQuantity: 0,
       unit: unitAbbreviation,
       category: { id: categoryId, name: `Categoria principal ${runId}` },
+      prepared: false,
+      recipeId: null,
     });
 
     const productC = body.data.find(
@@ -392,6 +394,8 @@ describe("GET /api/v1/branches/:id/sellable-products (e2e)", () => {
       reservedQuantity: 0,
       unit: unitAbbreviation,
       category: { id: categoryId, name: `Categoria principal ${runId}` },
+      prepared: false,
+      recipeId: null,
     });
 
     const referenceBody = byReference.body as SellableProductsResponse;
@@ -422,6 +426,8 @@ describe("GET /api/v1/branches/:id/sellable-products (e2e)", () => {
       reservedQuantity: 0,
       unit: unitAbbreviation,
       category: { id: otherCategoryId, name: `Categoria ajena ${runId}` },
+      prepared: false,
+      recipeId: null,
     });
 
     const mainBody = mainCategory.body as SellableProductsResponse;

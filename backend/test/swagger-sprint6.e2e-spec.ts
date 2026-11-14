@@ -50,8 +50,8 @@ const SCHEMA_PROPERTIES: Record<string, string[]> = {
   CreatePromotionDto: ["name", "discountPercentage", "startDate", "endDate"],
   UpdatePromotionDto: ["name", "discountPercentage", "startDate", "endDate"],
   UpdatePromotionStatusDto: ["active"],
-  CreateRecipeDto: ["name", "description", "ingredients"],
-  UpdateRecipeDto: ["name", "description", "ingredients"],
+  CreateRecipeDto: ["name", "description", "ingredients", "productId"],
+  UpdateRecipeDto: ["name", "description", "ingredients", "productId"],
   RecipeIngredientDto: ["supplyId", "quantity", "unitOfMeasureId"],
   UpdateRecipeStatusDto: ["active"],
   CreateSupplyDto: [

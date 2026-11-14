@@ -149,6 +149,12 @@ export function resolveRecipeError(error: unknown, fallback: string): string {
       return 'La receta ya estaba en ese estado. Recarga la lista.'
     case 'NOT_FOUND':
       return 'La receta ya no existe. Recarga la lista.'
+    case 'PRODUCT_ALREADY_HAS_RECIPE':
+      return 'Ese producto ya se prepara con otra receta. Elige otro producto o quítalo de la otra receta.'
+    case 'PRODUCT_INACTIVE':
+      return 'El producto está inactivo en el catálogo. Elige otro.'
+    case 'PRODUCT_NOT_FOUND':
+      return 'El producto ya no existe en el catálogo. Elige otro.'
   }
   if (error.status === 403) return 'Tu rol no puede hacer este cambio en las recetas.'
   if (error.status === 400) return 'Revisa los datos: hay un valor que el servidor no aceptó.'

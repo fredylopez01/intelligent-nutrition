@@ -5,7 +5,8 @@ import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { useAuth } from '../../hooks/useAuth'
 import { useRecipeFormOptions } from '../../hooks/useRecipeFormOptions'
 import { recipesService } from '../../services/recipes.service'
-import type { Recipe } from '../../types/recipe'
+import type { Recipe, UpdateRecipePayload } from '../../types/recipe'
+import type { SupplySourceProduct } from '../../types/supply'
 import {
   RECIPE_DESCRIPTION_MAX_LENGTH,
   buildRecipeChanges,
@@ -15,6 +16,7 @@ import {
   toIngredientPayloads,
   type RecipeFormValues,
 } from '../../utils/recipes'
+import { SupplyProductPicker } from '../supplies/SupplyProductPicker'
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
 import { TextAreaField } from '../ui/TextAreaField'
@@ -35,6 +37,18 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
   const { token } = useAuth()
   const options = useRecipeFormOptions()
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const initialProduct = recipe?.product ?? null
+  const [sold, setSold] = useState(initialProduct !== null)
+  const [product, setProduct] = useState<SupplySourceProduct | null>(
+    initialProduct
+      ? {
+          id: initialProduct.id,
+          name: initialProduct.name,
+          referenceCode: initialProduct.referenceCode,
+        }
+      : null,
+  )
+  const [productError, setProductError] = useState<string | null>(null)
   const {
     register,
     handleSubmit,
@@ -80,10 +94,16 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
   }
 
   const onSubmit = async (values: RecipeFormValues) => {
+    if (sold && !product) {
+      setProductError('Elige el producto del catálogo que se vende con esta receta.')
+      return
+    }
     setSubmitError(null)
+    const productId = sold && product ? product.id : null
     try {
       if (recipe) {
-        const changes = buildRecipeChanges(values, recipe)
+        const changes: UpdateRecipePayload = buildRecipeChanges(values, recipe)
+        if (productId !== (initialProduct?.id ?? null)) changes.productId = productId
         if (Object.keys(changes).length === 0) {
           setSubmitError('No hay cambios por guardar.')
           return
@@ -96,6 +116,7 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
           name: values.name.trim(),
           ...(values.description.trim() ? { description: values.description.trim() } : {}),
           ingredients: toIngredientPayloads(values.ingredients),
+          ...(productId ? { productId } : {}),
         },
         token,
       )
@@ -116,7 +137,15 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
   const noSupplies = options.status === 'success' && options.supplies.length === 0
 
   return (
-    <form className="category-form recipe-form" onSubmit={handleSubmit(onSubmit)} noValidate>
+    <form
+      className="category-form recipe-form"
+      onSubmit={handleSubmit(onSubmit, () => {
+        if (sold && !product) {
+          setProductError('Elige el producto del catálogo que se vende con esta receta.')
+        }
+      })}
+      noValidate
+    >
       {submitError && <Alert tone="error">{submitError}</Alert>}
 
       <TextField
@@ -137,6 +166,38 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
         error={errors.description?.message}
         {...register('description')}
       />
+
+      <div className="recipe-form__product">
+        <label className="recipe-form__product-toggle" htmlFor="recipe-sold">
+          <input
+            id="recipe-sold"
+            type="checkbox"
+            checked={sold}
+            disabled={isSubmitting}
+            onChange={(event) => {
+              setSold(event.target.checked)
+              setProductError(null)
+            }}
+          />
+          <strong>Se vende en el POS como un producto del catálogo</strong>
+          <small>
+            Al venderlo se descuentan estos insumos de la sede en lugar de unidades del inventario.
+            El precio es el del producto.
+          </small>
+        </label>
+        {sold && (
+          <SupplyProductPicker
+            id="recipe-product-search"
+            selected={product}
+            onSelect={(next) => {
+              setProduct(next)
+              setProductError(null)
+            }}
+            disabled={isSubmitting}
+            error={productError ?? undefined}
+          />
+        )}
+      </div>
 
       <fieldset className="recipe-form__ingredients">
         <legend className="recipe-form__legend">Ingredientes</legend>

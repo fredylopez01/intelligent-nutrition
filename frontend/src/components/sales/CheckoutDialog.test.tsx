@@ -211,6 +211,41 @@ describe('CheckoutDialog', () => {
     expect(charge()).toBeEnabled()
   })
 
+  it('sends the recipe of a prepared product and refreshes when the supplies run out', async () => {
+    createSale.mockRejectedValue(
+      new ApiError(
+        'Short',
+        422,
+        {
+          items: [{ supplyName: 'Proteína en polvo', unit: 'g', required: 60, available: 45.5 }],
+        },
+        'INSUFFICIENT_SUPPLY_STOCK',
+      ),
+    )
+    const shake = buildSellable({
+      productId: 'product-shake',
+      name: 'Batido de proteína',
+      prepared: true,
+      recipeId: 'recipe-shake',
+    })
+    const { user, onStockChanged } = renderDialog([{ product: shake, quantity: 2 }])
+
+    await user.click(charge())
+
+    expect(createSale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [{ productId: 'product-shake', quantity: 2, recipeId: 'recipe-shake' }],
+      }),
+      'test-token',
+    )
+    expect(
+      await screen.findByText(
+        'No alcanzan los insumos para los productos preparados: Proteína en polvo (se necesitan 60 g, hay 45,5 g). Ajusta las cantidades.',
+      ),
+    ).toBeInTheDocument()
+    expect(onStockChanged).toHaveBeenCalled()
+  })
+
   it('explains a generic failure without refreshing the stock', async () => {
     createSale.mockRejectedValue(new Error('boom'))
     const { user, onStockChanged } = renderDialog()

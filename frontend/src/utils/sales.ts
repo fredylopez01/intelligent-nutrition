@@ -235,11 +235,40 @@ export function stockShortages(error: unknown): StockShortage[] {
   return details?.items ?? []
 }
 
+const supplyAmountFormatter = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 3 })
+
+function formatSupplyAmount(value: number, unit: string): string {
+  return `${supplyAmountFormatter.format(value)} ${unit}`
+}
+
 export function resolveSaleError(error: unknown, fallback: string): string {
   if (!(error instanceof ApiError)) return fallback
   switch (error.code) {
     case 'INSUFFICIENT_STOCK':
       return 'Ya no hay unidades suficientes de algunos productos. Ajusta las cantidades de la venta.'
+    case 'INSUFFICIENT_SUPPLY_STOCK': {
+      const items = (
+        error.details as
+          | { items?: { supplyName: string; required: number; available: number; unit: string }[] }
+          | undefined
+      )?.items
+      const detail = items
+        ?.map(
+          (item) =>
+            `${item.supplyName} (se necesitan ${formatSupplyAmount(item.required, item.unit)}, hay ${formatSupplyAmount(item.available, item.unit)})`,
+        )
+        .join(', ')
+      return detail
+        ? `No alcanzan los insumos para los productos preparados: ${detail}. Ajusta las cantidades.`
+        : 'No alcanzan los insumos para los productos preparados. Ajusta las cantidades.'
+    }
+    case 'RECIPE_INACTIVE':
+      return 'La receta de uno de los productos preparados está inactiva. Quítalo de la venta o activa la receta.'
+    case 'RECIPE_NOT_FOUND':
+    case 'RECIPE_PRODUCT_MISMATCH':
+      return 'La receta de uno de los productos preparados cambió. Recarga los productos y vuelve a intentar.'
+    case 'RECIPE_UNIT_MISMATCH':
+      return 'La receta de uno de los productos usa una unidad que no se puede convertir a la del insumo. Corrígela en Recetas.'
     case 'PAYMENT_TOTAL_MISMATCH':
       return 'El total cambió porque se actualizó un precio o la promoción activa. Revisa el total y vuelve a intentar.'
     case 'PROMOTION_NOT_APPLICABLE':

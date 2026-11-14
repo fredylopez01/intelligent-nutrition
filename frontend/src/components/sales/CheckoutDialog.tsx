@@ -85,6 +85,7 @@ export function CheckoutDialog({
           items: lines.map((line) => ({
             productId: line.product.productId,
             quantity: line.quantity,
+            ...(line.product.recipeId ? { recipeId: line.product.recipeId } : {}),
           })),
           ...discount.payload,
           payments: payments.map((payment, index) => ({
@@ -98,7 +99,12 @@ export function CheckoutDialog({
       onCompleted(sale)
     } catch (caught) {
       const shortages = stockShortages(caught)
-      if (shortages.length > 0) onStockChanged()
+      if (
+        shortages.length > 0 ||
+        (caught instanceof ApiError && caught.code === 'INSUFFICIENT_SUPPLY_STOCK')
+      ) {
+        onStockChanged()
+      }
       if (
         caught instanceof ApiError &&
         (caught.code === 'PAYMENT_TOTAL_MISMATCH' || caught.code === 'PROMOTION_NOT_APPLICABLE')

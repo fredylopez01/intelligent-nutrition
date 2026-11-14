@@ -12,6 +12,8 @@ export interface SellableProduct {
   reservedQuantity?: number
   unit?: string
   category?: { id: string; name: string }
+  prepared?: boolean
+  recipeId?: string | null
 }
 
 export interface SellableProductsParams {
@@ -58,6 +60,7 @@ export interface SaleItem {
   productId: string
   productName: string
   referenceCode: string
+  recipeId?: string | null
   quantity: number
   unitPrice: string
   subtotal: string
@@ -99,7 +102,7 @@ export interface SalesListResponse {
 export interface CreateSalePayload {
   branchId: string
   customerId?: string | null
-  items: { productId: string; quantity: number }[]
+  items: { productId: string; quantity: number; recipeId?: string }[]
   promotionId?: string | null
   discountAmount?: string
   discountReason?: string | null

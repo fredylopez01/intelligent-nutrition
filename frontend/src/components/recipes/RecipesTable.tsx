@@ -64,6 +64,11 @@ export function RecipesTable({
                 {recipe.description && (
                   <span className="recipes-table__description">{recipe.description}</span>
                 )}
+                {recipe.product && (
+                  <span className="recipes-table__product">
+                    Se vende como {recipe.product.name}
+                  </span>
+                )}
                 <span className="recipes-table__inline">
                   {ingredientsLabel(recipe.ingredientsCount)}
                 </span>
