@@ -14,6 +14,7 @@ API REST del sistema Intelligent Nutrition, desarrollada con NestJS, Prisma y Po
   - [Opción B: Sin Docker (Node directo)](#opción-b-sin-docker-node-directo)
 - [Scripts disponibles](#scripts-disponibles)
 - [Base de datos y Prisma](#base-de-datos-y-prisma)
+- [Acceso de Looker Studio](#aprovisionar-acceso-de-looker-studio)
 - [Testing](#testing)
 - [Docker](#docker)
 - [Despliegue en Render](#despliegue-en-render)
@@ -295,6 +296,7 @@ Desde `backend/`:
 | `npm run start:dev`   | Inicia con watch (desarrollo)         |
 | `npm run start:debug` | Inicia con debugger y watch           |
 | `npm run start:prod`  | Inicia desde `dist/main` (producción) |
+| `npm run db:provision-bi-reader` | Provisiona y verifica el rol de solo lectura para Looker Studio |
 | `npm run format`      | Formatea con Prettier                 |
 | `npm run lint`        | Linting con ESLint (con `--fix`)      |
 | `npm test`            | Tests unitarios (Jest)                |
@@ -354,6 +356,24 @@ Para conectar desde local, usa la **External URL** que encuentras en:
 > Render Dashboard → Tu base de datos → **Info** → **Connections** → **External Database URL**
 
 Si la conexión falla, verifica que el **Inbound IP Restrictions** de la base de datos permita tu IP (por defecto `0.0.0.0/0` = todas).
+
+### Aprovisionar acceso de Looker Studio
+
+El rol `bi_reader` se crea manualmente en staging, no mediante una migración. El procedimiento usa `backend/.env`; ese archivo está ignorado por Git y no se debe copiar a la Wiki ni compartir.
+
+1. Confirma en Render que `DATABASE_URL` en `backend/.env` contiene la **External Database URL de staging**, no la de producción. La migración BI debe estar aplicada.
+2. Define `BI_READER_PASSWORD` en ese mismo `.env` con una contraseña aleatoria fuerte. No uses las contraseñas de seed ni guardes este valor en archivos versionados.
+3. Desde `backend/`, ejecuta:
+
+   ```bash
+   npm run db:provision-bi-reader
+   ```
+
+   El comando genera primero el cliente Prisma. El script muestra el host y la base destino, solicita escribir `STAGING <nombre-de-base>` y aborta si la confirmación no coincide. Luego crea o actualiza `bi_reader`, limita las conexiones a 5, configura `statement_timeout` a 120 segundos y otorga `SELECT` únicamente sobre `bi_sales`, `bi_sale_lines`, `bi_purchase_lines` y `bi_stock_status`. También valida que no haya acceso de lectura a otras relaciones de `public` ni permisos de escritura. Al final prueba la conexión y lectura de las cuatro vistas como `bi_reader`.
+5. Render concede `SELECT` a `PUBLIC` sobre `pg_stat_statements` y `pg_stat_statements_info`. PostgreSQL no permite negar esos permisos solo a `bi_reader`; por decisión operativa, el rol también podrá leer esas dos vistas de métricas. Los permisos directos de `bi_reader` siguen limitados a las cuatro vistas BI. Si la validación detecta cualquier otro acceso heredado, el proceso falla sin revocar permisos compartidos.
+6. En Looker Studio, crea la conexión PostgreSQL con los datos de staging, usuario `bi_reader` y el valor de `BI_READER_PASSWORD`. Confirma en Render que la conexión externa está habilitada y que las restricciones de IP permiten la conexión.
+7. Registra en la Wiki el procedimiento y resultados, nunca la contraseña ni el contenido de `.env`. Verifica también el plan/retención de la base en Render; esos ajustes se comprueban en el dashboard, no desde este script.
+8. Para producción futura, genera y guarda una contraseña distinta en los secretos del entorno de producción; no reutilices la credencial de staging ni ejecutes este comando contra producción sin revisar antes sus permisos compartidos.
 
 ---
 
