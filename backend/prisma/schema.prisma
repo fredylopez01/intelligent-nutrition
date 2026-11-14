@@ -81,6 +81,7 @@ model UserAccount {
   auditLogs            AuditLog[]
   createdImages        ProductImage[]        @relation("ProductImageCreatedBy")
   inventoryMovements   InventoryMovement[]
+  supplyPurchases SupplyPurchase[]
   purchases            Purchase[]
   inventoryClosures    InventoryClosure[]
   sales                Sale[]
@@ -116,6 +117,7 @@ model Supplier {
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   person    Person     @relation(fields: [personId], references: [id])
+  supplyPurchases SupplyPurchase[]
   purchases Purchase[]
 
   @@map("supplier")
@@ -365,6 +367,44 @@ enum PurchaseStatus {
   PENDING_RECEIPT
   PARTIALLY_RECEIVED
   FULLY_RECEIVED
+}
+
+model SupplyPurchase {
+  id             String         @id @default(uuid()) @db.Uuid
+  purchaseNumber String         @unique @map("purchase_number") @db.VarChar(30)
+  supplierId     String         @map("supplier_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  purchaseAt     DateTime       @default(now()) @map("purchase_at") @db.Timestamp(6)
+  total          Decimal        @db.Decimal(12, 2)
+  observation    String?        @db.Text
+  status         PurchaseStatus @default(PENDING_RECEIPT)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  supplier Supplier               @relation(fields: [supplierId], references: [personId])
+  user     UserAccount            @relation(fields: [userId], references: [personId])
+  details  SupplyPurchaseDetail[]
+
+  @@index([supplierId])
+  @@index([purchaseAt])
+  @@map("supply_purchase")
+}
+
+model SupplyPurchaseDetail {
+  id                String  @id @default(uuid()) @db.Uuid
+  purchaseId        String  @map("purchase_id") @db.Uuid
+  supplyId          String  @map("supply_id") @db.Uuid
+  requestedQuantity Decimal @map("requested_quantity") @db.Decimal(12, 3)
+  receivedQuantity  Decimal @default(0) @map("received_quantity") @db.Decimal(12, 3)
+  unitCost          Decimal @map("unit_cost") @db.Decimal(12, 2)
+  subtotal          Decimal @db.Decimal(12, 2)
+
+  purchase SupplyPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  supply   Supply         @relation(fields: [supplyId], references: [id])
+
+  @@unique([purchaseId, supplyId])
+  @@index([supplyId])
+  @@map("supply_purchase_detail")
 }
 
 model Purchase {
@@ -692,6 +732,7 @@ model Supply {
   movements     SupplyStockMovement[]
   recipeIngredients RecipeIngredient[]
   closureDetails    InventoryClosureSupplyDetail[]
+  purchaseDetails   SupplyPurchaseDetail[]
 
   @@index([unitOfMeasureId])
   @@map("supply")

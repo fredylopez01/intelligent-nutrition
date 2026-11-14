@@ -6,7 +6,7 @@ import type { SupplyStockRow } from '../types/supply'
 
 export const SUPPLY_MANAGE_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER']
 export const SUPPLY_MINIMUM_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER']
-export const SUPPLY_MOVEMENT_ROLES: RoleName[] = ['BRANCH_LEADER', 'BRANCH_ASSISTANT']
+export const SUPPLY_MOVEMENT_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER', 'BRANCH_ASSISTANT']
 export const SUPPLY_NAME_MIN_LENGTH = 2
 export const SUPPLY_NAME_MAX_LENGTH = 150
 export const SUPPLY_OBSERVATION_MAX_LENGTH = 500

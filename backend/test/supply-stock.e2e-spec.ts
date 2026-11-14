@@ -412,7 +412,7 @@ describe("Supply stock (e2e)", () => {
     expect((await rowOf(leaderToken, branch.id))?.quantity).toBe("10.000");
   });
 
-  it("does not let the superadmin register movements, as the contract says", async () => {
+  it("lets the superadmin register an entry in any branch", async () => {
     const response = await move(tokens.SUPERADMIN, {
       branchId: branchA,
       supplyId,
@@ -420,6 +420,6 @@ describe("Supply stock (e2e)", () => {
       quantity: 1,
     });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(201);
   });
 });

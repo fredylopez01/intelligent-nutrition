@@ -278,11 +278,6 @@ export function SuppliesPage() {
             onLimitChange={setLimit}
           />
         )}
-        {!canMove && isSuperadmin && (
-          <p className="inventory-page__note">
-            Las entradas y salidas de insumos las registra el personal de cada sede.
-          </p>
-        )}
       </div>
 
       <Modal

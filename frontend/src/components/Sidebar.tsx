@@ -64,6 +64,7 @@ const NAV_ITEMS: NavItem[] = [
     subs: [
       { label: 'Proveedores', to: '/proveedores' },
       { label: 'Compras y recepción', to: '/proveedores/compras' },
+      { label: 'Compras de insumos', to: '/proveedores/compras-insumos' },
     ],
   },
   {

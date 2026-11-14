@@ -169,7 +169,7 @@ describe('SuppliesPage list', () => {
     expect(screen.getAllByRole('button', { name: 'Registrar insumo' })).toHaveLength(2)
   })
 
-  it('lets the superadmin see every branch but not register movements', async () => {
+  it('lets the superadmin see every branch and register movements', async () => {
     auth.role = 'SUPERADMIN'
     vi.mocked(branchesService.list).mockResolvedValue({
       data: [
@@ -188,13 +188,14 @@ describe('SuppliesPage list', () => {
       ),
     )
     expect(await screen.findByRole('columnheader', { name: 'Sede' })).toBeInTheDocument()
-    await openAction(user, 'Acciones para Leche entera en Norte', 'Cambiar stock mínimo')
+    await user.click(screen.getByRole('button', { name: 'Acciones para Leche entera en Norte' }))
+    expect(screen.getByRole('menuitem', { name: 'Registrar entrada o salida' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Cambiar stock mínimo' })).toBeInTheDocument()
     expect(
-      screen.queryByRole('menuitem', { name: 'Registrar entrada o salida' }),
+      screen.queryByText(
+        'Las entradas y salidas de insumos las registra el personal de cada sede.',
+      ),
     ).not.toBeInTheDocument()
-    expect(
-      screen.getByText('Las entradas y salidas de insumos las registra el personal de cada sede.'),
-    ).toBeInTheDocument()
   })
 
   it('lets the assistant register movements but not change the minimum nor create supplies', async () => {

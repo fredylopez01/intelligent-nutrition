@@ -42,6 +42,7 @@ import { RestockPage } from '../pages/reports/RestockPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
 import { PurchasesPage } from '../pages/suppliers/PurchasesPage'
 import { SupplierDetailPage } from '../pages/suppliers/SupplierDetailPage'
+import { SupplyPurchasesPage } from '../pages/suppliers/SupplyPurchasesPage'
 import { SuppliersPage } from '../pages/suppliers/SuppliersPage'
 import { UserDetailPage } from '../pages/users/UserDetailPage'
 import { UsersPage } from '../pages/users/UsersPage'
@@ -221,6 +222,14 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/proveedores']}>
             <SuppliersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/proveedores/compras-insumos"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/proveedores/compras-insumos']}>
+            <SupplyPurchasesPage />
           </ProtectedRoute>
         }
       />

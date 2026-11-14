@@ -57,11 +57,11 @@ export class SupplyStockController {
 
   @Post("movement")
   @HttpCode(201)
-  @Roles("BRANCH_LEADER", "BRANCH_ASSISTANT")
+  @Roles("SUPERADMIN", "BRANCH_LEADER", "BRANCH_ASSISTANT")
   @ApiOperation({
     summary: "Register a supply movement",
     description:
-      "Adds (ENTRY) or removes (EXIT) whole units of a supply in a branch and records the movement. EXIT requires an observation and cannot exceed the stock. Roles: BRANCH_LEADER, BRANCH_ASSISTANT.",
+      "Adds (ENTRY) or removes (EXIT) whole units of a supply in a branch and records the movement. EXIT requires an observation and cannot exceed the stock. Roles: SUPERADMIN, BRANCH_LEADER, BRANCH_ASSISTANT.",
   })
   @ApiResponse({
     status: 201,
