@@ -235,6 +235,7 @@ describe("Supply stock (e2e)", () => {
       minimumQuantity: "0.000",
       lowStock: false,
       updatedAt: expect.any(String),
+      sourceProduct: null,
     });
   });
 

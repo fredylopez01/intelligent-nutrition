@@ -252,4 +252,32 @@ describe('SearchBar applied value', () => {
     // dispatchEvent returns false when the submit default action was prevented.
     expect(fireEvent.submit(screen.getByRole('search'))).toBe(false)
   })
+
+  it('searches inside another form without submitting it', async () => {
+    const onSearch = vi.fn()
+    const onOuterSubmit = vi.fn((event: { preventDefault: () => void }) => event.preventDefault())
+    const user = userEvent.setup()
+    render(
+      <form onSubmit={onOuterSubmit}>
+        <SearchBar
+          id="embedded-search"
+          label="Buscar producto"
+          placeholder="Buscar producto"
+          value=""
+          onSearch={onSearch}
+          embedded
+        />
+      </form>,
+    )
+    const box = screen.getByRole('searchbox', { name: 'Buscar producto' })
+
+    await user.type(box, 'whey{Enter}')
+    expect(onSearch).toHaveBeenLastCalledWith('whey')
+    await user.clear(box)
+    await user.type(box, 'avena')
+    await user.click(screen.getByRole('button', { name: 'Buscar' }))
+
+    expect(onSearch).toHaveBeenLastCalledWith('avena')
+    expect(onOuterSubmit).not.toHaveBeenCalled()
+  })
 })

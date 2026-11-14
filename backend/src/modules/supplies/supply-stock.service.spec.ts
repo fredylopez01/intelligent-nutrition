@@ -43,6 +43,13 @@ const { SupplyStockService, toSupplyStockResponse } =
 const { PrismaService } =
   await import("../../database/prisma/prisma.service.js");
 const { AuditService } = await import("../audit/audit.service.js");
+const { LowStockService } =
+  await import("../notifications/low-stock.service.js");
+
+const lowStockMock = {
+  levels: () => Promise.resolve(new Map()),
+  notifyCrossings: () => Promise.resolve(0),
+};
 
 const superadmin = {
   id: "user-1",
@@ -68,6 +75,9 @@ const stockRow = {
   quantity: "5.000",
   minimumQuantity: "10.000",
   updatedAt: new Date("2026-11-12T10:00:00.000Z"),
+  sourceProductId: "product-whey",
+  sourceProductName: "Whey 2 lb",
+  productUnitQuantity: "907.000",
 };
 
 async function buildService() {
@@ -76,6 +86,7 @@ async function buildService() {
       SupplyStockService,
       { provide: PrismaService, useValue: prismaMock },
       { provide: AuditService, useValue: auditMock },
+      { provide: LowStockService, useValue: lowStockMock },
     ],
   }).compile();
   return module.get(SupplyStockService);
@@ -103,10 +114,23 @@ describe("toSupplyStockResponse", () => {
       minimumQuantity: "10.000",
       lowStock: true,
       updatedAt: stockRow.updatedAt,
+      sourceProduct: {
+        id: "product-whey",
+        name: "Whey 2 lb",
+        unitQuantity: 907,
+      },
     });
     expect(
       toSupplyStockResponse({ ...stockRow, quantity: "10.000" }).lowStock,
     ).toBe(false);
+    expect(
+      toSupplyStockResponse({
+        ...stockRow,
+        sourceProductId: null,
+        sourceProductName: null,
+        productUnitQuantity: null,
+      }).sourceProduct,
+    ).toBeNull();
   });
 });
 

@@ -22,6 +22,7 @@ import { BranchScopeGuard } from "../../common/guards/branch-scope.guard.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 import { CreateSupplyStockMovementDto } from "./dto/create-supply-stock-movement.dto.js";
 import { UpdateSupplyMinimumDto } from "./dto/update-supply-minimum.dto.js";
+import { ConvertProductToSupplyDto } from "./dto/convert-product-to-supply.dto.js";
 import { ListSupplyStockQueryDto } from "./dto/list-supply-stock-query.dto.js";
 import { SupplyStockService } from "./supply-stock.service.js";
 
@@ -92,6 +93,32 @@ export class SupplyStockController {
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
     return this.supplyStockService.createMovement(dto, currentUser);
+  }
+
+  @Post("conversions")
+  @HttpCode(201)
+  @Roles("SUPERADMIN", "BRANCH_LEADER", "BRANCH_ASSISTANT")
+  @ApiOperation({
+    summary: "Convert catalog product units into a supply",
+    description:
+      "Opens whole units of the product linked to the supply (for example a 2 lb whey): takes them from the branch inventory, earliest expiration first and without touching units held by web orders, records EXIT movements, and adds productUnits × productUnitQuantity to the supply stock with an ENTRY movement. Recipes then consume the supply. Roles: SUPERADMIN, BRANCH_LEADER, BRANCH_ASSISTANT.",
+  })
+  @ApiResponse({ status: 201, description: "Conversion registered." })
+  @ApiResponse({ status: 400, description: "Invalid body." })
+  @ApiResponse({ status: 401, description: "Missing or invalid access token." })
+  @ApiResponse({ status: 403, description: "BRANCH_SCOPE_VIOLATION." })
+  @ApiResponse({ status: 404, description: "Supply or branch not found." })
+  @ApiResponse({
+    status: 422,
+    description:
+      "The supply has no product (SUPPLY_NOT_LINKED), not enough units (INSUFFICIENT_STOCK) or inactive product, supply or branch.",
+  })
+  convertProduct(
+    @Body() dto: ConvertProductToSupplyDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Ip() ipAddress: string,
+  ) {
+    return this.supplyStockService.convertProduct(dto, currentUser, ipAddress);
   }
 
   @Patch("minimum")
