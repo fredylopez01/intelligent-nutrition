@@ -34,6 +34,7 @@ services:
     environment:
       DATABASE_URL: "${DATABASE_URL_DOCKER:-postgresql://${POSTGRES_USER:-intelligent_nutrition}:${POSTGRES_PASSWORD:-change_me}@postgres:5432/${POSTGRES_DB:-intelligent_nutrition}?schema=public}"
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?Set SEED_ADMIN_PASSWORD in the root .env file}
+      SEED_TEST_PASSWORD: ${SEED_TEST_PASSWORD:?Set SEED_TEST_PASSWORD in the root .env file}
 
     depends_on:
       postgres:

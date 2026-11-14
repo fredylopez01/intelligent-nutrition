@@ -254,13 +254,17 @@ async function main() {
   ];
   const userIds = new Map<string, string>();
   const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  const testPassword = process.env.SEED_TEST_PASSWORD;
 
   if (!adminPassword) {
     throw new Error("SEED_ADMIN_PASSWORD environment variable is required");
   }
+  if (!testPassword) {
+    throw new Error("SEED_TEST_PASSWORD environment variable is required");
+  }
 
   const adminPasswordHash = await argon2.hash(adminPassword);
-  const testPasswordHash = await argon2.hash("@Password123!");
+  const testPasswordHash = await argon2.hash(testPassword);
 
   for (const account of userAccounts) {
     const personId = getId(personIds, account.personKey, "Person");
@@ -292,14 +296,16 @@ async function main() {
     { personKey: "customer-lucia", fullName: "Lucía Fernández" },
     { personKey: "customer-diego", fullName: "Diego Torres" },
   ];
+  const customerIds = new Map<string, string>();
 
   for (const customer of customers) {
     const personId = getId(personIds, customer.personKey, "Person");
-    await prisma.customer.upsert({
+    const seededCustomer = await prisma.customer.upsert({
       where: { personId },
       update: { fullName: customer.fullName, active: true },
       create: { personId, fullName: customer.fullName },
     });
+    customerIds.set(customer.personKey, seededCustomer.personId);
   }
 
   const suppliers = [
@@ -316,14 +322,16 @@ async function main() {
       commercialName: "Laboratorios Naturales del Valle",
     },
   ];
+  const supplierIds = new Map<string, string>();
 
   for (const supplier of suppliers) {
     const personId = getId(personIds, supplier.personKey, "Person");
-    await prisma.supplier.upsert({
+    const seededSupplier = await prisma.supplier.upsert({
       where: { personId },
       update: { commercialName: supplier.commercialName, active: true },
       create: { personId, commercialName: supplier.commercialName },
     });
+    supplierIds.set(supplier.personKey, seededSupplier.personId);
   }
 
   const branches = [
@@ -371,6 +379,33 @@ async function main() {
         },
         update: { active: true, endDate: null },
         create: { userId, branchId, assignmentDate },
+      });
+    }
+  }
+
+  const branchSchedules = [
+    { dayOfWeek: 1, opensAt: "09:00", closesAt: "19:00" },
+    { dayOfWeek: 2, opensAt: "09:00", closesAt: "19:00" },
+    { dayOfWeek: 3, opensAt: "09:00", closesAt: "19:00" },
+    { dayOfWeek: 4, opensAt: "09:00", closesAt: "19:00" },
+    { dayOfWeek: 5, opensAt: "09:00", closesAt: "19:00" },
+    { dayOfWeek: 6, opensAt: "09:00", closesAt: "17:00" },
+    { dayOfWeek: 7, opensAt: "10:00", closesAt: "16:00" },
+  ];
+
+  for (const branchName of branchIds.keys()) {
+    const branchId = getId(branchIds, branchName, "Branch");
+    for (const schedule of branchSchedules) {
+      await prisma.branchSchedule.upsert({
+        where: {
+          branchId_dayOfWeek_opensAt: {
+            branchId,
+            dayOfWeek: schedule.dayOfWeek,
+            opensAt: schedule.opensAt,
+          },
+        },
+        update: { closesAt: schedule.closesAt },
+        create: { branchId, ...schedule },
       });
     }
   }
@@ -523,6 +558,118 @@ async function main() {
       unitName: "Unidad",
       price: 4900,
     },
+    {
+      name: "Proteína Whey Cookies 2 lb",
+      referenceCode: "PRO-WHEY-COO-2LB",
+      description: "Proteína de suero sabor galleta, presentación de 2 lb.",
+      categoryName: "Proteínas",
+      unitName: "Unidad",
+      price: 194900,
+    },
+    {
+      name: "Proteína isolate natural 1 lb",
+      referenceCode: "PRO-ISO-NAT-1LB",
+      description: "Aislado de proteína de suero sin saborizantes.",
+      categoryName: "Proteínas",
+      unitName: "Unidad",
+      price: 169900,
+    },
+    {
+      name: "Proteína vegana chocolate 1 lb",
+      referenceCode: "PRO-VEG-CHO-1LB",
+      description: "Mezcla vegetal de arveja y arroz sabor chocolate.",
+      categoryName: "Proteínas",
+      unitName: "Unidad",
+      price: 134900,
+    },
+    {
+      name: "Creatina monohidratada 500 g",
+      referenceCode: "AMI-CREA-500G",
+      description: "Creatina monohidratada micronizada de 500 g.",
+      categoryName: "Aminoácidos",
+      unitName: "Unidad",
+      price: 149900,
+    },
+    {
+      name: "Glutamina micronizada 300 g",
+      referenceCode: "AMI-GLUTA-300G",
+      description: "L-glutamina micronizada para mezclar.",
+      categoryName: "Aminoácidos",
+      unitName: "Unidad",
+      price: 89900,
+    },
+    {
+      name: "Zinc 25 mg 60 cápsulas",
+      referenceCode: "VIT-ZINC-25-60C",
+      description: "Suplemento de zinc en presentación de 60 cápsulas.",
+      categoryName: "Vitaminas y minerales",
+      unitName: "Unidad",
+      price: 35900,
+    },
+    {
+      name: "Vitamina D3 2000 UI 60 cápsulas",
+      referenceCode: "VIT-D3-2000-60C",
+      description: "Vitamina D3 en presentación de 60 cápsulas.",
+      categoryName: "Vitaminas y minerales",
+      unitName: "Unidad",
+      price: 45900,
+    },
+    {
+      name: "Magnesio quelado 60 cápsulas",
+      referenceCode: "VIT-MAG-60C",
+      description: "Magnesio quelado en presentación de 60 cápsulas.",
+      categoryName: "Vitaminas y minerales",
+      unitName: "Unidad",
+      price: 56900,
+    },
+    {
+      name: "Té verde extracto 60 cápsulas",
+      referenceCode: "CON-TEVERDE-60C",
+      description: "Extracto de té verde en presentación de 60 cápsulas.",
+      categoryName: "Control de peso",
+      unitName: "Unidad",
+      price: 48900,
+    },
+    {
+      name: "Banda elástica de resistencia",
+      referenceCode: "ACC-BANDA-RES",
+      description: "Banda elástica para ejercicios de resistencia.",
+      categoryName: "Accesorios",
+      unitName: "Unidad",
+      price: 19900,
+    },
+    {
+      name: "Shaker deportivo 1000 ml",
+      referenceCode: "ACC-SHAKER-1000",
+      description: "Botella mezcladora de 1000 ml con tapa hermética.",
+      categoryName: "Accesorios",
+      unitName: "Unidad",
+      price: 34900,
+    },
+    {
+      name: "Barra proteica chocolate 60 g",
+      referenceCode: "PRO-BAR-CHO-60G",
+      description: "Barra de proteína sabor chocolate de 60 g.",
+      categoryName: "Proteínas",
+      unitName: "Unidad",
+      price: 12900,
+    },
+    {
+      name: "Electrolitos limón 20 servicios",
+      referenceCode: "AMI-ELECTRO-LIM-20",
+      description: "Mezcla en polvo de electrolitos sabor limón.",
+      categoryName: "Aminoácidos",
+      unitName: "Unidad",
+      price: 39900,
+    },
+    {
+      name: "Avena instantánea 500 g",
+      referenceCode: "CON-AVENA-500G",
+      description: "Avena instantánea para bebidas y preparaciones.",
+      categoryName: "Control de peso",
+      unitName: "Unidad",
+      price: 16900,
+    },
   ];
   const productIds = new Map<string, string>();
 
@@ -583,6 +730,7 @@ async function main() {
     { branch: "Cali", product: "ACC-SCOOP-30G", quantity: 50, minimum: 10 },
   ];
   const expirationDate = new Date("2028-12-31T00:00:00.000Z");
+  const inventoryQuantities = new Map<string, number>();
 
   for (const item of inventory) {
     const branchId = getId(
@@ -611,6 +759,59 @@ async function main() {
         minimumStock: item.minimum,
         expirationDate,
       },
+    });
+    inventoryQuantities.set(`${item.branch}:${item.product}`, item.quantity);
+  }
+
+  const branchNames = ["Medellín", "Bogotá", "Cali"] as const;
+  for (const [productIndex, product] of products.entries()) {
+    for (const [branchIndex, branch] of branchNames.entries()) {
+      const inventoryKey = `${branch}:${product.referenceCode}`;
+      if (inventoryQuantities.has(inventoryKey)) {
+        continue;
+      }
+
+      const quantity = 6 + ((productIndex * 7 + branchIndex * 11) % 35);
+      const branchId = getId(
+        branchIds,
+        `Intelligent Nutrition - ${branch}`,
+        "Branch",
+      );
+      const productId = getId(productIds, product.referenceCode, "Product");
+
+      await prisma.branchInventory.upsert({
+        where: {
+          branchId_productId_expirationDate: {
+            branchId,
+            productId,
+            expirationDate,
+          },
+        },
+        update: { quantity, minimumStock: 5 },
+        create: {
+          branchId,
+          productId,
+          quantity,
+          minimumStock: 5,
+          expirationDate,
+        },
+      });
+      inventoryQuantities.set(inventoryKey, quantity);
+    }
+  }
+
+  for (const product of products) {
+    const productId = getId(productIds, product.referenceCode, "Product");
+    const quantity = branchNames.reduce(
+      (total, branch) =>
+        total +
+        (inventoryQuantities.get(`${branch}:${product.referenceCode}`) ?? 0),
+      0,
+    );
+    await prisma.generalStock.upsert({
+      where: { productId_expirationDate: { productId, expirationDate } },
+      update: { quantity },
+      create: { productId, quantity, expirationDate },
     });
   }
 
@@ -709,6 +910,823 @@ async function main() {
           quantity: movement.quantity,
           observation: movement.observation,
           movementAt: movement.movementAt,
+        },
+      });
+    }
+  }
+
+  const paymentMethods = [
+    { code: "CASH", name: "Efectivo" },
+    { code: "CARD", name: "Tarjeta" },
+    { code: "TRANSFER", name: "Transferencia" },
+  ];
+  const paymentMethodIds = new Map<string, string>();
+
+  for (const paymentMethod of paymentMethods) {
+    const seededPaymentMethod = await prisma.paymentMethod.upsert({
+      where: { code: paymentMethod.code },
+      update: { name: paymentMethod.name, active: true },
+      create: paymentMethod,
+    });
+    paymentMethodIds.set(paymentMethod.code, seededPaymentMethod.id);
+  }
+
+  const supplies = [
+    { name: "Avena en hojuelas", unitName: "Gramo" },
+    { name: "Leche deslactosada", unitName: "Mililitro" },
+    { name: "Banano", unitName: "Unidad" },
+    { name: "Cacao en polvo", unitName: "Gramo" },
+    { name: "Mantequilla de maní", unitName: "Gramo" },
+    { name: "Proteína de suero a granel", unitName: "Gramo" },
+  ];
+  const supplyIds = new Map<string, string>();
+
+  for (const supply of supplies) {
+    const unitOfMeasureId = getId(
+      unitIds,
+      supply.unitName,
+      "Supply unit measure",
+    );
+    const seededSupply = await prisma.supply.upsert({
+      where: { name: supply.name },
+      update: { unitOfMeasureId, active: true },
+      create: { name: supply.name, unitOfMeasureId },
+    });
+    supplyIds.set(supply.name, seededSupply.id);
+  }
+
+  const recipes = [
+    {
+      name: "Batido de avena y banano",
+      description: "Preparación de avena, leche, banano y proteína.",
+      ingredients: [
+        { supply: "Avena en hojuelas", quantity: 40, unit: "Gramo" },
+        { supply: "Leche deslactosada", quantity: 250, unit: "Mililitro" },
+        { supply: "Banano", quantity: 1, unit: "Unidad" },
+        { supply: "Proteína de suero a granel", quantity: 30, unit: "Gramo" },
+      ],
+    },
+    {
+      name: "Batido de chocolate",
+      description: "Batido de leche, cacao, avena y proteína.",
+      ingredients: [
+        { supply: "Leche deslactosada", quantity: 300, unit: "Mililitro" },
+        { supply: "Cacao en polvo", quantity: 8, unit: "Gramo" },
+        { supply: "Avena en hojuelas", quantity: 30, unit: "Gramo" },
+        { supply: "Proteína de suero a granel", quantity: 30, unit: "Gramo" },
+      ],
+    },
+    {
+      name: "Avena proteica con cacao",
+      description: "Avena preparada con leche, cacao y proteína.",
+      ingredients: [
+        { supply: "Avena en hojuelas", quantity: 60, unit: "Gramo" },
+        { supply: "Leche deslactosada", quantity: 200, unit: "Mililitro" },
+        { supply: "Cacao en polvo", quantity: 5, unit: "Gramo" },
+        { supply: "Proteína de suero a granel", quantity: 25, unit: "Gramo" },
+      ],
+    },
+    {
+      name: "Batido de banano y maní",
+      description: "Batido de banano, leche y mantequilla de maní.",
+      ingredients: [
+        { supply: "Banano", quantity: 1, unit: "Unidad" },
+        { supply: "Leche deslactosada", quantity: 250, unit: "Mililitro" },
+        { supply: "Mantequilla de maní", quantity: 15, unit: "Gramo" },
+        { supply: "Proteína de suero a granel", quantity: 25, unit: "Gramo" },
+      ],
+    },
+    {
+      name: "Avena fría con banano",
+      description: "Preparación fría de avena, leche y banano.",
+      ingredients: [
+        { supply: "Avena en hojuelas", quantity: 50, unit: "Gramo" },
+        { supply: "Leche deslactosada", quantity: 200, unit: "Mililitro" },
+        { supply: "Banano", quantity: 1, unit: "Unidad" },
+        { supply: "Mantequilla de maní", quantity: 10, unit: "Gramo" },
+      ],
+    },
+    {
+      name: "Batido de cacao y maní",
+      description: "Batido de cacao, leche, maní y proteína.",
+      ingredients: [
+        { supply: "Leche deslactosada", quantity: 250, unit: "Mililitro" },
+        { supply: "Cacao en polvo", quantity: 8, unit: "Gramo" },
+        { supply: "Mantequilla de maní", quantity: 12, unit: "Gramo" },
+        { supply: "Proteína de suero a granel", quantity: 30, unit: "Gramo" },
+      ],
+    },
+  ];
+  const recipeIds = new Map<string, string>();
+  const recipeUserId = getId(userIds, "leader-medellin", "User account");
+
+  for (const recipe of recipes) {
+    const seededRecipe = await prisma.recipe.upsert({
+      where: { name: recipe.name },
+      update: {
+        description: recipe.description,
+        createdById: recipeUserId,
+        active: true,
+      },
+      create: {
+        name: recipe.name,
+        description: recipe.description,
+        createdById: recipeUserId,
+      },
+    });
+    recipeIds.set(recipe.name, seededRecipe.id);
+
+    for (const ingredient of recipe.ingredients) {
+      const recipeId = getId(recipeIds, recipe.name, "Recipe");
+      const supplyId = getId(supplyIds, ingredient.supply, "Supply");
+      const unitOfMeasureId = getId(
+        unitIds,
+        ingredient.unit,
+        "Ingredient unit measure",
+      );
+      await prisma.recipeIngredient.upsert({
+        where: { recipeId_supplyId: { recipeId, supplyId } },
+        update: { quantity: ingredient.quantity, unitOfMeasureId },
+        create: {
+          recipeId,
+          supplyId,
+          quantity: ingredient.quantity,
+          unitOfMeasureId,
+        },
+      });
+    }
+  }
+
+  const promotions = [
+    {
+      name: "Bienvenida saludable",
+      discountPercentage: 10,
+      startDate: new Date("2025-01-01T00:00:00.000Z"),
+      endDate: new Date("2026-12-31T00:00:00.000Z"),
+    },
+    {
+      name: "Mes del bienestar",
+      discountPercentage: 15,
+      startDate: new Date("2025-01-01T00:00:00.000Z"),
+      endDate: new Date("2026-12-31T00:00:00.000Z"),
+    },
+  ];
+  const promotionIds = new Map<string, string>();
+
+  for (const promotion of promotions) {
+    const seededPromotion = await prisma.promotion.upsert({
+      where: { name: promotion.name },
+      update: {
+        ...promotion,
+        createdById: recipeUserId,
+        active: false,
+      },
+      create: {
+        ...promotion,
+        createdById: recipeUserId,
+        active: false,
+      },
+    });
+    promotionIds.set(promotion.name, seededPromotion.id);
+  }
+
+  const branchCodes = ["MED", "BOG", "CAL"] as const;
+  const branchUsers = [
+    "assistant-medellin",
+    "assistant-bogota",
+    "assistant-cali",
+  ] as const;
+  const lastShiftByBranchMonth = new Map<string, string>();
+  const firstHistoryYear = 2025;
+  const historyMonthCount = 22;
+  const paymentCodes = ["CASH", "CARD", "TRANSFER"] as const;
+
+  for (let monthIndex = 0; monthIndex < historyMonthCount; monthIndex += 1) {
+    const year = firstHistoryYear + Math.floor(monthIndex / 12);
+    const month = monthIndex % 12;
+    const monthKey = `${year}${String(month + 1).padStart(2, "0")}`;
+
+    for (
+      let branchIndex = 0;
+      branchIndex < branchNames.length;
+      branchIndex += 1
+    ) {
+      const branchName = branchNames[branchIndex];
+      const branchCode = branchCodes[branchIndex];
+      const branchId = getId(
+        branchIds,
+        `Intelligent Nutrition - ${branchName}`,
+        "Branch",
+      );
+      const userId = getId(userIds, branchUsers[branchIndex], "User account");
+
+      for (let saleIndex = 0; saleIndex < 4; saleIndex += 1) {
+        const saleDate = new Date(
+          Date.UTC(year, month, 5 + saleIndex * 7, 10 + saleIndex, 30),
+        );
+        const saleNumber = `DEMO-${branchCode}-${monthKey}-${saleIndex + 1}`;
+        const customerKey =
+          saleIndex === 3
+            ? undefined
+            : [
+                "customer-ana",
+                "customer-carlos",
+                "customer-lucia",
+                "customer-diego",
+              ][(monthIndex + branchIndex + saleIndex) % 4];
+        const customerId = customerKey
+          ? getId(customerIds, customerKey, "Customer")
+          : null;
+        const selectedProductCount =
+          1 + ((monthIndex + saleIndex + branchIndex) % 3);
+        const firstProductIndex =
+          monthIndex * 3 + saleIndex * 5 + branchIndex * 4;
+        const promotion =
+          (monthIndex + saleIndex + branchIndex) % 5 === 0
+            ? promotions[
+                (monthIndex + saleIndex + branchIndex) % promotions.length
+              ]
+            : undefined;
+        const saleLines = Array.from(
+          { length: selectedProductCount },
+          (_, lineIndex) => {
+            const product =
+              products[(firstProductIndex + lineIndex * 5) % products.length];
+            const quantity =
+              1 + ((monthIndex + saleIndex + lineIndex + branchIndex) % 3);
+            return {
+              product,
+              quantity,
+              subtotal: product.price * quantity,
+              discountAmount: promotion
+                ? Math.round(
+                    (product.price * quantity * promotion.discountPercentage) /
+                      100,
+                  )
+                : 0,
+            };
+          },
+        );
+        const subtotal = saleLines.reduce(
+          (sum, line) => sum + line.subtotal,
+          0,
+        );
+        const discountAmount = saleLines.reduce(
+          (sum, line) => sum + line.discountAmount,
+          0,
+        );
+        const total = subtotal - discountAmount;
+        const promotionId = promotion
+          ? getId(promotionIds, promotion.name, "Promotion")
+          : null;
+        const paymentCode =
+          paymentCodes[
+            (monthIndex + saleIndex + branchIndex) % paymentCodes.length
+          ];
+        const seededSale = await prisma.sale.upsert({
+          where: { branchId_saleNumber: { branchId, saleNumber } },
+          update: {
+            userId,
+            customerId,
+            saleAt: saleDate,
+            subtotal,
+            discountAmount,
+            discountReason: promotion?.name ?? null,
+            taxAmount: 0,
+            total,
+            promotionId,
+            promotionDiscount: promotion ? discountAmount : null,
+            status: "COMPLETED",
+            reversalReason: null,
+            reversedAt: null,
+          },
+          create: {
+            branchId,
+            userId,
+            customerId,
+            saleNumber,
+            saleAt: saleDate,
+            subtotal,
+            discountAmount,
+            discountReason: promotion?.name ?? null,
+            taxAmount: 0,
+            total,
+            promotionId,
+            promotionDiscount: promotion ? discountAmount : null,
+            status: "COMPLETED",
+          },
+        });
+
+        for (const line of saleLines) {
+          const productId = getId(
+            productIds,
+            line.product.referenceCode,
+            "Product",
+          );
+          const existingDetail = await prisma.saleDetail.findFirst({
+            where: { saleId: seededSale.id, productId },
+          });
+          const detailData = {
+            quantity: line.quantity,
+            unitPrice: line.product.price,
+            subtotal: line.subtotal,
+            discountAmount: line.discountAmount,
+            taxAmount: 0,
+            total: line.subtotal - line.discountAmount,
+          };
+          if (existingDetail) {
+            await prisma.saleDetail.update({
+              where: { id: existingDetail.id },
+              data: detailData,
+            });
+          } else {
+            await prisma.saleDetail.create({
+              data: { saleId: seededSale.id, productId, ...detailData },
+            });
+          }
+
+          const existingSaleMovement = await prisma.inventoryMovement.findFirst(
+            {
+              where: {
+                saleId: seededSale.id,
+                productId,
+                branchId,
+                userId,
+                movementType: "EXIT",
+                quantity: line.quantity,
+                movementAt: saleDate,
+              },
+            },
+          );
+          if (!existingSaleMovement) {
+            await prisma.inventoryMovement.create({
+              data: {
+                saleId: seededSale.id,
+                productId,
+                branchId,
+                userId,
+                movementType: "EXIT",
+                quantity: line.quantity,
+                observation: `Salida asociada a venta ${saleNumber}.`,
+                movementAt: saleDate,
+              },
+            });
+          }
+        }
+
+        const paymentMethodId = getId(
+          paymentMethodIds,
+          paymentCode,
+          "Payment method",
+        );
+        const paymentReference = `DEMO-${saleNumber}`;
+        const existingPayment = await prisma.salePayment.findFirst({
+          where: {
+            saleId: seededSale.id,
+            paymentMethodId,
+            reference: paymentReference,
+          },
+        });
+        if (existingPayment) {
+          await prisma.salePayment.update({
+            where: { id: existingPayment.id },
+            data: { amount: total, paidAt: saleDate },
+          });
+        } else {
+          await prisma.salePayment.create({
+            data: {
+              saleId: seededSale.id,
+              paymentMethodId,
+              amount: total,
+              reference: paymentReference,
+              paidAt: saleDate,
+            },
+          });
+        }
+
+        const cashAmount = paymentCode === "CASH" ? total : 0;
+        const openedAt = new Date(Date.UTC(year, month, 5 + saleIndex * 7, 8));
+        const closedAt = new Date(Date.UTC(year, month, 5 + saleIndex * 7, 19));
+        const openingAmount = 150000 + branchIndex * 25000;
+        const existingShift = await prisma.cashShift.findFirst({
+          where: { branchId, userId, openedAt },
+        });
+        const seededShift = existingShift
+          ? await prisma.cashShift.update({
+              where: { id: existingShift.id },
+              data: {
+                closedAt,
+                openingAmount,
+                closingAmount: openingAmount + cashAmount,
+                status: "CLOSED",
+                observation: `Turno de prueba del ${saleDate.toISOString().slice(0, 10)}.`,
+              },
+            })
+          : await prisma.cashShift.create({
+              data: {
+                branchId,
+                userId,
+                openedAt,
+                closedAt,
+                openingAmount,
+                closingAmount: openingAmount + cashAmount,
+                status: "CLOSED",
+                observation: `Turno de prueba del ${saleDate.toISOString().slice(0, 10)}.`,
+              },
+            });
+        lastShiftByBranchMonth.set(`${branchCode}-${monthKey}`, seededShift.id);
+      }
+    }
+  }
+
+  for (let monthIndex = 0; monthIndex < historyMonthCount; monthIndex += 1) {
+    const year = firstHistoryYear + Math.floor(monthIndex / 12);
+    const month = monthIndex % 12;
+    const monthKey = `${year}${String(month + 1).padStart(2, "0")}`;
+    const purchaseDate = new Date(Date.UTC(year, month, 2, 9));
+    const purchaseSupplierKeys = [
+      "supplier-nutri",
+      "supplier-vital",
+      "supplier-natural",
+    ] as const;
+    const supplierId = getId(
+      supplierIds,
+      purchaseSupplierKeys[monthIndex % purchaseSupplierKeys.length],
+      "Supplier",
+    );
+    const purchaseUserId = getId(
+      userIds,
+      branchUsers[monthIndex % branchUsers.length],
+      "User account",
+    );
+    const purchaseNumber = `DEMO-COMP-${monthKey}`;
+    const purchaseStatus =
+      monthIndex % 11 === 0
+        ? "PENDING_RECEIPT"
+        : monthIndex % 7 === 0
+          ? "PARTIALLY_RECEIVED"
+          : "FULLY_RECEIVED";
+    const purchaseLines = [0, 1].map((lineIndex) => {
+      const product =
+        products[(monthIndex * 3 + lineIndex * 7) % products.length];
+      const requestedQuantity = 8 + ((monthIndex + lineIndex * 3) % 9);
+      const unitPrice = Math.round(product.price * 0.65);
+      const received =
+        purchaseStatus === "FULLY_RECEIVED" ||
+        (purchaseStatus === "PARTIALLY_RECEIVED" && lineIndex === 0);
+      return {
+        product,
+        requestedQuantity,
+        receivedQuantity: received ? requestedQuantity : 0,
+        unitPrice,
+        subtotal: requestedQuantity * unitPrice,
+        received,
+      };
+    });
+    const purchaseSubtotal = purchaseLines.reduce(
+      (sum, line) => sum + line.subtotal,
+      0,
+    );
+    const seededPurchase = await prisma.purchase.upsert({
+      where: { purchaseNumber },
+      update: {
+        supplierId,
+        userId: purchaseUserId,
+        purchaseAt: purchaseDate,
+        subtotal: purchaseSubtotal,
+        total: purchaseSubtotal,
+        observation: "Orden histórica de prueba para reportes.",
+        status: purchaseStatus,
+      },
+      create: {
+        purchaseNumber,
+        supplierId,
+        userId: purchaseUserId,
+        purchaseAt: purchaseDate,
+        subtotal: purchaseSubtotal,
+        total: purchaseSubtotal,
+        observation: "Orden histórica de prueba para reportes.",
+        status: purchaseStatus,
+      },
+    });
+
+    for (const [lineIndex, line] of purchaseLines.entries()) {
+      const productId = getId(
+        productIds,
+        line.product.referenceCode,
+        "Product",
+      );
+      const purchaseBranch =
+        branchNames[(monthIndex + lineIndex) % branchNames.length];
+      const branchId = getId(
+        branchIds,
+        `Intelligent Nutrition - ${purchaseBranch}`,
+        "Branch",
+      );
+      const existingDetail = await prisma.purchaseDetail.findFirst({
+        where: { purchaseId: seededPurchase.id, productId, branchId },
+      });
+      const detailData = {
+        requestedQuantity: line.requestedQuantity,
+        receivedQuantity: line.receivedQuantity,
+        unitPrice: line.unitPrice,
+        subtotal: line.subtotal,
+        observation: line.received
+          ? "Recepción registrada en la fecha de compra."
+          : "Pendiente de recepción.",
+        received: line.received,
+      };
+      if (existingDetail) {
+        await prisma.purchaseDetail.update({
+          where: { id: existingDetail.id },
+          data: detailData,
+        });
+      } else {
+        await prisma.purchaseDetail.create({
+          data: {
+            purchaseId: seededPurchase.id,
+            productId,
+            branchId,
+            ...detailData,
+          },
+        });
+      }
+
+      if (line.received) {
+        const movementAt = new Date(Date.UTC(year, month, 3 + lineIndex, 11));
+        const existingPurchaseMovement =
+          await prisma.inventoryMovement.findFirst({
+            where: {
+              purchaseId: seededPurchase.id,
+              productId,
+              branchId,
+              userId: purchaseUserId,
+              movementType: "ENTRY",
+              quantity: line.receivedQuantity,
+              movementAt,
+            },
+          });
+        if (!existingPurchaseMovement) {
+          await prisma.inventoryMovement.create({
+            data: {
+              purchaseId: seededPurchase.id,
+              productId,
+              branchId,
+              userId: purchaseUserId,
+              movementType: "ENTRY",
+              quantity: line.receivedQuantity,
+              observation: `Recepción de compra ${purchaseNumber}.`,
+              movementAt,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  for (let monthIndex = 0; monthIndex < historyMonthCount; monthIndex += 1) {
+    const year = firstHistoryYear + Math.floor(monthIndex / 12);
+    const month = monthIndex % 12;
+    const monthKey = `${year}${String(month + 1).padStart(2, "0")}`;
+
+    for (const [branchIndex, branchName] of branchNames.entries()) {
+      const branchCode = branchCodes[branchIndex];
+      const branchId = getId(
+        branchIds,
+        `Intelligent Nutrition - ${branchName}`,
+        "Branch",
+      );
+      const userId = getId(userIds, branchUsers[branchIndex], "User account");
+      const shiftId = lastShiftByBranchMonth.get(`${branchCode}-${monthKey}`);
+      if (!shiftId) {
+        throw new Error(
+          `Cash shift for ${branchName} ${monthKey} was not seeded`,
+        );
+      }
+      const closureDate = new Date(Date.UTC(year, month + 1, 0));
+      const notConfirmed = monthIndex % 9 === 0;
+      const seededClosure = await prisma.inventoryClosure.upsert({
+        where: { branchId_closureDate: { branchId, closureDate } },
+        update: {
+          userId,
+          cashShiftId: shiftId,
+          status: notConfirmed ? "NOT_CONFIRMED" : "CONFIRMED",
+          confirmed: !notConfirmed,
+          locked: !notConfirmed,
+          closedAt: notConfirmed
+            ? null
+            : new Date(Date.UTC(year, month + 1, 0, 19)),
+        },
+        create: {
+          branchId,
+          userId,
+          cashShiftId: shiftId,
+          closureDate,
+          status: notConfirmed ? "NOT_CONFIRMED" : "CONFIRMED",
+          confirmed: !notConfirmed,
+          locked: !notConfirmed,
+          closedAt: notConfirmed
+            ? null
+            : new Date(Date.UTC(year, month + 1, 0, 19)),
+        },
+      });
+
+      for (const [productIndex, product] of products.entries()) {
+        if (productIndex % 3 !== branchIndex) {
+          continue;
+        }
+        const productId = getId(productIds, product.referenceCode, "Product");
+        const currentQuantity =
+          inventoryQuantities.get(`${branchName}:${product.referenceCode}`) ??
+          0;
+        const systemQuantity = Math.max(
+          0,
+          currentQuantity + ((monthIndex + productIndex) % 7) - 3,
+        );
+        const difference =
+          (monthIndex + productIndex + branchIndex) % 5 === 0 ? -1 : 0;
+        await prisma.inventoryClosureDetail.upsert({
+          where: {
+            closureId_productId_expirationDate: {
+              closureId: seededClosure.id,
+              productId,
+              expirationDate,
+            },
+          },
+          update: {
+            systemQuantity,
+            physicalQuantity: systemQuantity + difference,
+            difference,
+            observation: difference
+              ? "Diferencia detectada en conteo de prueba."
+              : "Conteo físico coincide con el sistema.",
+          },
+          create: {
+            closureId: seededClosure.id,
+            productId,
+            systemQuantity,
+            physicalQuantity: systemQuantity + difference,
+            difference,
+            expirationDate,
+            observation: difference
+              ? "Diferencia detectada en conteo de prueba."
+              : "Conteo físico coincide con el sistema.",
+          },
+        });
+      }
+
+      for (const [supplyIndex, supply] of supplies.entries()) {
+        const supplyId = getId(supplyIds, supply.name, "Supply");
+        const systemQuantity =
+          20 + ((monthIndex + branchIndex + supplyIndex) % 18);
+        const difference = (monthIndex + supplyIndex) % 6 === 0 ? -0.5 : 0;
+        await prisma.inventoryClosureSupplyDetail.upsert({
+          where: {
+            closureId_supplyId: {
+              closureId: seededClosure.id,
+              supplyId,
+            },
+          },
+          update: {
+            systemQuantity,
+            physicalQuantity: systemQuantity + difference,
+            difference,
+            observation: difference
+              ? "Diferencia detectada en conteo de insumos."
+              : "Conteo de insumos coincide con el sistema.",
+          },
+          create: {
+            closureId: seededClosure.id,
+            supplyId,
+            systemQuantity,
+            physicalQuantity: systemQuantity + difference,
+            difference,
+            observation: difference
+              ? "Diferencia detectada en conteo de insumos."
+              : "Conteo de insumos coincide con el sistema.",
+          },
+        });
+      }
+
+      if (notConfirmed) {
+        const existingNotification = await prisma.notification.findFirst({
+          where: {
+            userId,
+            branchId,
+            type: "CLOSURE_NOT_CONFIRMED",
+            title: `Cierre pendiente - ${monthKey}`,
+          },
+        });
+        if (!existingNotification) {
+          await prisma.notification.create({
+            data: {
+              userId,
+              branchId,
+              type: "CLOSURE_NOT_CONFIRMED",
+              title: `Cierre pendiente - ${monthKey}`,
+              message: `El cierre de inventario de ${branchName} requiere revisión.`,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  for (const [branchIndex, branchName] of branchNames.entries()) {
+    const branchId = getId(
+      branchIds,
+      `Intelligent Nutrition - ${branchName}`,
+      "Branch",
+    );
+    for (const [supplyIndex, supply] of supplies.entries()) {
+      const supplyId = getId(supplyIds, supply.name, "Supply");
+      const quantity = 18 + ((branchIndex * 7 + supplyIndex * 5) % 20);
+      const minimumQuantity = 5 + (supplyIndex % 4);
+      await prisma.supplyStock.upsert({
+        where: { branchId_supplyId: { branchId, supplyId } },
+        update: { quantity, minimumQuantity },
+        create: { branchId, supplyId, quantity, minimumQuantity },
+      });
+    }
+  }
+
+  for (let monthIndex = 0; monthIndex < historyMonthCount; monthIndex += 1) {
+    const year = firstHistoryYear + Math.floor(monthIndex / 12);
+    const month = monthIndex % 12;
+    for (const [branchIndex, branchName] of branchNames.entries()) {
+      const branchId = getId(
+        branchIds,
+        `Intelligent Nutrition - ${branchName}`,
+        "Branch",
+      );
+      const userId = getId(userIds, branchUsers[branchIndex], "User account");
+      const supply = supplies[(monthIndex + branchIndex) % supplies.length];
+      const supplyId = getId(supplyIds, supply.name, "Supply");
+      const movementType = monthIndex % 2 === 0 ? "ENTRY" : "EXIT";
+      const quantity = 1 + ((monthIndex + branchIndex) % 8) * 0.5;
+      const movementAt = new Date(Date.UTC(year, month, 15, 13));
+      const existingMovement = await prisma.supplyStockMovement.findFirst({
+        where: {
+          branchId,
+          supplyId,
+          userId,
+          movementType,
+          quantity,
+          movementAt,
+        },
+      });
+      if (!existingMovement) {
+        await prisma.supplyStockMovement.create({
+          data: {
+            branchId,
+            supplyId,
+            userId,
+            movementType,
+            quantity,
+            observation: `Movimiento histórico de insumos ${month + 1}/${year}.`,
+            movementAt,
+          },
+        });
+      }
+    }
+  }
+
+  for (const item of inventory) {
+    if (item.quantity >= item.minimum) {
+      continue;
+    }
+    const branchId = getId(
+      branchIds,
+      `Intelligent Nutrition - ${item.branch}`,
+      "Branch",
+    );
+    const productId = getId(productIds, item.product, "Product");
+    const userKey =
+      item.branch === "Medellín"
+        ? "assistant-medellin"
+        : item.branch === "Bogotá"
+          ? "assistant-bogota"
+          : "assistant-cali";
+    const userId = getId(userIds, userKey, "User account");
+    const title = `Inventario bajo: ${item.product}`;
+    const existingNotification = await prisma.notification.findFirst({
+      where: {
+        userId,
+        branchId,
+        productId,
+        type: "LOW_STOCK",
+        title,
+      },
+    });
+    if (!existingNotification) {
+      await prisma.notification.create({
+        data: {
+          userId,
+          branchId,
+          productId,
+          type: "LOW_STOCK",
+          title,
+          message: `Quedan ${item.quantity} unidades; el mínimo configurado es ${item.minimum}.`,
         },
       });
     }
