@@ -10,6 +10,7 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import { Roles } from "../../common/decorators/roles.decorator.js";
 import { BranchScopeGuard } from "../../common/guards/branch-scope.guard.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
+import { DashboardEmbedService } from "./dashboard-embed.service.js";
 import { ListSalesReportQueryDto } from "./dto/list-sales-report-query.dto.js";
 import { RestockReportQueryDto } from "./dto/restock-report-query.dto.js";
 import { ReportsService } from "./reports.service.js";
@@ -19,7 +20,10 @@ import { ReportsService } from "./reports.service.js";
 @Controller("reports")
 @UseGuards(BranchScopeGuard)
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(
+    private readonly reportsService: ReportsService,
+    private readonly dashboardEmbedService: DashboardEmbedService,
+  ) {}
 
   @Get("sales")
   @Roles("SUPERADMIN", "BRANCH_LEADER")
@@ -71,5 +75,27 @@ export class ReportsController {
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
     return this.reportsService.getRestockReport(query, currentUser);
+  }
+
+  @Get("dashboard-embed")
+  @Roles("SUPERADMIN")
+  @ApiOperation({
+    summary: "Get the analytics dashboard embed URL",
+    description:
+      "Returns the Looker Studio embed URL (read from the BI_DASHBOARD_EMBED_URL environment variable) that the app shows in an iframe. It does not return business data: the report reads the bi_* views directly, and Google decides who can open it. Roles: SUPERADMIN.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Object with the embed url.",
+  })
+  @ApiResponse({ status: 401, description: "Missing or invalid access token." })
+  @ApiResponse({ status: 403, description: "Role not allowed." })
+  @ApiResponse({
+    status: 503,
+    description:
+      "BI_DASHBOARD_EMBED_URL is missing, empty or not an https URL (DASHBOARD_NOT_CONFIGURED).",
+  })
+  getDashboardEmbedUrl() {
+    return this.dashboardEmbedService.getEmbedUrl();
   }
 }
