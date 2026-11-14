@@ -81,6 +81,25 @@ describe('PublicProductPage', () => {
     expect(await screen.findByText('Foto principal del producto')).toBeInTheDocument()
   })
 
+  it('adds the chosen quantity to the order without passing the units of a branch', async () => {
+    localStorage.clear()
+    const { user } = renderPage()
+
+    await screen.findByRole('heading', { name: 'Iron Creatina Ultra Pure 500g' })
+    expect(screen.getByRole('button', { name: 'Agregar una unidad' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Agregar al pedido' }))
+
+    expect(screen.getByText(/Agregado a tu pedido\./)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Mi pedido, 1 productos' })).toHaveAttribute(
+      'href',
+      '/pedido',
+    )
+    expect(JSON.parse(localStorage.getItem('intelligent-nutrition:cart') ?? '[]')).toEqual([
+      expect.objectContaining({ productId: 'p-creatine', quantity: 1, price: '109990.00' }),
+    ])
+    expect(screen.getByRole('button', { name: 'Ya tienes todas las unidades' })).toBeDisabled()
+  })
+
   it('hides the WhatsApp button when the number is not configured', async () => {
     renderPage('')
 

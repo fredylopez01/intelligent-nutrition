@@ -20,6 +20,10 @@ import {
   businessDate,
   businessDayBounds,
 } from "../../common/utils/business-day.util.js";
+import {
+  reservationKey,
+  reservedUnits,
+} from "../../common/utils/stock-reservations.util.js";
 import { PromotionsService } from "../promotions/promotions.service.js";
 
 const saleSelect = {
@@ -151,7 +155,11 @@ export class SalesService {
     private readonly promotionsService: PromotionsService,
   ) {}
 
-  async create(dto: CreateSaleDto, currentUser: AuthenticatedUser) {
+  async create(
+    dto: CreateSaleDto,
+    currentUser: AuthenticatedUser,
+    options: { onlineOrderId?: string; client?: Prisma.TransactionClient } = {},
+  ) {
     const { branchId, customerId, items, payments } = dto;
 
     this.assertBranchScope(branchId, currentUser);
@@ -166,7 +174,7 @@ export class SalesService {
 
     const paymentMethodIds = payments.map((payment) => payment.paymentMethodId);
 
-    return this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       const branch = await tx.branch.findUnique({
         where: { id: branchId },
         select: { id: true, name: true, active: true },
@@ -395,6 +403,12 @@ export class SalesService {
         }>
       >();
       const today = startOfTodayUtc(now);
+      const reserved = await reservedUnits(tx, {
+        productIds,
+        branchIds: [branchId],
+        now,
+        excludeOrderId: options.onlineOrderId,
+      });
       const insufficientStock: Array<{
         productId: string;
         productName: string;
@@ -425,7 +439,11 @@ export class SalesService {
           orderBy: { expirationDate: "asc" },
         });
 
-        const available = lots.reduce((sum, lot) => sum + lot.quantity, 0);
+        const available = Math.max(
+          0,
+          lots.reduce((sum, lot) => sum + lot.quantity, 0) -
+            (reserved.get(reservationKey(branchId, item.productId)) ?? 0),
+        );
 
         if (available < item.quantity) {
           insufficientStock.push({
@@ -516,7 +534,9 @@ export class SalesService {
       await this.lowStockService.notifyCrossings(tx, branchId, stockBefore);
 
       return formatSaleResponse(sale);
-    });
+    };
+
+    return options.client ? run(options.client) : this.prisma.$transaction(run);
   }
 
   async findAll(query: ListSalesQueryDto, currentUser: AuthenticatedUser) {

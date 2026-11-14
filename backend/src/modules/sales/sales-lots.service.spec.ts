@@ -63,6 +63,9 @@ const tx = {
     findUnique: jest.fn<AsyncMock>(),
     update: jest.fn<AsyncMock>(),
   },
+  onlineOrderItem: {
+    findMany: jest.fn<AsyncMock>(),
+  },
   inventoryMovement: {
     create: jest.fn<AsyncMock>(),
     findMany: jest.fn<AsyncMock>(),
@@ -103,6 +106,7 @@ describe("SalesService lots", () => {
   beforeEach(() => {
     jest.useFakeTimers({ now: new Date("2026-10-25T15:00:00.000Z") });
     jest.resetAllMocks();
+    tx.onlineOrderItem.findMany.mockResolvedValue([]);
     prisma.$transaction.mockImplementation((operation) => operation(tx));
     tx.branch.findUnique.mockResolvedValue({
       id: branchId,

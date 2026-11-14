@@ -114,4 +114,12 @@ describe('SellableProductCard', () => {
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
+
+  it('tells how many units are held by web orders', () => {
+    renderCard({ availableQuantity: 4, reservedQuantity: 2 })
+
+    expect(screen.getByText(/apartadas en pedidos web/)).toHaveTextContent(
+      '2 und apartadas en pedidos web',
+    )
+  })
 })

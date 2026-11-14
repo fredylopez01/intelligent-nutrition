@@ -45,6 +45,11 @@ export function SellableProductCard({
             {formatQuantity(product.availableQuantity, unit)} disponibles
           </span>
         </div>
+        {(product.reservedQuantity ?? 0) > 0 && (
+          <span className="pos-card__reserved">
+            {formatQuantity(product.reservedQuantity ?? 0, unit)} apartadas en pedidos web
+          </span>
+        )}
         {canSelect && (
           <button
             type="button"

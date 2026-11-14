@@ -4,6 +4,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   LOW_STOCK: 'Inventario bajo',
   CLOSURE_NOT_CONFIRMED: 'Cierre sin confirmar',
   PURCHASE_PENDING_RECEIPT: 'Compra pendiente',
+  ONLINE_ORDER: 'Pedido web',
 }
 
 const relativeFormatter = new Intl.RelativeTimeFormat('es-CO', { numeric: 'auto' })

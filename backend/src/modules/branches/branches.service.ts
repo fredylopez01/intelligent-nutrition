@@ -17,6 +17,10 @@ import { startOfTodayUtc } from "../../common/utils/expiration.util.js";
 import { UpdateBranchDto } from "./dto/update-branch.dto.js";
 import { UpdateBranchScheduleDto } from "./dto/update-branch-schedule.dto.js";
 import {
+  reservationKey,
+  reservedUnits,
+} from "../../common/utils/stock-reservations.util.js";
+import {
   groupSchedule,
   isOpenAt,
   toMinutes,
@@ -85,6 +89,7 @@ export class BranchesService {
           address: true,
           phone: true,
           active: true,
+          deliveryEnabled: true,
           schedules: SCHEDULE_SELECT,
         },
       }),
@@ -111,6 +116,7 @@ export class BranchesService {
         address: true,
         phone: true,
         active: true,
+        deliveryEnabled: true,
         schedules: SCHEDULE_SELECT,
       },
     });
@@ -171,6 +177,7 @@ export class BranchesService {
           address: true,
           phone: true,
           active: true,
+          deliveryEnabled: true,
           schedules: SCHEDULE_SELECT,
         },
       });
@@ -224,7 +231,7 @@ export class BranchesService {
           throw new NotFoundException("Branch not found");
         }
 
-        const { name, address, phone } = updateBranchDto;
+        const { name, address, phone, deliveryEnabled } = updateBranchDto;
         if (name !== undefined && name !== existingBranch.name) {
           const branchWithSameName = await transaction.branch.findUnique({
             where: { name },
@@ -242,6 +249,7 @@ export class BranchesService {
             ...(name === undefined ? {} : { name }),
             ...(address === undefined ? {} : { address }),
             ...(phone === undefined ? {} : { phone }),
+            ...(deliveryEnabled === undefined ? {} : { deliveryEnabled }),
           },
           select: {
             id: true,
@@ -249,6 +257,7 @@ export class BranchesService {
             address: true,
             phone: true,
             active: true,
+            deliveryEnabled: true,
           },
         });
 
@@ -323,6 +332,7 @@ export class BranchesService {
           address: true,
           phone: true,
           active: true,
+          deliveryEnabled: true,
         },
       });
 
@@ -374,6 +384,7 @@ export class BranchesService {
             address: true,
             phone: true,
             active: true,
+            deliveryEnabled: true,
           },
         });
 
@@ -441,6 +452,10 @@ export class BranchesService {
       where: { branchId, expirationDate: { gte: startOfTodayUtc() } },
       _sum: { quantity: true },
     });
+    const reserved = await reservedUnits(this.prisma, {
+      productIds: grouped.map((g) => g.productId),
+      branchIds: [branchId],
+    });
 
     if (grouped.length === 0) {
       return {
@@ -506,16 +521,24 @@ export class BranchesService {
       grouped.map((g) => [g.productId, g._sum.quantity ?? 0]),
     );
 
-    const data = products.map((product) => ({
-      productId: product.id,
-      name: product.name,
-      referenceCode: product.referenceCode,
-      primaryImageUrl: this.getPrimaryImageUrl(product.images),
-      price: product.price.toFixed(2),
-      availableQuantity: quantityMap.get(product.id) ?? 0,
-      unit: product.unitOfMeasure.abreviation,
-      category: product.category,
-    }));
+    const data = products.map((product) => {
+      const reservedQuantity =
+        reserved.get(reservationKey(branchId, product.id)) ?? 0;
+      return {
+        productId: product.id,
+        name: product.name,
+        referenceCode: product.referenceCode,
+        primaryImageUrl: this.getPrimaryImageUrl(product.images),
+        price: product.price.toFixed(2),
+        availableQuantity: Math.max(
+          0,
+          (quantityMap.get(product.id) ?? 0) - reservedQuantity,
+        ),
+        reservedQuantity,
+        unit: product.unitOfMeasure.abreviation,
+        category: product.category,
+      };
+    });
 
     return {
       data,

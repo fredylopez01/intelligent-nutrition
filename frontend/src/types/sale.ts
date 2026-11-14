@@ -9,6 +9,7 @@ export interface SellableProduct {
   primaryImageUrl: string | null
   price: string
   availableQuantity: number
+  reservedQuantity?: number
   unit?: string
   category?: { id: string; name: string }
 }

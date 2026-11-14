@@ -16,6 +16,7 @@ interface SellableProduct {
   primaryImageUrl: string | null;
   price: string;
   availableQuantity: number;
+  reservedQuantity: number;
   unit: string;
   category: { id: string; name: string } | null;
 }
@@ -322,6 +323,7 @@ describe("GET /api/v1/branches/:id/sellable-products (e2e)", () => {
       primaryImageUrl: null,
       price: "10.00",
       availableQuantity: 15,
+      reservedQuantity: 0,
       unit: unitAbbreviation,
       category: { id: categoryId, name: `Categoria principal ${runId}` },
     });
@@ -387,6 +389,7 @@ describe("GET /api/v1/branches/:id/sellable-products (e2e)", () => {
       primaryImageUrl: null,
       price: "8.00",
       availableQuantity: 8,
+      reservedQuantity: 0,
       unit: unitAbbreviation,
       category: { id: categoryId, name: `Categoria principal ${runId}` },
     });
@@ -416,6 +419,7 @@ describe("GET /api/v1/branches/:id/sellable-products (e2e)", () => {
       primaryImageUrl: null,
       price: "7.00",
       availableQuantity: 12,
+      reservedQuantity: 0,
       unit: unitAbbreviation,
       category: { id: otherCategoryId, name: `Categoria ajena ${runId}` },
     });

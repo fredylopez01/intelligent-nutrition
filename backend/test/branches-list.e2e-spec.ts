@@ -142,6 +142,7 @@ describe("GET /api/v1/branches (e2e)", () => {
         address: expect.any(String),
         phone: expect.any(String),
         active: expect.any(Boolean),
+        deliveryEnabled: expect.any(Boolean),
         openNow: expect.any(Boolean),
         schedule: expect.any(Array),
       });

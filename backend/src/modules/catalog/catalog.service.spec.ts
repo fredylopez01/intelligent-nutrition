@@ -9,6 +9,7 @@ const prismaMock = {
     findFirst: jest.fn<AsyncMock>(),
   },
   category: { findMany: jest.fn<AsyncMock>() },
+  onlineOrderItem: { findMany: jest.fn<AsyncMock>() },
   $transaction: jest.fn<(operations: Promise<unknown>[]) => Promise<unknown>>(),
 };
 
@@ -54,6 +55,7 @@ describe("CatalogService", () => {
     );
     prismaMock.product.count.mockResolvedValue(1);
     prismaMock.product.findMany.mockResolvedValue([row]);
+    prismaMock.onlineOrderItem.findMany.mockResolvedValue([]);
     const module = await Test.createTestingModule({
       providers: [
         CatalogService,
@@ -92,6 +94,24 @@ describe("CatalogService", () => {
       total: 1,
       totalPages: 1,
     });
+  });
+
+  it("hides the units held by web orders", async () => {
+    prismaMock.onlineOrderItem.findMany.mockResolvedValue([
+      { productId: "product-1", quantity: 3, order: { branchId: "makro" } },
+      { productId: "product-1", quantity: 2, order: { branchId: "viva" } },
+    ]);
+
+    const result = await service.listProducts({
+      page: 1,
+      limit: 12,
+      sort: CatalogSort.NAME,
+    });
+
+    expect(result.data[0].branches).toEqual([
+      { branchId: "viva", name: "Sede Viva", quantity: 7 },
+    ]);
+    expect(result.data[0].branchUnits).toBe(7);
   });
 
   it("orders by price when asked", async () => {

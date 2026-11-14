@@ -27,11 +27,13 @@ import { TermsOfServicePage } from '../pages/legal/TermsOfServicePage'
 import { LoginPage } from '../pages/LoginPage'
 import { ForgotPasswordPage } from '../pages/password-reset/ForgotPasswordPage'
 import { ResetPasswordPage } from '../pages/password-reset/ResetPasswordPage'
+import { OnlineOrdersPage } from '../pages/pos/OnlineOrdersPage'
 import { PaymentMethodsPage } from '../pages/pos/PaymentMethodsPage'
 import { PosPage } from '../pages/pos/PosPage'
 import { SalesPage } from '../pages/pos/SalesPage'
 import { ProfilePage } from '../pages/profile/ProfilePage'
 import { PromotionsPage } from '../pages/promotions/PromotionsPage'
+import { OrderPage } from '../pages/public/OrderPage'
 import { PublicCatalogPage } from '../pages/public/PublicCatalogPage'
 import { PublicProductPage } from '../pages/public/PublicProductPage'
 import { BiDashboardPage } from '../pages/reports/BiDashboardPage'
@@ -75,6 +77,7 @@ export function AppRouter() {
       <Route path="/privacidad" element={<PrivacyPolicyPage />} />
       <Route path="/productos" element={<PublicCatalogPage />} />
       <Route path="/productos/:productId" element={<PublicProductPage />} />
+      <Route path="/pedido" element={<OrderPage />} />
 
       <Route
         path="/dashboard"
@@ -193,6 +196,14 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/pos/ventas']}>
             <SalesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/pos/pedidos"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/pos/pedidos']}>
+            <OnlineOrdersPage />
           </ProtectedRoute>
         }
       />

@@ -1,6 +1,7 @@
 import type { PaginationMeta } from './user'
 
-export type NotificationType = 'LOW_STOCK' | 'CLOSURE_NOT_CONFIRMED' | 'PURCHASE_PENDING_RECEIPT'
+export type NotificationType =
+  'LOW_STOCK' | 'CLOSURE_NOT_CONFIRMED' | 'PURCHASE_PENDING_RECEIPT' | 'ONLINE_ORDER'
 
 export interface AppNotification {
   id: string

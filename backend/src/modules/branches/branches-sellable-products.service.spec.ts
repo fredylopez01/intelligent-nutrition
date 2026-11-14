@@ -30,6 +30,7 @@ const baseProduct = {
 const prisma = {
   branch: { findUnique: jest.fn<AsyncMock>() },
   branchInventory: { groupBy: jest.fn<AsyncMock>() },
+  onlineOrderItem: { findMany: jest.fn<AsyncMock>() },
   product: {
     count: jest.fn<AsyncMock>(),
     findMany: jest.fn<AsyncMock>(),
@@ -44,6 +45,7 @@ describe("BranchesService.findSellableProducts", () => {
 
     prisma.branch.findUnique.mockResolvedValue({ id: BRANCH_ID });
     prisma.branchInventory.groupBy.mockResolvedValue([]);
+    prisma.onlineOrderItem.findMany.mockResolvedValue([]);
     prisma.product.count.mockResolvedValue(0);
     prisma.product.findMany.mockResolvedValue([]);
     prisma.$transaction.mockImplementation(
@@ -265,6 +267,7 @@ describe("BranchesService.findSellableProducts", () => {
       referenceCode: "WP-001",
       price: "145000.00",
       availableQuantity: 7,
+      reservedQuantity: 0,
       unit: "kg",
       category: { id: CATEGORY_ID, name: "Suplementos" },
       primaryImageUrl: null,
@@ -309,6 +312,28 @@ describe("BranchesService.findSellableProducts", () => {
     const creatine = result.data.find((p) => p.productId === PRODUCT_B);
     expect(whey?.availableQuantity).toBe(3);
     expect(creatine?.availableQuantity).toBe(12);
+  });
+
+  it("subtracts the units held by web orders of the branch", async () => {
+    prisma.branchInventory.groupBy.mockResolvedValue([
+      { productId: PRODUCT_ID, _sum: { quantity: 7 } },
+    ]);
+    prisma.onlineOrderItem.findMany.mockResolvedValue([
+      { productId: PRODUCT_ID, quantity: 5, order: { branchId: BRANCH_ID } },
+    ]);
+    prisma.product.count.mockResolvedValue(1);
+    prisma.product.findMany.mockResolvedValue([baseProduct]);
+    const service = new BranchesService(prisma as never, {} as never);
+
+    const result = await service.findSellableProducts(BRANCH_ID, {
+      page: 1,
+      limit: 20,
+    });
+
+    expect(result.data[0]).toMatchObject({
+      availableQuantity: 2,
+      reservedQuantity: 5,
+    });
   });
 
   // ─── primaryImageUrl ──────────────────────────────────────────────────────────

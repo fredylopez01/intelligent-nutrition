@@ -75,6 +75,7 @@ const transactionMock = {
     update: jest.fn<AsyncMock>(),
   },
   inventoryMovement: { create: jest.fn<AsyncMock>() },
+  onlineOrderItem: { findMany: jest.fn<AsyncMock>() },
   sale: {
     findFirst: jest.fn<AsyncMock>(),
     create: jest.fn<AsyncMock>(),
@@ -239,6 +240,7 @@ describe("SalesService.create", () => {
       { id: firstLotId, quantity: 10, minimumStock: 2 },
     ]);
     transactionMock.branchInventory.update.mockResolvedValue({});
+    transactionMock.onlineOrderItem.findMany.mockResolvedValue([]);
     transactionMock.inventoryMovement.create.mockResolvedValue({});
     transactionMock.sale.findFirst.mockResolvedValue(null);
     transactionMock.sale.create.mockResolvedValue(buildSaleRecord());
@@ -846,6 +848,45 @@ describe("SalesService.create", () => {
   });
 
   describe("stock", () => {
+    it("does not sell the units held by web orders of the branch", async () => {
+      transactionMock.branchInventory.findMany.mockResolvedValue([
+        { id: firstLotId, quantity: 3, minimumStock: 0 },
+      ]);
+      transactionMock.onlineOrderItem.findMany.mockResolvedValue([
+        { productId: productAId, quantity: 2, order: { branchId } },
+      ]);
+
+      await expect(service.create(baseDto, superadmin)).rejects.toMatchObject({
+        response: {
+          code: "INSUFFICIENT_STOCK",
+          details: {
+            items: [expect.objectContaining({ requested: 2, available: 1 })],
+          },
+        },
+      });
+      expect(transactionMock.onlineOrderItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            order: expect.objectContaining({ branchId: { in: [branchId] } }),
+          }),
+        }),
+      );
+    });
+
+    it("ignores the reservation of the web order being completed", async () => {
+      transactionMock.branchInventory.findMany.mockResolvedValue([
+        { id: firstLotId, quantity: 2, minimumStock: 0 },
+      ]);
+
+      await service.create(baseDto, superadmin, { onlineOrderId: "order-1" });
+
+      const [args] = transactionMock.onlineOrderItem.findMany.mock.calls[0] as [
+        { where: { order: { id?: unknown } } },
+      ];
+      expect(args.where.order.id).toEqual({ not: "order-1" });
+      expect(transactionMock.sale.create).toHaveBeenCalled();
+    });
+
     it("rejects a sale when an item does not have enough stock", async () => {
       transactionMock.branchInventory.findMany.mockResolvedValue([
         { id: firstLotId, quantity: 1, minimumStock: 2 },

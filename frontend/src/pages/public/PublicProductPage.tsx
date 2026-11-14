@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import { AddToCart } from '../../components/catalog-public/AddToCart'
 import { CatalogImage } from '../../components/catalog-public/CatalogImage'
 import { PublicLayout } from '../../components/landing/PublicLayout'
 import { useCatalogProduct } from '../../hooks/useCatalog'
@@ -153,9 +154,10 @@ function ProductView({ productId, whatsapp }: ProductViewProps) {
               </ul>
             </section>
 
+            <AddToCart product={product} />
             {whatsapp && (
               <a
-                className="public-product__cta"
+                className="public-product__question"
                 href={whatsappUrl(whatsapp, productInquiryMessage(product))}
                 target="_blank"
                 rel="noreferrer noopener"
@@ -163,9 +165,6 @@ function ProductView({ productId, whatsapp }: ProductViewProps) {
                 Preguntar por WhatsApp
               </a>
             )}
-            <p className="public-product__note">
-              Te ayudamos a apartarlo en una sede o a coordinar el envío en Tunja.
-            </p>
 
             {product.description && (
               <section className="public-product__description" aria-labelledby="product-desc">

@@ -8,6 +8,10 @@ import { PrismaService } from "../../database/prisma/prisma.service.js";
 import { startOfTodayUtc } from "../../common/utils/expiration.util.js";
 import { normalizeSearchTerm } from "../../common/utils/search.util.js";
 import {
+  reservationKey,
+  reservedUnits,
+} from "../../common/utils/stock-reservations.util.js";
+import {
   CatalogSort,
   ListCatalogProductsQueryDto,
 } from "./dto/list-catalog-products-query.dto.js";
@@ -65,7 +69,7 @@ type ProductRow = Prisma.ProductGetPayload<{
 export class CatalogService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private toItem(product: ProductRow) {
+  private toItem(product: ProductRow, reserved = new Map<string, number>()) {
     const branches = new Map<
       string,
       { branchId: string; name: string; quantity: number }
@@ -79,9 +83,17 @@ export class CatalogService {
       current.quantity += lot.quantity;
       branches.set(lot.branch.id, current);
     }
-    const availability = [...branches.values()].sort((a, b) =>
-      a.name.localeCompare(b.name, "es"),
-    );
+    const availability = [...branches.values()]
+      .map((item) => ({
+        ...item,
+        quantity: Math.max(
+          0,
+          item.quantity -
+            (reserved.get(reservationKey(item.branchId, product.id)) ?? 0),
+        ),
+      }))
+      .filter((item) => item.quantity > 0)
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
     return {
       productId: product.id,
       name: product.name,
@@ -95,6 +107,13 @@ export class CatalogService {
       ),
       branches: availability,
     };
+  }
+
+  private async withReservations(products: ProductRow[]) {
+    const reserved = await reservedUnits(this.prisma, {
+      productIds: products.map((product) => product.id),
+    });
+    return products.map((product) => this.toItem(product, reserved));
   }
 
   async listProducts(query: ListCatalogProductsQueryDto) {
@@ -144,7 +163,7 @@ export class CatalogService {
     ]);
 
     return {
-      data: products.map((product) => this.toItem(product)),
+      data: await this.withReservations(products),
       meta: {
         page,
         limit,
@@ -187,7 +206,7 @@ export class CatalogService {
       });
     }
     return {
-      ...this.toItem(product),
+      ...(await this.withReservations([product]))[0],
       description: product.description,
       images: product.images.map((image) => image.url),
     };

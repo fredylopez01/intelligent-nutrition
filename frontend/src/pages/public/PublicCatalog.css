@@ -124,8 +124,7 @@
 .public-catalog__chip:focus-visible,
 .public-catalog__pages button:focus-visible,
 .public-catalog__message button:focus-visible,
-.public-product__thumb:focus-visible,
-.public-product__cta:focus-visible {
+.public-product__thumb:focus-visible {
   outline: 2px solid var(--color-primary-strong);
   outline-offset: 2px;
 }
@@ -379,24 +378,18 @@
   color: var(--color-text-muted);
 }
 
-.public-product__cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 52px;
-  margin-top: 1.75rem;
-  padding: 0 1.5rem;
-  background: var(--color-primary-strong);
-  border-radius: 12px;
-  color: var(--color-on-primary);
-  font-size: 0.95rem;
-  font-weight: 600;
-  transition: background-color 0.15s ease;
+.public-product__question {
+  align-self: flex-start;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-outline);
+  text-underline-offset: 4px;
 }
 
-.public-product__cta:hover {
-  background: var(--color-hover);
-  color: var(--color-on-primary);
+.public-product__question:hover {
+  text-decoration-color: var(--color-primary-strong);
 }
 
 .public-product__note {
@@ -437,8 +430,7 @@
     animation: none;
   }
 
-  .public-catalog__chip,
-  .public-product__cta {
+  .public-catalog__chip {
     transition: none;
   }
 }

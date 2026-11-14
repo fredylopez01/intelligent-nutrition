@@ -110,6 +110,11 @@
   color: var(--color-warning);
 }
 
+.pos-card__reserved {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
 .pos-card__add {
   margin-top: 0.625rem;
   padding: 0.5rem 0.625rem;

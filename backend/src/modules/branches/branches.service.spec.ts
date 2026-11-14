@@ -40,6 +40,7 @@ const branchSelect = {
   address: true,
   phone: true,
   active: true,
+  deliveryEnabled: true,
 };
 
 const createBranchDto = {
