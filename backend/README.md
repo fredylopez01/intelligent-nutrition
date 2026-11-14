@@ -251,7 +251,8 @@ docker compose down
 ```bash
 cd backend
 
-# 1. Asegurar que .env tiene el DATABASE_URL correcto
+# 1. Asegurar que .env tiene el DATABASE_URL correcto y las variables
+#    SEED_ADMIN_PASSWORD y SEED_TEST_PASSWORD configuradas.
 #    Si usas Render: pega la EXTERNAL URL
 
 # 2. Generar cliente Prisma
@@ -260,9 +261,14 @@ npx prisma generate
 # 3. Aplicar migraciones (si es la primera vez)
 npx prisma migrate deploy
 
-# 4. Iniciar en modo desarrollo (watch)
+# 4. Cargar datos de ejemplo e historial para reportes
+npx prisma db seed
+
+# 5. Iniciar en modo desarrollo (watch)
 npm run start:dev
 ```
+
+La semilla es repetible y genera 27 productos, 264 ventas con pagos y movimientos asociados, compras, cierres mensuales, turnos de caja, recetas e historial de insumos entre 2025 y 2026. Las contraseñas de las cuentas de prueba se leen de `SEED_TEST_PASSWORD`; no hay una contraseña de prueba predeterminada en el código.
 
 El servidor estará en `http://localhost:3000`.
 
