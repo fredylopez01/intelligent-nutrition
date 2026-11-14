@@ -12,6 +12,13 @@ import { AuditService } from "../audit/audit.service.js";
 import { ListSupplyStockQueryDto } from "./dto/list-supply-stock-query.dto.js";
 import { CreateSupplyStockMovementDto } from "./dto/create-supply-stock-movement.dto.js";
 import { UpdateSupplyMinimumDto } from "./dto/update-supply-minimum.dto.js";
+import { ConvertProductToSupplyDto } from "./dto/convert-product-to-supply.dto.js";
+import { LowStockService } from "../notifications/low-stock.service.js";
+import { startOfTodayUtc } from "../../common/utils/expiration.util.js";
+import {
+  reservationKey,
+  reservedUnits,
+} from "../../common/utils/stock-reservations.util.js";
 
 interface SupplyStockRow {
   supplyId: string;
@@ -23,6 +30,9 @@ interface SupplyStockRow {
   quantity: string;
   minimumQuantity: string;
   updatedAt: Date | null;
+  sourceProductId: string | null;
+  sourceProductName: string | null;
+  productUnitQuantity: string | null;
 }
 
 export function toSupplyStockResponse(row: SupplyStockRow) {
@@ -38,6 +48,13 @@ export function toSupplyStockResponse(row: SupplyStockRow) {
     minimumQuantity: row.minimumQuantity,
     lowStock: parseFloat(row.quantity) < parseFloat(row.minimumQuantity),
     updatedAt: row.updatedAt,
+    sourceProduct: row.sourceProductId
+      ? {
+          id: row.sourceProductId,
+          name: row.sourceProductName ?? "",
+          unitQuantity: Number(row.productUnitQuantity ?? 0),
+        }
+      : null,
   };
 }
 
@@ -53,7 +70,163 @@ export class SupplyStockService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly lowStockService: LowStockService,
   ) {}
+
+  async convertProduct(
+    dto: ConvertProductToSupplyDto,
+    currentUser: AuthenticatedUser,
+    ipAddress?: string,
+  ) {
+    const { branchId, supplyId, productUnits } = dto;
+    await this.assertSupplyAndBranch(branchId, supplyId);
+
+    return this.prisma.$transaction(async (tx) => {
+      const supply = await tx.supply.findUnique({
+        where: { id: supplyId },
+        select: {
+          id: true,
+          name: true,
+          productUnitQuantity: true,
+          unitOfMeasure: { select: { abreviation: true } },
+          sourceProduct: {
+            select: { id: true, name: true, referenceCode: true, active: true },
+          },
+        },
+      });
+      if (!supply?.sourceProduct || supply.productUnitQuantity === null) {
+        throw new UnprocessableEntityException({
+          code: "SUPPLY_NOT_LINKED",
+          message: "The supply is not linked to a catalog product.",
+        });
+      }
+      const product = supply.sourceProduct;
+      if (!product.active) {
+        throw new UnprocessableEntityException({
+          code: "PRODUCT_INACTIVE",
+          message: `Product "${product.name}" is inactive.`,
+        });
+      }
+
+      await tx.$queryRaw`
+        SELECT id FROM branch_inventory
+        WHERE branch_id = ${branchId}::uuid AND product_id = ${product.id}::uuid
+        FOR UPDATE
+      `;
+      const now = new Date();
+      const lots = await tx.branchInventory.findMany({
+        where: {
+          branchId,
+          productId: product.id,
+          expirationDate: { gte: startOfTodayUtc(now) },
+          quantity: { gt: 0 },
+        },
+        orderBy: { expirationDate: "asc" },
+        select: { id: true, quantity: true, expirationDate: true },
+      });
+      const reserved =
+        (
+          await reservedUnits(tx, {
+            productIds: [product.id],
+            branchIds: [branchId],
+            now,
+          })
+        ).get(reservationKey(branchId, product.id)) ?? 0;
+      const available = Math.max(
+        0,
+        lots.reduce((sum, lot) => sum + lot.quantity, 0) - reserved,
+      );
+      if (available < productUnits) {
+        throw new UnprocessableEntityException({
+          code: "INSUFFICIENT_STOCK",
+          message: `Only ${available} units of "${product.name}" are available in the branch.`,
+          details: { available, requested: productUnits },
+        });
+      }
+
+      const stockBefore = await this.lowStockService.levels(tx, branchId, [
+        product.id,
+      ]);
+      const observation = `Conversión a insumo ${supply.name}${dto.observation ? ` · ${dto.observation}` : ""}`;
+      let pending = productUnits;
+      for (const lot of lots) {
+        if (pending === 0) break;
+        const taken = Math.min(lot.quantity, pending);
+        await tx.branchInventory.update({
+          where: { id: lot.id },
+          data: { quantity: { decrement: taken } },
+        });
+        await tx.inventoryMovement.create({
+          data: {
+            productId: product.id,
+            branchId,
+            originBranchId: null,
+            userId: currentUser.id,
+            movementType: "EXIT",
+            quantity: taken,
+            expirationDate: lot.expirationDate,
+            observation,
+          },
+        });
+        pending -= taken;
+      }
+      await this.lowStockService.notifyCrossings(tx, branchId, stockBefore);
+
+      const supplyQuantity = Number(
+        (Number(supply.productUnitQuantity) * productUnits).toFixed(3),
+      );
+      const stock = await tx.supplyStock.upsert({
+        where: { branchId_supplyId: { branchId, supplyId } },
+        create: { branchId, supplyId, quantity: supplyQuantity },
+        update: { quantity: { increment: supplyQuantity } },
+        select: { quantity: true },
+      });
+      await tx.supplyStockMovement.create({
+        data: {
+          branchId,
+          supplyId,
+          movementType: SupplyMovementType.ENTRY,
+          quantity: supplyQuantity,
+          observation: `Conversión de ${productUnits} × ${product.name}`,
+          userId: currentUser.id,
+        },
+      });
+      await this.auditService.createAuditLog(
+        {
+          userId: currentUser.id,
+          action: "CONVERT",
+          entity: "SUPPLY",
+          entityId: supplyId,
+          newData: {
+            branchId,
+            productId: product.id,
+            productUnits,
+            supplyQuantity,
+          },
+          reason: `Conversión de ${productUnits} × ${product.name} a ${supplyQuantity} ${supply.unitOfMeasure.abreviation} de ${supply.name}`,
+          ipAddress,
+        },
+        tx,
+      );
+
+      return {
+        supply: {
+          id: supply.id,
+          name: supply.name,
+          unit: supply.unitOfMeasure.abreviation,
+        },
+        product: {
+          id: product.id,
+          name: product.name,
+          referenceCode: product.referenceCode,
+        },
+        productUnits,
+        supplyQuantity,
+        resultingSupplyQuantity: Number(stock.quantity),
+        remainingProductUnits: available - productUnits,
+      };
+    });
+  }
 
   private stockQuery(conditions: Prisma.Sql[]) {
     const whereClause = Prisma.sql`WHERE ${Prisma.join(
@@ -65,6 +238,7 @@ export class SupplyStockService {
       CROSS JOIN branch b
       INNER JOIN unit_measure um ON um.id = s.unit_of_measure_id
       LEFT JOIN supply_stock ss ON ss.supply_id = s.id AND ss.branch_id = b.id
+      LEFT JOIN product sp ON sp.id = s.source_product_id
       ${whereClause}
     `;
   }
@@ -80,7 +254,10 @@ export class SupplyStockService {
         b.name                                AS "branchName",
         COALESCE(ss.quantity, 0)::text        AS "quantity",
         COALESCE(ss.minimum_quantity, 0)::text AS "minimumQuantity",
-        ss.updated_at                         AS "updatedAt"
+        ss.updated_at                         AS "updatedAt",
+        s.source_product_id                   AS "sourceProductId",
+        sp.name                               AS "sourceProductName",
+        s.product_unit_quantity::text         AS "productUnitQuantity"
       ${this.stockQuery(conditions)}
       ORDER BY s.name ASC, b.name ASC
       ${pagination}

@@ -14,11 +14,29 @@ import { ListSuppliesQueryDto } from "./dto/list-supplies-query.dto.js";
 
 interface SupplyWithUnit {
   unitOfMeasure: { id: string; name: string; abreviation: string };
+  productUnitQuantity?: unknown;
 }
+
+export const SUPPLY_LINK_SELECT = {
+  productUnitQuantity: true,
+  sourceProduct: { select: { id: true, name: true, referenceCode: true } },
+} as const;
 
 export function formatSupply<T extends SupplyWithUnit>(supply: T) {
   const { abreviation, ...unit } = supply.unitOfMeasure;
-  return { ...supply, unitOfMeasure: { ...unit, abbreviation: abreviation } };
+  return {
+    ...supply,
+    unitOfMeasure: { ...unit, abbreviation: abreviation },
+    ...("productUnitQuantity" in supply
+      ? {
+          productUnitQuantity:
+            supply.productUnitQuantity === null ||
+            supply.productUnitQuantity === undefined
+              ? null
+              : Number(supply.productUnitQuantity),
+        }
+      : {}),
+  };
 }
 
 @Injectable()
@@ -34,6 +52,7 @@ export class SuppliesService {
     ipAddress?: string,
   ) {
     const { name, unitOfMeasureId } = dto;
+    await this.assertSourceProduct(dto.sourceProductId);
 
     const existing = await this.prisma.supply.findFirst({
       where: { name: { equals: name, mode: "insensitive" } },
@@ -62,7 +81,16 @@ export class SuppliesService {
 
     return this.prisma.$transaction(async (tx) => {
       const supply = await tx.supply.create({
-        data: { name, unitOfMeasureId },
+        data: {
+          name,
+          unitOfMeasureId,
+          ...(dto.sourceProductId
+            ? {
+                sourceProductId: dto.sourceProductId,
+                productUnitQuantity: dto.productUnitQuantity,
+              }
+            : {}),
+        },
         select: {
           id: true,
           name: true,
@@ -70,6 +98,7 @@ export class SuppliesService {
           active: true,
           createdAt: true,
           updatedAt: true,
+          ...SUPPLY_LINK_SELECT,
         },
       });
 
@@ -105,6 +134,26 @@ export class SuppliesService {
     });
   }
 
+  private async assertSourceProduct(productId: string | undefined | null) {
+    if (!productId) return;
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { name: true, active: true },
+    });
+    if (!product) {
+      throw new NotFoundException({
+        code: "PRODUCT_NOT_FOUND",
+        message: "Product not found.",
+      });
+    }
+    if (!product.active) {
+      throw new UnprocessableEntityException({
+        code: "PRODUCT_INACTIVE",
+        message: `Product "${product.name}" is inactive.`,
+      });
+    }
+  }
+
   async findAll(query: ListSuppliesQueryDto) {
     const { page, limit, active, search } = query;
 
@@ -128,6 +177,7 @@ export class SuppliesService {
           id: true,
           name: true,
           unitOfMeasure: { select: { id: true, name: true, abreviation: true } },
+          ...SUPPLY_LINK_SELECT,
           active: true,
           createdAt: true,
           updatedAt: true,
@@ -153,6 +203,7 @@ export class SuppliesService {
         id: true,
         name: true,
         unitOfMeasure: { select: { id: true, name: true, abreviation: true } },
+        ...SUPPLY_LINK_SELECT,
         active: true,
         createdAt: true,
         updatedAt: true,
@@ -194,6 +245,20 @@ export class SuppliesService {
       }
     }
 
+    if (typeof dto.sourceProductId === "string") {
+      await this.assertSourceProduct(dto.sourceProductId);
+    }
+    if (
+      dto.productUnitQuantity !== undefined &&
+      dto.sourceProductId === undefined &&
+      !existing.sourceProductId
+    ) {
+      throw new UnprocessableEntityException({
+        code: "SUPPLY_NOT_LINKED",
+        message: "Link the supply to a product before setting its quantity.",
+      });
+    }
+
     if (dto.unitOfMeasureId !== undefined) {
       const unit = await this.prisma.unitMeasure.findUnique({
         where: { id: dto.unitOfMeasureId },
@@ -216,6 +281,16 @@ export class SuppliesService {
         data: {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           ...(dto.unitOfMeasureId !== undefined ? { unitOfMeasureId: dto.unitOfMeasureId } : {}),
+          ...(dto.sourceProductId === null
+            ? { sourceProductId: null, productUnitQuantity: null }
+            : {}),
+          ...(typeof dto.sourceProductId === "string"
+            ? { sourceProductId: dto.sourceProductId }
+            : {}),
+          ...(dto.productUnitQuantity !== undefined &&
+          dto.sourceProductId !== null
+            ? { productUnitQuantity: dto.productUnitQuantity }
+            : {}),
         },
         select: {
           id: true,
@@ -223,6 +298,7 @@ export class SuppliesService {
           unitOfMeasure: { select: { id: true, name: true, abreviation: true } },
           active: true,
           updatedAt: true,
+          ...SUPPLY_LINK_SELECT,
         },
       });
 

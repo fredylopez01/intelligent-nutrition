@@ -6,7 +6,7 @@ import type { SupplyStockRow } from '../types/supply'
 
 export const SUPPLY_MANAGE_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER']
 export const SUPPLY_MINIMUM_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER']
-export const SUPPLY_MOVEMENT_ROLES: RoleName[] = ['BRANCH_LEADER', 'BRANCH_ASSISTANT']
+export const SUPPLY_MOVEMENT_ROLES: RoleName[] = ['SUPERADMIN', 'BRANCH_LEADER', 'BRANCH_ASSISTANT']
 export const SUPPLY_NAME_MIN_LENGTH = 2
 export const SUPPLY_NAME_MAX_LENGTH = 150
 export const SUPPLY_OBSERVATION_MAX_LENGTH = 500
@@ -27,20 +27,41 @@ export function isSupplyLow(row: Pick<SupplyStockRow, 'quantity' | 'minimumQuant
   return supplyQuantity(row.quantity) < supplyQuantity(row.minimumQuantity)
 }
 
-export const supplySchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(
-      SUPPLY_NAME_MIN_LENGTH,
-      `El nombre debe tener al menos ${SUPPLY_NAME_MIN_LENGTH} caracteres.`,
-    )
-    .max(
-      SUPPLY_NAME_MAX_LENGTH,
-      `El nombre no puede superar los ${SUPPLY_NAME_MAX_LENGTH} caracteres.`,
-    ),
-  unitOfMeasureId: z.string().min(1, 'Elige la unidad de medida.'),
-})
+export const supplySchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(
+        SUPPLY_NAME_MIN_LENGTH,
+        `El nombre debe tener al menos ${SUPPLY_NAME_MIN_LENGTH} caracteres.`,
+      )
+      .max(
+        SUPPLY_NAME_MAX_LENGTH,
+        `El nombre no puede superar los ${SUPPLY_NAME_MAX_LENGTH} caracteres.`,
+      ),
+    unitOfMeasureId: z.string().min(1, 'Elige la unidad de medida.'),
+    linked: z.boolean(),
+    productUnitQuantity: z.string(),
+  })
+  .superRefine((values, context) => {
+    if (!values.linked) return
+    if (!values.productUnitQuantity.trim()) {
+      context.addIssue({
+        code: 'custom',
+        path: ['productUnitQuantity'],
+        message: 'Escribe cuánto rinde una unidad del producto.',
+      })
+      return
+    }
+    if (parseUnitQuantity(values.productUnitQuantity) === null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['productUnitQuantity'],
+        message: 'Usa un número mayor que 0 con máximo 3 decimales.',
+      })
+    }
+  })
 
 export type SupplyFormValues = z.infer<typeof supplySchema>
 
@@ -108,6 +129,51 @@ export const supplyMinimumSchema = z.object({
 
 export type SupplyMinimumValues = z.infer<typeof supplyMinimumSchema>
 
+export const CONVERSION_MAX_UNITS = 100
+
+export function productUnitsLabel(units: number): string {
+  return units === 1 ? '1 unidad' : `${units} unidades`
+}
+
+export function parseUnitQuantity(text: string): number | null {
+  const value = parseMinimum(text)
+  return value !== null && value > 0 ? value : null
+}
+
+export const unitQuantityField = z
+  .string()
+  .trim()
+  .min(1, 'Escribe cuánto rinde una unidad del producto.')
+  .refine(
+    (value) => parseUnitQuantity(value) !== null,
+    'Usa un número mayor que 0 con máximo 3 decimales.',
+  )
+
+export const supplyLinkSchema = z.object({ productUnitQuantity: unitQuantityField })
+
+export type SupplyLinkValues = z.infer<typeof supplyLinkSchema>
+
+export const conversionSchema = z.object({
+  productUnits: z
+    .string()
+    .trim()
+    .min(1, 'Escribe cuántas unidades vas a abrir.')
+    .refine(
+      (value) =>
+        WHOLE_PATTERN.test(value) && Number(value) > 0 && Number(value) <= CONVERSION_MAX_UNITS,
+      `Usa un número entero entre 1 y ${CONVERSION_MAX_UNITS}.`,
+    ),
+  observation: z
+    .string()
+    .trim()
+    .max(
+      SUPPLY_OBSERVATION_MAX_LENGTH,
+      `La nota no puede superar los ${SUPPLY_OBSERVATION_MAX_LENGTH} caracteres.`,
+    ),
+})
+
+export type ConversionValues = z.infer<typeof conversionSchema>
+
 export function resolveSupplyError(error: unknown, fallback: string): string {
   if (!(error instanceof ApiError)) return fallback
   switch (error.code) {
@@ -127,6 +193,14 @@ export function resolveSupplyError(error: unknown, fallback: string): string {
       return 'La sede está inactiva.'
     case 'BRANCH_SCOPE_VIOLATION':
       return 'No tienes acceso a esta sede.'
+    case 'SUPPLY_NOT_LINKED':
+      return 'El insumo no está ligado a un producto del catálogo.'
+    case 'PRODUCT_NOT_FOUND':
+      return 'El producto ya no existe en el catálogo. Elige otro.'
+    case 'PRODUCT_INACTIVE':
+      return 'El producto está inactivo en el catálogo.'
+    case 'INSUFFICIENT_STOCK':
+      return 'La sede no tiene suficientes unidades vigentes del producto. Recarga para ver lo disponible.'
   }
   if (error.status === 403) return 'Tu rol no puede hacer esta acción con los insumos.'
   if (error.status === 400) return 'Revisa los datos: hay un valor que el servidor no aceptó.'

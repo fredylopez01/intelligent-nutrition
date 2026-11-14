@@ -31,6 +31,11 @@ const transactionMock = {
     create: jest.fn<AsyncMock>(),
     findMany: jest.fn<AsyncMock>(),
   },
+  supplyStockMovement: {
+    create: jest.fn<AsyncMock>(),
+    findMany: jest.fn<AsyncMock>(),
+  },
+  supplyStock: { upsert: jest.fn<AsyncMock>() },
   sale: {
     findUnique: jest.fn<AsyncMock>(),
     update: jest.fn<AsyncMock>(),
@@ -142,6 +147,7 @@ describe("SalesService.reverse", () => {
     transactionMock.branchInventory.update.mockResolvedValue({});
     transactionMock.inventoryMovement.create.mockResolvedValue({});
     transactionMock.inventoryMovement.findMany.mockResolvedValue([]);
+    transactionMock.supplyStockMovement.findMany.mockResolvedValue([]);
     transactionMock.branchInventory.create.mockResolvedValue({});
     transactionMock.sale.update.mockResolvedValue({});
     transactionMock.sale.findUnique.mockResolvedValue(buildUpdatedSale());

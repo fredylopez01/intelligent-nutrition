@@ -14,11 +14,16 @@ import { hasDuplicateSupplies } from "./dto/recipe-ingredient.dto.js";
 import { ListRecipesQueryDto } from "./dto/list-recipes-query.dto.js";
 import { UpdateRecipeDto } from "./dto/update-recipe.dto.js";
 
+const recipeProductSelect = {
+  select: { id: true, name: true, referenceCode: true, price: true },
+} as const;
+
 const recipeDetailSelect = {
   id: true,
   name: true,
   description: true,
   active: true,
+  product: recipeProductSelect,
   createdAt: true,
   updatedAt: true,
   ingredients: {
@@ -43,6 +48,7 @@ const recipeListSelect = {
   name: true,
   description: true,
   active: true,
+  product: recipeProductSelect,
   createdAt: true,
   _count: { select: { ingredients: true } },
 } satisfies Prisma.RecipeSelect;
@@ -75,12 +81,24 @@ function isPrismaError(error: unknown, code: string): boolean {
   );
 }
 
+function formatProduct(product: RecipeDetail["product"]) {
+  return product
+    ? {
+        id: product.id,
+        name: product.name,
+        referenceCode: product.referenceCode,
+        price: product.price.toFixed(2),
+      }
+    : null;
+}
+
 function formatRecipe(recipe: RecipeDetail) {
   return {
     id: recipe.id,
     name: recipe.name,
     description: recipe.description,
     active: recipe.active,
+    product: formatProduct(recipe.product),
     ingredients: recipe.ingredients.map((ingredient) => ({
       id: ingredient.id,
       supply: {
@@ -182,6 +200,43 @@ export class RecipesService {
     }
   }
 
+  private async assertProduct(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    recipeId?: string,
+  ) {
+    const product = await tx.product.findUnique({
+      where: { id: productId },
+      select: {
+        id: true,
+        name: true,
+        active: true,
+        recipe: { select: { id: true, name: true } },
+      },
+    });
+    if (!product) {
+      throw new NotFoundException({
+        code: "PRODUCT_NOT_FOUND",
+        message: "The selected product does not exist.",
+        details: { productId },
+      });
+    }
+    if (!product.active) {
+      throw new UnprocessableEntityException({
+        code: "PRODUCT_INACTIVE",
+        message: `Product "${product.name}" is inactive.`,
+        details: { productId },
+      });
+    }
+    if (product.recipe && product.recipe.id !== recipeId) {
+      throw new ConflictException({
+        code: "PRODUCT_ALREADY_HAS_RECIPE",
+        message: `Product "${product.name}" is already prepared with the recipe "${product.recipe.name}".`,
+        details: { productId, recipeId: product.recipe.id },
+      });
+    }
+  }
+
   async create(
     dto: CreateRecipeDto,
     currentUser: AuthenticatedUser,
@@ -192,6 +247,9 @@ export class RecipesService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         await this.validateIngredients(tx, dto.ingredients);
+        if (dto.productId) {
+          await this.assertProduct(tx, dto.productId);
+        }
 
         const existing = await tx.recipe.findFirst({
           where: { name: { equals: dto.name, mode: "insensitive" } },
@@ -205,6 +263,7 @@ export class RecipesService {
           data: {
             name: dto.name,
             description: dto.description ?? null,
+            productId: dto.productId ?? null,
             createdById: currentUser.id,
             ingredients: {
               create: dto.ingredients.map((ingredient) => ({
@@ -272,6 +331,7 @@ export class RecipesService {
         name: recipe.name,
         description: recipe.description,
         active: recipe.active,
+        product: formatProduct(recipe.product),
         ingredientsCount: recipe._count.ingredients,
         createdAt: recipe.createdAt,
       })),
@@ -327,6 +387,9 @@ export class RecipesService {
         if (dto.ingredients) {
           await this.validateIngredients(tx, dto.ingredients);
         }
+        if (dto.productId) {
+          await this.assertProduct(tx, dto.productId, recipeId);
+        }
 
         if (dto.name !== undefined && dto.name !== existing.name) {
           const conflictingRecipe = await tx.recipe.findFirst({
@@ -348,6 +411,9 @@ export class RecipesService {
             ...(dto.description === undefined
               ? {}
               : { description: dto.description }),
+            ...(dto.productId === undefined
+              ? {}
+              : { productId: dto.productId }),
             ...(dto.ingredients === undefined
               ? {}
               : {

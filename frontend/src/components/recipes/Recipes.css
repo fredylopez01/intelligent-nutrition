@@ -242,3 +242,58 @@
     width: 100%;
   }
 }
+
+.recipe-form__product {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.recipe-form__product-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.25rem 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.recipe-form__product-toggle input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.125rem;
+  accent-color: var(--color-primary-strong);
+}
+
+.recipe-form__product-toggle strong {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.recipe-form__product-toggle small {
+  grid-column: 2;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.recipe-detail__product {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.recipe-detail__product strong {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.recipes-table__product {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}

@@ -1,19 +1,27 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 
 import { useAuth } from '../../hooks/useAuth'
 import { suppliesService } from '../../services/supplies.service'
 import { unitsService } from '../../services/units.service'
-import type { Supply } from '../../types/supply'
+import type { Supply, SupplySourceProduct } from '../../types/supply'
 import type { UnitOfMeasure } from '../../types/unit'
-import { resolveSupplyError, supplySchema, type SupplyFormValues } from '../../utils/supplies'
+import {
+  parseUnitQuantity,
+  resolveSupplyError,
+  supplySchema,
+  type SupplyFormValues,
+} from '../../utils/supplies'
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
 import { SelectField } from '../ui/SelectField'
 import { TextField } from '../ui/TextField'
 
+import { SupplyProductPicker } from './SupplyProductPicker'
+
 import '../categories/CategoryForm.css'
+import './Supplies.css'
 
 interface SupplyFormProps {
   onSaved: (supply: Supply) => void
@@ -31,15 +39,20 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [units, setUnits] = useState<UnitsResult | null>(null)
+  const [product, setProduct] = useState<SupplySourceProduct | null>(null)
+  const [productError, setProductError] = useState<string | null>(null)
   const {
     register,
     handleSubmit,
     setError,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<SupplyFormValues>({
     resolver: zodResolver(supplySchema),
-    defaultValues: { name: '', unitOfMeasureId: '' },
+    defaultValues: { name: '', unitOfMeasureId: '', linked: false, productUnitQuantity: '' },
   })
+  const linked = useWatch({ control, name: 'linked' })
+  const unitId = useWatch({ control, name: 'unitOfMeasureId' })
 
   useEffect(() => {
     let cancelled = false
@@ -56,13 +69,25 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
     }
   }, [reloadToken, token])
   const currentUnits = units?.key === reloadToken ? units : null
+  const unitAbbreviation = currentUnits?.units.find((unit) => unit.id === unitId)?.abbreviation
 
   const onSubmit = async (values: SupplyFormValues) => {
+    if (values.linked && !product) {
+      setProductError('Elige el producto del catálogo.')
+      return
+    }
     setSubmitError(null)
+    const quantity = parseUnitQuantity(values.productUnitQuantity)
     try {
       onSaved(
         await suppliesService.create(
-          { name: values.name.trim(), unitOfMeasureId: values.unitOfMeasureId },
+          {
+            name: values.name.trim(),
+            unitOfMeasureId: values.unitOfMeasureId,
+            ...(values.linked && product && quantity !== null
+              ? { sourceProductId: product.id, productUnitQuantity: quantity }
+              : {}),
+          },
           token,
         ),
       )
@@ -80,7 +105,14 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
   }
 
   return (
-    <form className="category-form" onSubmit={handleSubmit(onSubmit)} noValidate>
+    <form
+      className="category-form"
+      onSubmit={handleSubmit(onSubmit, (invalid) => {
+        if (linked && !product && !invalid.linked)
+          setProductError('Elige el producto del catálogo.')
+      })}
+      noValidate
+    >
       {submitError && <Alert tone="error">{submitError}</Alert>}
       <TextField
         id="supply-name"
@@ -111,6 +143,38 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
           error={errors.unitOfMeasureId?.message}
           {...register('unitOfMeasureId')}
         />
+      )}
+      <label className="supply-form__link-toggle" htmlFor="supply-linked">
+        <input id="supply-linked" type="checkbox" disabled={isSubmitting} {...register('linked')} />
+        <strong>Viene de un producto del catálogo</strong>
+        <small>
+          Úsalo cuando una receta necesita parte de un producto que se vende, como una porción de
+          proteína.
+        </small>
+      </label>
+      {linked && (
+        <div className="supply-form__link">
+          <SupplyProductPicker
+            id="supply-product-search"
+            selected={product}
+            onSelect={(next) => {
+              setProduct(next)
+              setProductError(null)
+            }}
+            disabled={isSubmitting}
+            error={productError ?? undefined}
+          />
+          <TextField
+            id="supply-product-quantity"
+            label={`Cuánto rinde una unidad del producto${unitAbbreviation ? ` (${unitAbbreviation})` : ''}`}
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="Ej. 900"
+            hint="Ej. un tarro de proteína de 900 g rinde 900 si el insumo se mide en gramos."
+            error={errors.productUnitQuantity?.message}
+            {...register('productUnitQuantity')}
+          />
+        </div>
       )}
       <p className="category-form__note">
         El insumo queda disponible en todas las sedes con stock 0. Registra una entrada para sumar

@@ -32,6 +32,8 @@ import { SuppliesModule } from "./modules/supplies/supplies.module.js";
 import { CashShiftsModule } from "./modules/cash-shifts/cash-shifts.module.js";
 import { RecipesModule } from "./modules/recipes/recipes.module.js";
 import { CatalogModule } from "./modules/catalog/catalog.module.js";
+import { OnlineOrdersModule } from "./modules/online-orders/online-orders.module.js";
+import { SupplyPurchasesModule } from "./modules/supply-purchases/supply-purchases.module.js";
 
 @Module({
   imports: [
@@ -68,6 +70,8 @@ import { CatalogModule } from "./modules/catalog/catalog.module.js";
     CashShiftsModule,
     RecipesModule,
     CatalogModule,
+    OnlineOrdersModule,
+    SupplyPurchasesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -20,7 +20,17 @@ import {
   businessDate,
   businessDayBounds,
 } from "../../common/utils/business-day.util.js";
+import {
+  reservationKey,
+  reservedUnits,
+} from "../../common/utils/stock-reservations.util.js";
 import { PromotionsService } from "../promotions/promotions.service.js";
+import {
+  loadRecipes,
+  roundQuantity,
+  supplyStockMap,
+  type PreparedRecipe,
+} from "../recipes/recipe-consumption.js";
 
 const saleSelect = {
   id: true,
@@ -46,11 +56,25 @@ const saleSelect = {
     },
   },
   customer: {
-    select: { personId: true, fullName: true },
+    select: {
+      personId: true,
+      fullName: true,
+      person: {
+        select: {
+          documentNumber: true,
+          email: true,
+          phone: true,
+          address: true,
+          businessName: true,
+          documentType: { select: { code: true, name: true } },
+        },
+      },
+    },
   },
   details: {
     select: {
       productId: true,
+      recipeId: true,
       quantity: true,
       unitPrice: true,
       subtotal: true,
@@ -103,6 +127,12 @@ function formatSaleResponse(sale: SaleWithRelations) {
       ? {
           id: sale.customer.personId,
           fullName: sale.customer.fullName,
+          documentType: sale.customer.person.documentType,
+          documentNumber: sale.customer.person.documentNumber,
+          email: sale.customer.person.email,
+          phone: sale.customer.person.phone,
+          address: sale.customer.person.address,
+          isCompany: Boolean(sale.customer.person.businessName),
         }
       : null,
     saleAt: sale.saleAt,
@@ -120,6 +150,7 @@ function formatSaleResponse(sale: SaleWithRelations) {
       productId: detail.productId,
       productName: detail.product.name,
       referenceCode: detail.product.referenceCode,
+      recipeId: detail.recipeId ?? null,
       quantity: detail.quantity,
       unitPrice: Number(detail.unitPrice).toFixed(2),
       subtotal: Number(detail.subtotal).toFixed(2),
@@ -151,7 +182,11 @@ export class SalesService {
     private readonly promotionsService: PromotionsService,
   ) {}
 
-  async create(dto: CreateSaleDto, currentUser: AuthenticatedUser) {
+  async create(
+    dto: CreateSaleDto,
+    currentUser: AuthenticatedUser,
+    options: { onlineOrderId?: string; client?: Prisma.TransactionClient } = {},
+  ) {
     const { branchId, customerId, items, payments } = dto;
 
     this.assertBranchScope(branchId, currentUser);
@@ -166,7 +201,7 @@ export class SalesService {
 
     const paymentMethodIds = payments.map((payment) => payment.paymentMethodId);
 
-    return this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       const branch = await tx.branch.findUnique({
         where: { id: branchId },
         select: { id: true, name: true, active: true },
@@ -250,6 +285,12 @@ export class SalesService {
         }
       }
 
+      const recipeForItem = await this.resolveRecipes(tx, items);
+      const stockedItems = items.filter(
+        (item) => !recipeForItem.has(item.productId),
+      );
+      const stockedProductIds = stockedItems.map((item) => item.productId);
+
       const paymentMethods = await tx.paymentMethod.findMany({
         where: { id: { in: paymentMethodIds } },
         select: { id: true, code: true, name: true, active: true },
@@ -309,7 +350,7 @@ export class SalesService {
 
         return {
           productId: item.productId,
-          recipeId: item.recipeId ?? null,
+          recipeId: recipeForItem.get(item.productId)?.id ?? null,
           quantity: item.quantity,
           unitPrice: toMoney(unitPriceCents),
           subtotal: toMoney(itemSubtotalCents),
@@ -395,6 +436,12 @@ export class SalesService {
         }>
       >();
       const today = startOfTodayUtc(now);
+      const reserved = await reservedUnits(tx, {
+        productIds: stockedProductIds,
+        branchIds: [branchId],
+        now,
+        excludeOrderId: options.onlineOrderId,
+      });
       const insufficientStock: Array<{
         productId: string;
         productName: string;
@@ -402,7 +449,7 @@ export class SalesService {
         available: number;
       }> = [];
 
-      for (const item of items) {
+      for (const item of stockedItems) {
         await tx.$queryRaw`
           SELECT id FROM branch_inventory
           WHERE branch_id = ${branchId}::uuid
@@ -425,7 +472,11 @@ export class SalesService {
           orderBy: { expirationDate: "asc" },
         });
 
-        const available = lots.reduce((sum, lot) => sum + lot.quantity, 0);
+        const available = Math.max(
+          0,
+          lots.reduce((sum, lot) => sum + lot.quantity, 0) -
+            (reserved.get(reservationKey(branchId, item.productId)) ?? 0),
+        );
 
         if (available < item.quantity) {
           insufficientStock.push({
@@ -447,10 +498,17 @@ export class SalesService {
         });
       }
 
+      const supplyNeeds = await this.checkSupplyStock(
+        tx,
+        branchId,
+        items,
+        recipeForItem,
+      );
+
       const stockBefore = await this.lowStockService.levels(
         tx,
         branchId,
-        productIds,
+        stockedProductIds,
       );
 
       const saleNumber = await this.generateSaleNumber(tx, branchId, now);
@@ -478,7 +536,7 @@ export class SalesService {
         select: saleSelect,
       });
 
-      for (const item of items) {
+      for (const item of stockedItems) {
         let remainingToDiscount = item.quantity;
 
         for (const lot of lotsByProduct.get(item.productId) ?? []) {
@@ -513,10 +571,34 @@ export class SalesService {
         }
       }
 
+      for (const need of supplyNeeds) {
+        const quantity = new Prisma.Decimal(need.required.toFixed(3));
+        await tx.supplyStock.update({
+          where: {
+            branchId_supplyId: { branchId, supplyId: need.supplyId },
+          },
+          data: { quantity: { decrement: quantity } },
+        });
+        await tx.supplyStockMovement.create({
+          data: {
+            branchId,
+            supplyId: need.supplyId,
+            movementType: "EXIT",
+            quantity,
+            observation: `Sale ${saleNumber}`,
+            userId: currentUser.id,
+            saleId: sale.id,
+            movementAt: now,
+          },
+        });
+      }
+
       await this.lowStockService.notifyCrossings(tx, branchId, stockBefore);
 
       return formatSaleResponse(sale);
-    });
+    };
+
+    return options.client ? run(options.client) : this.prisma.$transaction(run);
   }
 
   async findAll(query: ListSalesQueryDto, currentUser: AuthenticatedUser) {
@@ -702,6 +784,7 @@ export class SalesService {
             select: {
               id: true,
               productId: true,
+              recipeId: true,
               quantity: true,
             },
           },
@@ -752,7 +835,8 @@ export class SalesService {
         });
       }
 
-      const saleProductIds = sale.details.map((detail) => detail.productId);
+      const stockedDetails = sale.details.filter((detail) => !detail.recipeId);
+      const saleProductIds = stockedDetails.map((detail) => detail.productId);
       const stockBefore = await this.lowStockService.levels(
         tx,
         sale.branchId,
@@ -767,7 +851,7 @@ export class SalesService {
         select: { productId: true, quantity: true, expirationDate: true },
       });
 
-      for (const detail of sale.details) {
+      for (const detail of stockedDetails) {
         await tx.$queryRaw`
           SELECT id FROM branch_inventory
           WHERE branch_id = ${sale.branchId}::uuid
@@ -857,6 +941,39 @@ export class SalesService {
         }
       }
 
+      const soldSupplies = await tx.supplyStockMovement.findMany({
+        where: { saleId: sale.id, movementType: "EXIT" },
+        select: { supplyId: true, quantity: true },
+        orderBy: { supplyId: "asc" },
+      });
+      for (const movement of soldSupplies) {
+        await tx.supplyStock.upsert({
+          where: {
+            branchId_supplyId: {
+              branchId: sale.branchId,
+              supplyId: movement.supplyId,
+            },
+          },
+          update: { quantity: { increment: movement.quantity } },
+          create: {
+            branchId: sale.branchId,
+            supplyId: movement.supplyId,
+            quantity: movement.quantity,
+          },
+        });
+        await tx.supplyStockMovement.create({
+          data: {
+            branchId: sale.branchId,
+            supplyId: movement.supplyId,
+            movementType: "ENTRY",
+            quantity: movement.quantity,
+            observation: `Reversal of sale ${sale.saleNumber}: ${reason}`,
+            userId: currentUser.id,
+            saleId: sale.id,
+          },
+        });
+      }
+
       await tx.sale.update({
         where: { id: sale.id },
         data: {
@@ -909,6 +1026,127 @@ export class SalesService {
 
       return formatSaleResponse(updatedSale);
     });
+  }
+
+  private async resolveRecipes(
+    tx: Prisma.TransactionClient,
+    items: CreateSaleDto["items"],
+  ): Promise<Map<string, PreparedRecipe>> {
+    const productIds = items.map((item) => item.productId);
+    const explicitIds = [
+      ...new Set(
+        items.flatMap((item) => (item.recipeId ? [item.recipeId] : [])),
+      ),
+    ];
+    const recipes = await loadRecipes(tx, {
+      OR: [
+        { productId: { in: productIds } },
+        ...(explicitIds.length > 0 ? [{ id: { in: explicitIds } }] : []),
+      ],
+    });
+    const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+    const byProduct = new Map(
+      recipes.flatMap((recipe) =>
+        recipe.productId ? [[recipe.productId, recipe] as const] : [],
+      ),
+    );
+    const resolved = new Map<string, PreparedRecipe>();
+
+    for (const item of items) {
+      const recipe = item.recipeId
+        ? byId.get(item.recipeId)
+        : byProduct.get(item.productId);
+      if (item.recipeId && !recipe) {
+        throw new NotFoundException({
+          code: "RECIPE_NOT_FOUND",
+          message: `Recipe ${item.recipeId} not found.`,
+          details: { productId: item.productId, recipeId: item.recipeId },
+        });
+      }
+      if (!recipe) continue;
+      if (recipe.productId && recipe.productId !== item.productId) {
+        throw new UnprocessableEntityException({
+          code: "RECIPE_PRODUCT_MISMATCH",
+          message: `Recipe "${recipe.name}" belongs to another product.`,
+          details: { productId: item.productId, recipeId: recipe.id },
+        });
+      }
+      if (!recipe.active) {
+        throw new UnprocessableEntityException({
+          code: "RECIPE_INACTIVE",
+          message: `Recipe "${recipe.name}" is inactive.`,
+          details: { productId: item.productId, recipeId: recipe.id },
+        });
+      }
+      if (recipe.unitMismatch) {
+        throw new UnprocessableEntityException({
+          code: "RECIPE_UNIT_MISMATCH",
+          message: `Recipe "${recipe.name}" uses a unit that cannot be converted for "${recipe.unitMismatch.supplyName}".`,
+          details: { recipeId: recipe.id, ...recipe.unitMismatch },
+        });
+      }
+      resolved.set(item.productId, recipe);
+    }
+
+    return resolved;
+  }
+
+  private async checkSupplyStock(
+    tx: Prisma.TransactionClient,
+    branchId: string,
+    items: CreateSaleDto["items"],
+    recipeForItem: Map<string, PreparedRecipe>,
+  ) {
+    const needs = new Map<
+      string,
+      { supplyId: string; supplyName: string; unit: string; required: number }
+    >();
+    for (const item of items) {
+      const recipe = recipeForItem.get(item.productId);
+      if (!recipe) continue;
+      for (const ingredient of recipe.ingredients) {
+        const need = needs.get(ingredient.supplyId) ?? {
+          supplyId: ingredient.supplyId,
+          supplyName: ingredient.supplyName,
+          unit: ingredient.unit,
+          required: 0,
+        };
+        need.required = roundQuantity(
+          need.required + ingredient.perUnit * item.quantity,
+        );
+        needs.set(ingredient.supplyId, need);
+      }
+    }
+    if (needs.size === 0) return [];
+
+    const supplyIds = [...needs.keys()].sort();
+    for (const supplyId of supplyIds) {
+      await tx.$queryRaw`
+        SELECT id FROM supply_stock
+        WHERE branch_id = ${branchId}::uuid
+          AND supply_id = ${supplyId}::uuid
+        FOR UPDATE
+      `;
+    }
+    const stock = await supplyStockMap(tx, branchId, supplyIds);
+    const insufficient = [...needs.values()]
+      .filter((need) => (stock.get(need.supplyId) ?? 0) + 1e-9 < need.required)
+      .map((need) => ({
+        supplyId: need.supplyId,
+        supplyName: need.supplyName,
+        unit: need.unit,
+        required: need.required,
+        available: roundQuantity(stock.get(need.supplyId) ?? 0),
+      }));
+    if (insufficient.length > 0) {
+      throw new UnprocessableEntityException({
+        code: "INSUFFICIENT_SUPPLY_STOCK",
+        message: "One or more supplies do not have enough stock.",
+        details: { items: insufficient },
+      });
+    }
+
+    return [...needs.values()];
   }
 
   private async generateSaleNumber(

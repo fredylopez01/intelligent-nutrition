@@ -16,11 +16,19 @@ export interface RecipeIngredient {
   unitOfMeasure: RecipeUnit
 }
 
+export interface RecipeProduct {
+  id: string
+  name: string
+  referenceCode: string
+  price: string
+}
+
 export interface RecipeSummary {
   id: string
   name: string
   description: string | null
   active: boolean
+  product?: RecipeProduct | null
   ingredientsCount: number
   createdAt: string
 }
@@ -30,6 +38,7 @@ export interface Recipe {
   name: string
   description: string | null
   active: boolean
+  product?: RecipeProduct | null
   ingredients: RecipeIngredient[]
   createdAt: string
   updatedAt: string
@@ -57,6 +66,7 @@ export interface CreateRecipePayload {
   name: string
   description?: string | null
   ingredients: RecipeIngredientPayload[]
+  productId?: string | null
 }
 
 export type UpdateRecipePayload = Partial<CreateRecipePayload>

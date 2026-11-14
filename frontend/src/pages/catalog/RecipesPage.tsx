@@ -19,7 +19,12 @@ import { AppLayout } from '../../layouts/AppLayout'
 import { recipesService } from '../../services/recipes.service'
 import type { Recipe, RecipeSummary } from '../../types/recipe'
 import { hasRole } from '../../utils/categories'
-import { RECIPE_MANAGE_ROLES, RECIPE_STATUS_ROLES, resolveRecipeError } from '../../utils/recipes'
+import {
+  RECIPE_MANAGE_ROLES,
+  RECIPE_STATUS_ROLES,
+  ingredientsLabel,
+  resolveRecipeError,
+} from '../../utils/recipes'
 
 import './CatalogPage.css'
 import '../../components/recipes/Recipes.css'
@@ -121,7 +126,7 @@ export function RecipesPage() {
   const handleCreated = (recipe: Recipe) => {
     setIsCreateOpen(false)
     setFeedback(
-      `La receta ${recipe.name} quedó registrada con ${recipe.ingredients.length} ingredientes.`,
+      `La receta ${recipe.name} quedó registrada con ${ingredientsLabel(recipe.ingredients.length)}${recipe.product ? ` y se vende en el POS como ${recipe.product.name}` : ''}.`,
     )
     if (page === 1) refetch()
     else setPage(1)

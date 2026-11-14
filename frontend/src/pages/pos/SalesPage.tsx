@@ -23,6 +23,7 @@ import type { Sale, SaleStatus, SaleSummary } from '../../types/sale'
 import { hasRole } from '../../utils/categories'
 import { downloadSaleReceipt } from '../../utils/pdf/saleReceiptPdf'
 import { formatPrice } from '../../utils/products'
+import { receiptButtonLabel } from '../../utils/saleDocuments'
 import { SALE_REVERSE_ROLES, SALE_STATUS_LABELS, resolveSaleError } from '../../utils/sales'
 
 import '../inventory/InventoryPage.css'
@@ -328,7 +329,7 @@ function SaleDialog({ summary, canReverse, onReversed, onClose }: SaleDialogProp
           Cerrar
         </Button>
         <DownloadPdfButton
-          label="Descargar comprobante"
+          label={receiptButtonLabel(sale)}
           onDownload={() => downloadSaleReceipt(sale)}
         />
         {canReverse && result.sale.status === 'COMPLETED' && (

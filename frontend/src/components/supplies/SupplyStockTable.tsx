@@ -11,6 +11,8 @@ interface SupplyStockTableProps {
   showBranch: boolean
   onMove?: (row: SupplyStockRow) => void
   onEditMinimum?: (row: SupplyStockRow) => void
+  onConvert?: (row: SupplyStockRow) => void
+  onLink?: (row: SupplyStockRow) => void
 }
 
 export function SupplyStockTable({
@@ -18,8 +20,10 @@ export function SupplyStockTable({
   showBranch,
   onMove,
   onEditMinimum,
+  onConvert,
+  onLink,
 }: SupplyStockTableProps) {
-  const hasActions = Boolean(onMove || onEditMinimum)
+  const hasActions = Boolean(onMove || onEditMinimum || onConvert || onLink)
   return (
     <table className="inventory-table supplies-table">
       <caption className="sr-only">Stock de insumos por sede</caption>
@@ -54,8 +58,17 @@ export function SupplyStockTable({
           const actions: RowAction[] = []
           if (onMove)
             actions.push({ label: 'Registrar entrada o salida', onSelect: () => onMove(row) })
+          if (onConvert && row.sourceProduct) {
+            actions.push({ label: 'Convertir producto a insumo', onSelect: () => onConvert(row) })
+          }
           if (onEditMinimum) {
             actions.push({ label: 'Cambiar stock mínimo', onSelect: () => onEditMinimum(row) })
+          }
+          if (onLink) {
+            actions.push({
+              label: row.sourceProduct ? 'Cambiar producto de origen' : 'Ligar a un producto',
+              onSelect: () => onLink(row),
+            })
           }
           return (
             <tr
@@ -65,6 +78,12 @@ export function SupplyStockTable({
               <td>
                 <span className="inventory-table__identity">
                   <span className="inventory-table__name">{row.supply.name}</span>
+                  {row.sourceProduct && (
+                    <span className="supplies-table__source">
+                      De {row.sourceProduct.name} · 1 und ={' '}
+                      {formatSupplyQuantity(row.sourceProduct.unitQuantity, unit)}
+                    </span>
+                  )}
                   <span className="inventory-table__reference supplies-table__inline">
                     {showBranch && row.branchName && (
                       <span className="supplies-table__inline-branch">{row.branchName}</span>

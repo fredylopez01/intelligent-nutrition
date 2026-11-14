@@ -6,11 +6,19 @@ export interface SupplyUnit {
   abbreviation: string
 }
 
+export interface SupplySourceProduct {
+  id: string
+  name: string
+  referenceCode?: string
+}
+
 export interface Supply {
   id: string
   name: string
   unitOfMeasure: SupplyUnit
   active: boolean
+  sourceProduct?: SupplySourceProduct | null
+  productUnitQuantity?: number | null
   createdAt: string
   updatedAt?: string
 }
@@ -30,6 +38,13 @@ export interface SuppliesListResponse {
 export interface CreateSupplyPayload {
   name: string
   unitOfMeasureId: string
+  sourceProductId?: string
+  productUnitQuantity?: number
+}
+
+export interface UpdateSupplyLinkPayload {
+  sourceProductId: string | null
+  productUnitQuantity?: number
 }
 
 export interface SupplyStockRow {
@@ -43,6 +58,7 @@ export interface SupplyStockRow {
   quantity: string
   minimumQuantity: string
   lowStock: boolean
+  sourceProduct?: { id: string; name: string; unitQuantity: number } | null
   updatedAt: string | null
 }
 
@@ -85,4 +101,20 @@ export interface UpdateSupplyMinimumPayload {
   branchId: string
   supplyId: string
   minimumQuantity: number
+}
+
+export interface ConvertProductPayload {
+  branchId: string
+  supplyId: string
+  productUnits: number
+  observation?: string
+}
+
+export interface ProductConversion {
+  supply: { id: string; name: string }
+  product: { id: string; name: string }
+  productUnits: number
+  supplyQuantity: number
+  resultingSupplyQuantity: number
+  remainingProductUnits: number
 }

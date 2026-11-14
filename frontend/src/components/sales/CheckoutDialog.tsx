@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { ApiError } from '../../services/http'
 import { salesService } from '../../services/sales.service'
+import type { Customer } from '../../types/customer'
 import type { PaymentMethod } from '../../types/paymentMethod'
 import type { Sale } from '../../types/sale'
 import { formatPrice } from '../../utils/products'
@@ -19,6 +20,7 @@ import {
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
 
+import { CheckoutCustomer } from './CheckoutCustomer'
 import type { SelectionLine } from './PosSelection'
 
 import './PointOfSale.css'
@@ -55,6 +57,9 @@ export function CheckoutDialog({
   const { token } = useAuth()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<{ message: string; shortages: StockShortage[] } | null>(null)
+  const [withCustomer, setWithCustomer] = useState(false)
+  const [customer, setCustomer] = useState<Customer | null>(null)
+  const customerReady = !withCustomer || customer !== null
   const promotionsLoading = discount.needsPromotions && promotionsStatus === 'loading'
   const promotionsFailed = discount.needsPromotions && promotionsStatus === 'error'
   const totalReady = !promotionsLoading && !promotionsFailed && discountReady(discount)
@@ -67,7 +72,7 @@ export function CheckoutDialog({
       : discount.label
   const balance = paymentsBalance(payments, totalCents)
   const isSplit = payments.length > 1
-  const canCharge = totalReady && balance.matches && !submitting
+  const canCharge = totalReady && balance.matches && customerReady && !submitting
 
   const confirm = async () => {
     setSubmitting(true)
@@ -76,9 +81,11 @@ export function CheckoutDialog({
       const sale = await salesService.create(
         {
           branchId: branch.id,
+          ...(withCustomer && customer ? { customerId: customer.id } : {}),
           items: lines.map((line) => ({
             productId: line.product.productId,
             quantity: line.quantity,
+            ...(line.product.recipeId ? { recipeId: line.product.recipeId } : {}),
           })),
           ...discount.payload,
           payments: payments.map((payment, index) => ({
@@ -92,7 +99,12 @@ export function CheckoutDialog({
       onCompleted(sale)
     } catch (caught) {
       const shortages = stockShortages(caught)
-      if (shortages.length > 0) onStockChanged()
+      if (
+        shortages.length > 0 ||
+        (caught instanceof ApiError && caught.code === 'INSUFFICIENT_SUPPLY_STOCK')
+      ) {
+        onStockChanged()
+      }
       if (
         caught instanceof ApiError &&
         (caught.code === 'PAYMENT_TOTAL_MISMATCH' || caught.code === 'PROMOTION_NOT_APPLICABLE')
@@ -143,6 +155,28 @@ export function CheckoutDialog({
           </li>
         ))}
       </ul>
+
+      <fieldset className="pos-checkout__customer">
+        <legend className="sr-only">Cliente de la venta</legend>
+        <label className="pos-checkout__customer-toggle">
+          <input
+            type="checkbox"
+            checked={withCustomer}
+            onChange={(event) => setWithCustomer(event.target.checked)}
+          />
+          <strong>Factura con datos del cliente</strong>
+          <small>
+            Asocia la venta a un cliente registrado. La factura sale con su documento, correo,
+            teléfono y dirección, lista para la factura electrónica.
+          </small>
+        </label>
+        {withCustomer && <CheckoutCustomer customer={customer} onChange={setCustomer} />}
+        {withCustomer && !customer && (
+          <p className="pos-checkout__customer-hint">
+            Elige o registra el cliente para poder cobrar.
+          </p>
+        )}
+      </fieldset>
 
       {discount.promotionError && !promotionsLoading && !promotionsFailed && (
         <Alert tone="error">{discount.promotionError}</Alert>

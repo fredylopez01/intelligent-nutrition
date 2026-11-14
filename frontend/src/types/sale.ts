@@ -9,8 +9,11 @@ export interface SellableProduct {
   primaryImageUrl: string | null
   price: string
   availableQuantity: number
+  reservedQuantity?: number
   unit?: string
   category?: { id: string; name: string }
+  prepared?: boolean
+  recipeId?: string | null
 }
 
 export interface SellableProductsParams {
@@ -25,13 +28,24 @@ export interface SellableProductsResponse {
   meta: PaginationMeta
 }
 
+export interface SaleCustomer {
+  id: string
+  fullName: string
+  documentType?: { code: string; name: string }
+  documentNumber?: string
+  email?: string
+  phone?: string
+  address?: string
+  isCompany?: boolean
+}
+
 export interface SaleSummary {
   id: string
   saleNumber: string
   status: SaleStatus
   branch: { id: string; name: string }
   user: { id: string; fullName: string }
-  customer: { id: string; fullName: string } | null
+  customer: SaleCustomer | null
   saleAt: string
   subtotal: string
   discountAmount: string
@@ -46,6 +60,7 @@ export interface SaleItem {
   productId: string
   productName: string
   referenceCode: string
+  recipeId?: string | null
   quantity: number
   unitPrice: string
   subtotal: string
@@ -87,7 +102,7 @@ export interface SalesListResponse {
 export interface CreateSalePayload {
   branchId: string
   customerId?: string | null
-  items: { productId: string; quantity: number }[]
+  items: { productId: string; quantity: number; recipeId?: string }[]
   promotionId?: string | null
   discountAmount?: string
   discountReason?: string | null

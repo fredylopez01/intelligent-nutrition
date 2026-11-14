@@ -63,6 +63,19 @@ const tx = {
     findUnique: jest.fn<AsyncMock>(),
     update: jest.fn<AsyncMock>(),
   },
+  onlineOrderItem: {
+    findMany: jest.fn<AsyncMock>(),
+  },
+  recipe: { findMany: jest.fn<AsyncMock>() },
+  supplyStock: {
+    findMany: jest.fn<AsyncMock>(),
+    update: jest.fn<AsyncMock>(),
+    upsert: jest.fn<AsyncMock>(),
+  },
+  supplyStockMovement: {
+    create: jest.fn<AsyncMock>(),
+    findMany: jest.fn<AsyncMock>(),
+  },
   inventoryMovement: {
     create: jest.fn<AsyncMock>(),
     findMany: jest.fn<AsyncMock>(),
@@ -103,6 +116,9 @@ describe("SalesService lots", () => {
   beforeEach(() => {
     jest.useFakeTimers({ now: new Date("2026-10-25T15:00:00.000Z") });
     jest.resetAllMocks();
+    tx.onlineOrderItem.findMany.mockResolvedValue([]);
+    tx.recipe.findMany.mockResolvedValue([]);
+    tx.supplyStockMovement.findMany.mockResolvedValue([]);
     prisma.$transaction.mockImplementation((operation) => operation(tx));
     tx.branch.findUnique.mockResolvedValue({
       id: branchId,
@@ -272,6 +288,48 @@ describe("SalesService lots", () => {
     expect(entries).toEqual([
       expect.objectContaining({ movementType: "ENTRY", quantity: 2, saleId }),
       expect.objectContaining({ movementType: "ENTRY", quantity: 1, saleId }),
+    ]);
+  });
+
+  it("gives the supplies back when the reversed sale had a prepared product", async () => {
+    tx.sale.findUnique
+      .mockResolvedValueOnce({
+        id: saleId,
+        saleNumber: "V-20261025-0002",
+        status: "COMPLETED",
+        branchId,
+        saleAt: new Date("2026-10-25T14:00:00.000Z"),
+        total: "20000.00",
+        details: [
+          { id: "detail-1", productId, recipeId: "recipe-1", quantity: 2 },
+        ],
+      })
+      .mockResolvedValue(storedSale);
+    tx.inventoryMovement.findMany.mockResolvedValue([]);
+    tx.supplyStockMovement.findMany.mockResolvedValue([
+      { supplyId: "supply-milk", quantity: "0.500" },
+      { supplyId: "supply-whey", quantity: "60.000" },
+    ]);
+
+    await service.reverse(saleId, { reason: "Cliente no lo quiso" }, leader);
+
+    expect(tx.branchInventory.findMany).not.toHaveBeenCalled();
+    expect(tx.supplyStock.upsert).toHaveBeenCalledWith({
+      where: { branchId_supplyId: { branchId, supplyId: "supply-whey" } },
+      update: { quantity: { increment: "60.000" } },
+      create: { branchId, supplyId: "supply-whey", quantity: "60.000" },
+    });
+    const entries = tx.supplyStockMovement.create.mock.calls.map(
+      ([arg]) => (arg as { data: Record<string, unknown> }).data,
+    );
+    expect(entries).toEqual([
+      expect.objectContaining({
+        supplyId: "supply-milk",
+        movementType: "ENTRY",
+        saleId,
+        observation: "Reversal of sale V-20261025-0002: Cliente no lo quiso",
+      }),
+      expect.objectContaining({ supplyId: "supply-whey", saleId }),
     ]);
   });
 

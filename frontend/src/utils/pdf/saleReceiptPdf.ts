@@ -1,6 +1,7 @@
 import type { Sale } from '../../types/sale'
 import { formatMovementDate } from '../inventoryMovements'
 import { formatPrice } from '../products'
+import { isInvoice } from '../saleDocuments'
 import { SALE_STATUS_LABELS } from '../sales'
 
 import {
@@ -19,21 +20,27 @@ function money(value: string | number): string {
 }
 
 export function saleReceiptFileName(sale: Sale): string {
-  return `comprobante-${sale.saleNumber}.pdf`
+  return `${isInvoice(sale) ? 'factura' : 'comprobante'}-${sale.saleNumber}.pdf`
 }
 
 export async function downloadSaleReceipt(sale: Sale, now = new Date()) {
   const branch = await fetchBranchContact(sale.branch.id)
+  const invoice = isInvoice(sale)
   const pdf = await createBrandedPdf(
     {
-      title: 'Comprobante de venta',
+      title: invoice ? 'Factura de venta' : 'Comprobante de venta',
       reference: sale.saleNumber,
       issuer: { name: sale.branch.name, address: branch?.address, phone: branch?.phone },
       meta: [
         ['Fecha de compra', formatMovementDate(sale.saleAt)],
         ['Estado', SALE_STATUS_LABELS[sale.status]],
         ['Atendió', sale.user.fullName],
-        ['Cliente', sale.customer?.fullName ?? 'Cliente no identificado'],
+        ...(invoice
+          ? []
+          : ([['Cliente', sale.customer?.fullName ?? 'Cliente no identificado']] as [
+              string,
+              string,
+            ][])),
       ],
     },
     now,
@@ -41,6 +48,42 @@ export async function downloadSaleReceipt(sale: Sale, now = new Date()) {
   const { doc, autoTable } = pdf
   const right = PAGE.width - PAGE.margin
   let y = pdf.cursorY
+
+  if (invoice && sale.customer) {
+    const customer = sale.customer
+    const fields: [string, string][] = [
+      [customer.isCompany ? 'Razón social' : 'Nombre', customer.fullName],
+      [
+        customer.documentType?.name ?? 'Documento',
+        `${customer.documentType?.code ?? ''} ${customer.documentNumber ?? ''}`.trim(),
+      ],
+      ['Correo', customer.email ?? ''],
+      ['Teléfono', customer.phone ?? ''],
+      ['Dirección', customer.address ?? ''],
+    ]
+    const boxHeight = 8 + Math.ceil(fields.length / 2) * 9
+    doc.setFillColor(...PDF_COLORS.soft)
+    doc.setDrawColor(...PDF_COLORS.line)
+    doc.roundedRect(PAGE.margin, y - 4, right - PAGE.margin, boxHeight, 2, 2, 'FD')
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7.5)
+    setColor(doc, PDF_COLORS.faint)
+    doc.text('DATOS DEL CLIENTE', PAGE.margin + 4, y + 1.5)
+    const columnWidth = (right - PAGE.margin - 8) / 2
+    fields.forEach(([label, value], index) => {
+      const x = PAGE.margin + 4 + (index % 2) * columnWidth
+      const rowY = y + 7.5 + Math.floor(index / 2) * 9
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7.5)
+      setColor(doc, PDF_COLORS.muted)
+      doc.text(pdfText(label), x, rowY)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      setColor(doc, PDF_COLORS.ink)
+      doc.text(pdfText(value), x, rowY + 4, { maxWidth: columnWidth - 4 })
+    })
+    y += boxHeight + 4
+  }
 
   if (sale.status === 'REVERSED') {
     doc.setFillColor(253, 236, 236)
@@ -141,6 +184,8 @@ export async function downloadSaleReceipt(sale: Sale, now = new Date()) {
   doc.text('Gracias por tu compra.', PAGE.margin, thanksY)
 
   finishPdf(pdf, saleReceiptFileName(sale), [
-    'Comprobante interno de venta. No reemplaza la factura electrónica.',
+    invoice
+      ? 'Factura de venta con los datos del cliente. Aún no está validada como factura electrónica ante la DIAN.'
+      : 'Comprobante interno de venta. No reemplaza la factura electrónica.',
   ])
 }

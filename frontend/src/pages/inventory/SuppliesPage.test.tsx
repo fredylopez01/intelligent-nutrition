@@ -6,8 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { branchesService } from '../../services/branches.service'
 import { ApiError } from '../../services/http'
+import { inventoryService } from '../../services/inventory.service'
+import { productsService } from '../../services/products.service'
 import { suppliesService } from '../../services/supplies.service'
 import { unitsService } from '../../services/units.service'
+import type { BranchInventoryDetail } from '../../types/inventory'
+import type { ProductsListResponse } from '../../types/product'
 import type { SupplyStockRow } from '../../types/supply'
 
 import { SuppliesPage } from './SuppliesPage'
@@ -18,7 +22,22 @@ const auth = vi.hoisted(() => ({
 }))
 
 vi.mock('../../services/supplies.service', () => ({
-  suppliesService: { stock: vi.fn(), create: vi.fn(), move: vi.fn(), setMinimum: vi.fn() },
+  suppliesService: {
+    stock: vi.fn(),
+    create: vi.fn(),
+    move: vi.fn(),
+    setMinimum: vi.fn(),
+    updateLink: vi.fn(),
+    convert: vi.fn(),
+  },
+}))
+
+vi.mock('../../services/products.service', () => ({
+  productsService: { list: vi.fn() },
+}))
+
+vi.mock('../../services/inventory.service', () => ({
+  inventoryService: { getProductInBranch: vi.fn() },
 }))
 
 vi.mock('../../services/units.service', () => ({
@@ -49,6 +68,8 @@ const stock = vi.mocked(suppliesService.stock)
 const move = vi.mocked(suppliesService.move)
 const setMinimum = vi.mocked(suppliesService.setMinimum)
 const createSupply = vi.mocked(suppliesService.create)
+const updateLink = vi.mocked(suppliesService.updateLink)
+const convert = vi.mocked(suppliesService.convert)
 const centro = { id: 'branch-centro', name: 'Centro' }
 const norte = { id: 'branch-norte', name: 'Norte' }
 
@@ -169,7 +190,7 @@ describe('SuppliesPage list', () => {
     expect(screen.getAllByRole('button', { name: 'Registrar insumo' })).toHaveLength(2)
   })
 
-  it('lets the superadmin see every branch but not register movements', async () => {
+  it('lets the superadmin see every branch and register movements', async () => {
     auth.role = 'SUPERADMIN'
     vi.mocked(branchesService.list).mockResolvedValue({
       data: [
@@ -188,13 +209,14 @@ describe('SuppliesPage list', () => {
       ),
     )
     expect(await screen.findByRole('columnheader', { name: 'Sede' })).toBeInTheDocument()
-    await openAction(user, 'Acciones para Leche entera en Norte', 'Cambiar stock mínimo')
+    await user.click(screen.getByRole('button', { name: 'Acciones para Leche entera en Norte' }))
+    expect(screen.getByRole('menuitem', { name: 'Registrar entrada o salida' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Cambiar stock mínimo' })).toBeInTheDocument()
     expect(
-      screen.queryByRole('menuitem', { name: 'Registrar entrada o salida' }),
+      screen.queryByText(
+        'Las entradas y salidas de insumos las registra el personal de cada sede.',
+      ),
     ).not.toBeInTheDocument()
-    expect(
-      screen.getByText('Las entradas y salidas de insumos las registra el personal de cada sede.'),
-    ).toBeInTheDocument()
   })
 
   it('lets the assistant register movements but not change the minimum nor create supplies', async () => {
@@ -395,5 +417,217 @@ describe('SuppliesPage minimum and creation', () => {
     await user.click(dialog.getByRole('button', { name: 'Registrar insumo' }))
 
     expect(await dialog.findByText('Ya existe un insumo con ese nombre.')).toBeInTheDocument()
+  })
+})
+
+const WHEY = {
+  id: 'product-whey',
+  name: 'Proteína Whey 2 lb',
+  referenceCode: 'PRO-001',
+  category: { id: 'cat-1', name: 'Proteínas' },
+}
+
+const WHEY_POWDER = row({
+  supplyId: 'supply-whey',
+  supply: { name: 'Proteína en polvo', unitOfMeasure: { id: 'unit-g', abbreviation: 'g' } },
+  quantity: '100.000',
+  minimumQuantity: '0.000',
+  lowStock: false,
+  sourceProduct: { id: WHEY.id, name: WHEY.name, unitQuantity: 900 },
+})
+
+function productsPage() {
+  return {
+    data: [WHEY],
+    meta: { page: 1, limit: 6, total: 1, totalPages: 1 },
+  } as unknown as ProductsListResponse
+}
+
+function wheyInBranch(lots: { quantity: number; expirationDate: string }[]) {
+  return {
+    product: WHEY,
+    branchId: centro.id,
+    totalQuantity: lots.reduce((total, lot) => total + lot.quantity, 0),
+    lots: lots.map((lot, index) => ({ id: `lot-${index}`, ...lot })),
+  } as unknown as BranchInventoryDetail
+}
+
+describe('SuppliesPage product to supply', () => {
+  it('links an existing supply to a catalog product', async () => {
+    vi.mocked(productsService.list).mockResolvedValue(productsPage())
+    updateLink.mockResolvedValue({
+      id: OATS.supplyId,
+      name: 'Avena en hojuelas',
+      unitOfMeasure: { id: 'unit-g', abbreviation: 'g' },
+      active: true,
+      sourceProduct: { id: WHEY.id, name: WHEY.name },
+      productUnitQuantity: 900,
+      createdAt: '2026-11-12T10:00:00.000Z',
+    })
+    const { user } = renderPage()
+    await screen.findByText('Avena en hojuelas')
+
+    await openAction(user, 'Acciones para Avena en hojuelas', 'Ligar a un producto')
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Producto de origen de Avena en hojuelas' }),
+    )
+    await user.click(dialog.getByRole('button', { name: 'Guardar vínculo' }))
+    expect(await dialog.findByText('Elige el producto del catálogo.')).toBeInTheDocument()
+
+    await user.click(await dialog.findByRole('button', { name: /Proteína Whey 2 lb/ }))
+    await user.type(dialog.getByLabelText('Cuánto rinde una unidad del producto (g)'), '900')
+    await user.click(dialog.getByRole('button', { name: 'Guardar vínculo' }))
+
+    await waitFor(() =>
+      expect(updateLink).toHaveBeenCalledWith(
+        OATS.supplyId,
+        { sourceProductId: WHEY.id, productUnitQuantity: 900 },
+        'test-token',
+      ),
+    )
+    expect(
+      await screen.findByText(
+        'Avena en hojuelas quedó ligado a Proteína Whey 2 lb. Ya puedes convertir unidades en cualquier sede.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('converts product units into the supply with a preview', async () => {
+    stock.mockResolvedValue(stockPage([MILK, WHEY_POWDER]))
+    vi.mocked(inventoryService.getProductInBranch).mockResolvedValue(
+      wheyInBranch([
+        { quantity: 3, expirationDate: '2099-01-31' },
+        { quantity: 5, expirationDate: '2020-01-31' },
+      ]),
+    )
+    convert.mockResolvedValue({
+      supply: { id: WHEY_POWDER.supplyId, name: 'Proteína en polvo' },
+      product: { id: WHEY.id, name: WHEY.name },
+      productUnits: 2,
+      supplyQuantity: 1800,
+      resultingSupplyQuantity: 1900,
+      remainingProductUnits: 1,
+    })
+    const { user } = renderPage()
+    await screen.findByText('Proteína en polvo')
+    expect(
+      rowOf('Proteína en polvo').getByText(/De Proteína Whey 2 lb · 1 und = 900 g/),
+    ).toBeInTheDocument()
+
+    await openAction(user, 'Acciones para Proteína en polvo', 'Convertir producto a insumo')
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Convertir producto a Proteína en polvo' }),
+    )
+    expect(await dialog.findByText('3')).toBeInTheDocument()
+    const units = dialog.getByLabelText('Unidades del producto que vas a abrir')
+    await user.clear(units)
+    await user.type(units, '2')
+    expect(dialog.getByRole('status')).toHaveTextContent(
+      'Se descuentan 2 unidades de Proteína Whey 2 lb del inventario y se suman 1.800 g de Proteína en polvo. Quedarán 1.900 g.',
+    )
+    await user.click(dialog.getByRole('button', { name: 'Convertir a insumo' }))
+
+    await waitFor(() =>
+      expect(convert).toHaveBeenCalledWith(
+        { branchId: centro.id, supplyId: WHEY_POWDER.supplyId, productUnits: 2 },
+        'test-token',
+      ),
+    )
+    expect(
+      await screen.findByText(
+        'Se abrieron 2 unidades de Proteína Whey 2 lb y se sumaron 1.800 g de Proteína en polvo. Quedan 1.900 g del insumo y 1 unidad del producto.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('shows the units the branch really has when the server rejects the conversion', async () => {
+    stock.mockResolvedValue(stockPage([WHEY_POWDER]))
+    vi.mocked(inventoryService.getProductInBranch).mockResolvedValue(
+      wheyInBranch([{ quantity: 4, expirationDate: '2099-01-31' }]),
+    )
+    convert.mockRejectedValue(
+      new ApiError('Unprocessable', 422, { available: 1, requested: 3 }, 'INSUFFICIENT_STOCK'),
+    )
+    const { user } = renderPage()
+    await screen.findByText('Proteína en polvo')
+
+    await openAction(user, 'Acciones para Proteína en polvo', 'Convertir producto a insumo')
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Convertir producto a Proteína en polvo' }),
+    )
+    await dialog.findByText('4')
+    const units = dialog.getByLabelText('Unidades del producto que vas a abrir')
+    await user.clear(units)
+    await user.type(units, '3')
+    await user.click(dialog.getByRole('button', { name: 'Convertir a insumo' }))
+
+    expect(
+      await dialog.findByText('La sede solo tiene 1 unidad de Proteína Whey 2 lb sin vencer.'),
+    ).toBeInTheDocument()
+  })
+
+  it('lets the assistant convert but not change the product of origin', async () => {
+    auth.role = 'BRANCH_ASSISTANT'
+    stock.mockResolvedValue(stockPage([MILK, WHEY_POWDER]))
+    const { user } = renderPage()
+    await screen.findByText('Proteína en polvo')
+
+    await user.click(screen.getByRole('button', { name: 'Acciones para Proteína en polvo' }))
+    expect(
+      screen.getByRole('menuitem', { name: 'Convertir producto a insumo' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Cambiar producto de origen' }),
+    ).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Acciones para Leche entera' }))
+    expect(
+      screen.queryByRole('menuitem', { name: 'Convertir producto a insumo' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('registers a supply that comes from a catalog product', async () => {
+    vi.mocked(unitsService.list).mockResolvedValue({
+      data: [{ id: 'unit-g', name: 'Gramo', abbreviation: 'g', active: true }],
+      meta: { page: 1, limit: 100, total: 1, totalPages: 1 },
+    })
+    vi.mocked(productsService.list).mockResolvedValue(productsPage())
+    createSupply.mockResolvedValue({
+      id: 'supply-new',
+      name: 'Proteína en polvo',
+      unitOfMeasure: { id: 'unit-g', abbreviation: 'g' },
+      active: true,
+      createdAt: '2026-11-12T10:00:00.000Z',
+    })
+    const { user } = renderPage()
+    await screen.findByText('Leche entera')
+
+    await user.click(screen.getByRole('button', { name: 'Registrar insumo' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Registrar insumo' }))
+    await user.type(dialog.getByLabelText('Nombre'), 'Proteína en polvo')
+    await waitFor(() => expect(dialog.getByLabelText('Unidad de medida')).toBeEnabled())
+    await user.selectOptions(dialog.getByLabelText('Unidad de medida'), 'unit-g')
+    await user.click(dialog.getByLabelText(/Viene de un producto del catálogo/))
+    await user.click(dialog.getByRole('button', { name: 'Registrar insumo' }))
+    expect(
+      await dialog.findByText('Escribe cuánto rinde una unidad del producto.'),
+    ).toBeInTheDocument()
+    expect(dialog.getByText('Elige el producto del catálogo.')).toBeInTheDocument()
+
+    await user.click(await dialog.findByRole('button', { name: /Proteína Whey 2 lb/ }))
+    await user.type(dialog.getByLabelText('Cuánto rinde una unidad del producto (g)'), '907,2')
+    await user.click(dialog.getByRole('button', { name: 'Registrar insumo' }))
+
+    await waitFor(() =>
+      expect(createSupply).toHaveBeenCalledWith(
+        {
+          name: 'Proteína en polvo',
+          unitOfMeasureId: 'unit-g',
+          sourceProductId: WHEY.id,
+          productUnitQuantity: 907.2,
+        },
+        'test-token',
+      ),
+    )
   })
 })

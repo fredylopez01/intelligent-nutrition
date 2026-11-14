@@ -113,4 +113,35 @@ describe('downloadSaleReceipt', () => {
     expect(pdf.texts.some((text) => text.startsWith('Venta reversada el'))).toBe(true)
     expect(pdf.texts.some((text) => text.startsWith('Tel.'))).toBe(false)
   })
+
+  it('prints an invoice with the customer data when the sale has a registered customer', async () => {
+    await downloadSaleReceipt({
+      ...sale,
+      customer: {
+        id: 'c-1',
+        fullName: 'Laura Pérez',
+        documentType: { code: 'CC', name: 'Cédula de ciudadanía' },
+        documentNumber: '1049000111',
+        email: 'laura@correo.com',
+        phone: '3001112233',
+        address: 'Calle 20 # 10-15, Tunja',
+        isCompany: false,
+      },
+    })
+
+    const pdf = fake.current!
+    expect(pdf.saved).toEqual(['factura-V-20261113-0002.pdf'])
+    expect(pdf.texts).toEqual(
+      expect.arrayContaining([
+        'Factura de venta',
+        'DATOS DEL CLIENTE',
+        'Laura Pérez',
+        'CC 1049000111',
+        'laura@correo.com',
+        'Calle 20 # 10-15, Tunja',
+      ]),
+    )
+    expect(pdf.texts).not.toContain('Cliente no identificado')
+    expect(pdf.texts.some((text) => text.includes('validada como factura electrónica'))).toBe(true)
+  })
 })

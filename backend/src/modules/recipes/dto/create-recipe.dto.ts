@@ -3,6 +3,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
+  IsUUID,
   IsOptional,
   IsString,
   MaxLength,
@@ -42,4 +43,14 @@ export class CreateRecipeDto {
   @ValidateNested({ each: true })
   @Type(() => RecipeIngredientDto)
   ingredients!: RecipeIngredientDto[];
+
+  @ApiPropertyOptional({
+    format: "uuid",
+    nullable: true,
+    description:
+      "Catalog product sold as this prepared recipe. Selling it deducts the recipe supplies instead of the product lots. null removes the link.",
+  })
+  @IsOptional()
+  @IsUUID("all")
+  productId?: string | null;
 }

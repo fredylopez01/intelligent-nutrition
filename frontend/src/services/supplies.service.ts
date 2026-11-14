@@ -1,5 +1,7 @@
 import type {
+  ConvertProductPayload,
   CreateSupplyPayload,
+  ProductConversion,
   Supply,
   SuppliesListParams,
   SuppliesListResponse,
@@ -9,6 +11,7 @@ import type {
   SupplyStockResponse,
   SupplyStockRow,
   SupplyUnit,
+  UpdateSupplyLinkPayload,
   UpdateSupplyMinimumPayload,
 } from '../types/supply'
 import type { PaginationMeta } from '../types/user'
@@ -77,6 +80,15 @@ export const suppliesService = {
   create: async (payload: CreateSupplyPayload, token: string | null): Promise<Supply> =>
     normalizeSupply(await http.post<ApiSupply>(SUPPLIES_PATH, payload, { token })),
 
+  updateLink: async (
+    supplyId: string,
+    payload: UpdateSupplyLinkPayload,
+    token: string | null,
+  ): Promise<Supply> =>
+    normalizeSupply(
+      await http.patch<ApiSupply>(`${SUPPLIES_PATH}/${supplyId}`, payload, { token }),
+    ),
+
   stock: async (params: SupplyStockParams, token: string | null): Promise<SupplyStockResponse> => {
     const response = await http.get<{ data: ApiSupplyStockRow[]; meta: PaginationMeta }>(
       `${SUPPLY_STOCK_PATH}${buildQuery(params)}`,
@@ -87,6 +99,9 @@ export const suppliesService = {
 
   move: (payload: SupplyMovementPayload, token: string | null) =>
     http.post<SupplyMovement>(`${SUPPLY_STOCK_PATH}/movement`, payload, { token }),
+
+  convert: (payload: ConvertProductPayload, token: string | null) =>
+    http.post<ProductConversion>(`${SUPPLY_STOCK_PATH}/conversions`, payload, { token }),
 
   setMinimum: async (
     payload: UpdateSupplyMinimumPayload,

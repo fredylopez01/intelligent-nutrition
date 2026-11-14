@@ -1,0 +1,93 @@
+.add-to-cart {
+  margin-top: 1.75rem;
+}
+
+.add-to-cart__row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.add-to-cart__stepper {
+  display: inline-flex;
+  align-items: center;
+  height: 52px;
+  border: 1px solid var(--color-border-outline);
+  border-radius: 12px;
+}
+
+.add-to-cart__stepper button {
+  width: 44px;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  color: var(--color-text);
+  font-size: 1.125rem;
+  cursor: pointer;
+}
+
+.add-to-cart__stepper button:disabled {
+  color: var(--color-text-faint);
+  cursor: default;
+}
+
+.add-to-cart__stepper output {
+  min-width: 2rem;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+.add-to-cart__button {
+  flex: 1;
+  min-height: 52px;
+  padding: 0 1.5rem;
+  background: var(--color-primary-strong);
+  border: 0;
+  border-radius: 12px;
+  color: var(--color-on-primary);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.add-to-cart__button:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.add-to-cart__button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.add-to-cart__stepper button:focus-visible,
+.add-to-cart__button:focus-visible,
+.add-to-cart__added a:focus-visible {
+  outline: 2px solid var(--color-primary-strong);
+  outline-offset: 2px;
+}
+
+.add-to-cart__added {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  color: var(--color-success);
+}
+
+.add-to-cart__added a {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.add-to-cart__note {
+  margin: 0.875rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .add-to-cart__button {
+    transition: none;
+  }
+}

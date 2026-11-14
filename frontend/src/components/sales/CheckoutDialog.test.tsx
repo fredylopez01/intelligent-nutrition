@@ -2,8 +2,10 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { customersService } from '../../services/customers.service'
 import { ApiError } from '../../services/http'
 import { salesService } from '../../services/sales.service'
+import { buildNaturalCustomer } from '../../test-utils/customers'
 import { CASH, NEQUI } from '../../test-utils/paymentMethods'
 import { buildPromotion } from '../../test-utils/promotions'
 import { buildSale, buildSellable } from '../../test-utils/sales'
@@ -16,6 +18,14 @@ import type { SelectionLine } from './PosSelection'
 
 vi.mock('../../services/sales.service', () => ({
   salesService: { create: vi.fn() },
+}))
+
+vi.mock('../../services/customers.service', () => ({
+  customersService: { list: vi.fn(), create: vi.fn() },
+}))
+
+vi.mock('../../services/persons.service', () => ({
+  personsService: { search: vi.fn() },
 }))
 
 vi.mock('../../hooks/useAuth', () => ({
@@ -76,6 +86,43 @@ beforeEach(() => {
 })
 
 describe('CheckoutDialog', () => {
+  it('asks for a customer before charging an invoice with customer data', async () => {
+    const laura = buildNaturalCustomer()
+    vi.mocked(customersService.list).mockResolvedValue({
+      data: [laura],
+      meta: { page: 1, limit: 5, total: 1, totalPages: 1 },
+    })
+    const { user } = renderDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: /Factura con datos del cliente/ }))
+    expect(charge()).toBeDisabled()
+    expect(screen.getByText('Elige o registra el cliente para poder cobrar.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Buscar cliente por nombre o documento'), '1049000111')
+    await user.keyboard('{Enter}')
+    await user.click(await screen.findByRole('button', { name: /Laura Pérez/ }))
+
+    expect(customersService.list).toHaveBeenCalledWith(
+      { page: 1, limit: 5, search: '1049000111', active: true },
+      'test-token',
+    )
+    expect(screen.getByText('CC 1049000111 · laura@correo.com')).toBeInTheDocument()
+    await user.click(charge())
+    expect(createSale).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: 'customer-laura' }),
+      'test-token',
+    )
+  })
+
+  it('opens the customer registration from the checkout', async () => {
+    const { user } = renderDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: /Factura con datos del cliente/ }))
+    await user.click(screen.getByRole('button', { name: 'Registrar un cliente nuevo' }))
+
+    expect(screen.queryByLabelText('Buscar cliente por nombre o documento')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Buscar persona')).toBeInTheDocument()
+  })
+
   it('lists each line with its quantity, unit price and total', () => {
     const { container, summary } = renderDialog()
     const lines = within(container.querySelector('.pos-checkout__lines') as HTMLElement)
@@ -162,6 +209,41 @@ describe('CheckoutDialog', () => {
     expect(onStockChanged).toHaveBeenCalled()
     expect(onCompleted).not.toHaveBeenCalled()
     expect(charge()).toBeEnabled()
+  })
+
+  it('sends the recipe of a prepared product and refreshes when the supplies run out', async () => {
+    createSale.mockRejectedValue(
+      new ApiError(
+        'Short',
+        422,
+        {
+          items: [{ supplyName: 'Proteína en polvo', unit: 'g', required: 60, available: 45.5 }],
+        },
+        'INSUFFICIENT_SUPPLY_STOCK',
+      ),
+    )
+    const shake = buildSellable({
+      productId: 'product-shake',
+      name: 'Batido de proteína',
+      prepared: true,
+      recipeId: 'recipe-shake',
+    })
+    const { user, onStockChanged } = renderDialog([{ product: shake, quantity: 2 }])
+
+    await user.click(charge())
+
+    expect(createSale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [{ productId: 'product-shake', quantity: 2, recipeId: 'recipe-shake' }],
+      }),
+      'test-token',
+    )
+    expect(
+      await screen.findByText(
+        'No alcanzan los insumos para los productos preparados: Proteína en polvo (se necesitan 60 g, hay 45,5 g). Ajusta las cantidades.',
+      ),
+    ).toBeInTheDocument()
+    expect(onStockChanged).toHaveBeenCalled()
   })
 
   it('explains a generic failure without refreshing the stock', async () => {

@@ -417,6 +417,7 @@ describe("SalesService read operations (GET /sales)", () => {
             productId,
             productName: "Proteína",
             referenceCode: "P-001",
+            recipeId: null,
             quantity: 2,
             unitPrice: "12.35",
             subtotal: "24.70",

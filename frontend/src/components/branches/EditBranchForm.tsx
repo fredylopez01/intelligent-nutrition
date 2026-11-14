@@ -30,6 +30,7 @@ const editBranchSchema = z.object({
     .min(1, 'Ingresa el teléfono')
     .max(30, 'El teléfono no puede superar 30 caracteres')
     .regex(/^\d+$/, 'El teléfono solo puede contener números, sin espacios ni símbolos'),
+  deliveryEnabled: z.boolean(),
 })
 
 type EditBranchFormValues = z.infer<typeof editBranchSchema>
@@ -61,7 +62,12 @@ export function EditBranchForm({ branch, onUpdated, onCancel }: EditBranchFormPr
     formState: { errors, isSubmitting },
   } = useForm<EditBranchFormValues>({
     resolver: zodResolver(editBranchSchema),
-    defaultValues: { name: branch.name, address: branch.address, phone: branch.phone },
+    defaultValues: {
+      name: branch.name,
+      address: branch.address,
+      phone: branch.phone,
+      deliveryEnabled: branch.deliveryEnabled ?? false,
+    },
   })
 
   const onSubmit = async (values: EditBranchFormValues) => {
@@ -72,8 +78,9 @@ export function EditBranchForm({ branch, onUpdated, onCancel }: EditBranchFormPr
     const nameChanged = name !== branch.name
     const addressChanged = address !== branch.address
     const phoneChanged = phone !== branch.phone
+    const deliveryChanged = values.deliveryEnabled !== (branch.deliveryEnabled ?? false)
 
-    if (!nameChanged && !addressChanged && !phoneChanged) {
+    if (!nameChanged && !addressChanged && !phoneChanged && !deliveryChanged) {
       setSubmitError('No hay cambios por guardar.')
       return
     }
@@ -85,6 +92,7 @@ export function EditBranchForm({ branch, onUpdated, onCancel }: EditBranchFormPr
           ...(nameChanged ? { name } : {}),
           ...(addressChanged ? { address } : {}),
           ...(phoneChanged ? { phone } : {}),
+          ...(deliveryChanged ? { deliveryEnabled: values.deliveryEnabled } : {}),
         },
         token,
       )
@@ -120,6 +128,16 @@ export function EditBranchForm({ branch, onUpdated, onCancel }: EditBranchFormPr
         error={errors.phone?.message}
         {...register('phone')}
       />
+
+      <label className="branch-form__check">
+        <input type="checkbox" {...register('deliveryEnabled')} />
+        <span>
+          <strong>Hace domicilios en Tunja</strong>
+          <span>
+            Los pedidos web con domicilio pueden salir de esta sede si tiene todo el pedido.
+          </span>
+        </span>
+      </label>
 
       <div className="branch-form__actions">
         <Button variant="outline" type="button" onClick={onCancel} disabled={isSubmitting}>

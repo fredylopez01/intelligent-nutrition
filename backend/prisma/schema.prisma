@@ -81,6 +81,7 @@ model UserAccount {
   auditLogs            AuditLog[]
   createdImages        ProductImage[]        @relation("ProductImageCreatedBy")
   inventoryMovements   InventoryMovement[]
+  supplyPurchases SupplyPurchase[]
   purchases            Purchase[]
   inventoryClosures    InventoryClosure[]
   sales                Sale[]
@@ -103,6 +104,7 @@ model Customer {
   person Person @relation(fields: [personId], references: [id])
 
   sales Sale[]
+  onlineOrders OnlineOrder[]
 
   @@map("customer")
 }
@@ -115,6 +117,7 @@ model Supplier {
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   person    Person     @relation(fields: [personId], references: [id])
+  supplyPurchases SupplyPurchase[]
   purchases Purchase[]
 
   @@map("supplier")
@@ -126,6 +129,7 @@ model Branch {
   address   String   @db.VarChar(255)
   phone     String   @db.VarChar(30)
   active    Boolean  @default(true)
+  deliveryEnabled Boolean @default(false) @map("delivery_enabled")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
@@ -141,6 +145,7 @@ model Branch {
   supplyStockMovements  SupplyStockMovement[]
   cashShifts            CashShift[]
   schedules             BranchSchedule[]
+  onlineOrders          OnlineOrder[]
 
   @@map("branch")
 }
@@ -258,6 +263,9 @@ model Product {
   saleDetails     SaleDetail[]
   generalStock    GeneralStock[]
   notifications   Notification[]
+  onlineOrderItems OnlineOrderItem[]
+  derivedSupplies  Supply[]
+  recipe           Recipe?
 
   @@index([categoryId])
   @@index([unitOfMeasureId])
@@ -361,6 +369,44 @@ enum PurchaseStatus {
   PENDING_RECEIPT
   PARTIALLY_RECEIVED
   FULLY_RECEIVED
+}
+
+model SupplyPurchase {
+  id             String         @id @default(uuid()) @db.Uuid
+  purchaseNumber String         @unique @map("purchase_number") @db.VarChar(30)
+  supplierId     String         @map("supplier_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  purchaseAt     DateTime       @default(now()) @map("purchase_at") @db.Timestamp(6)
+  total          Decimal        @db.Decimal(12, 2)
+  observation    String?        @db.Text
+  status         PurchaseStatus @default(PENDING_RECEIPT)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  supplier Supplier               @relation(fields: [supplierId], references: [personId])
+  user     UserAccount            @relation(fields: [userId], references: [personId])
+  details  SupplyPurchaseDetail[]
+
+  @@index([supplierId])
+  @@index([purchaseAt])
+  @@map("supply_purchase")
+}
+
+model SupplyPurchaseDetail {
+  id                String  @id @default(uuid()) @db.Uuid
+  purchaseId        String  @map("purchase_id") @db.Uuid
+  supplyId          String  @map("supply_id") @db.Uuid
+  requestedQuantity Decimal @map("requested_quantity") @db.Decimal(12, 3)
+  receivedQuantity  Decimal @default(0) @map("received_quantity") @db.Decimal(12, 3)
+  unitCost          Decimal @map("unit_cost") @db.Decimal(12, 2)
+  subtotal          Decimal @db.Decimal(12, 2)
+
+  purchase SupplyPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  supply   Supply         @relation(fields: [supplyId], references: [id])
+
+  @@unique([purchaseId, supplyId])
+  @@index([supplyId])
+  @@map("supply_purchase_detail")
 }
 
 model Purchase {
@@ -510,6 +556,8 @@ model Sale {
   details   SaleDetail[]
   payments  SalePayment[]
   movements InventoryMovement[]
+  supplyMovements SupplyStockMovement[]
+  onlineOrder OnlineOrder?
 
   @@unique([branchId, saleNumber])
   @@index([branchId])
@@ -582,6 +630,72 @@ enum NotificationType {
   LOW_STOCK
   CLOSURE_NOT_CONFIRMED
   PURCHASE_PENDING_RECEIPT
+  ONLINE_ORDER
+}
+
+enum OnlineOrderStatus {
+  PENDING
+  CONFIRMED
+  READY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  EXPIRED
+}
+
+enum OnlineOrderFulfillment {
+  PICKUP
+  DELIVERY
+}
+
+model OnlineOrder {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  code                 String                 @unique @db.VarChar(30)
+  status               OnlineOrderStatus      @default(PENDING)
+  fulfillment          OnlineOrderFulfillment
+  branchId             String                 @map("branch_id") @db.Uuid
+  customerId           String?                @map("customer_id") @db.Uuid
+  customerName         String                 @map("customer_name") @db.VarChar(200)
+  customerPhone        String                 @map("customer_phone") @db.VarChar(30)
+  customerEmail        String?                @map("customer_email") @db.VarChar(150)
+  deliveryAddress      String?                @map("delivery_address") @db.VarChar(255)
+  deliveryNeighborhood String?                @map("delivery_neighborhood") @db.VarChar(100)
+  notes                String?                @db.Text
+  subtotal             Decimal                @db.Decimal(12, 2)
+  expiresAt            DateTime               @map("expires_at") @db.Timestamp(6)
+  saleId               String?                @unique @map("sale_id") @db.Uuid
+  cancelReason         String?                @map("cancel_reason") @db.Text
+  confirmedAt          DateTime?              @map("confirmed_at") @db.Timestamp(6)
+  deliveredAt          DateTime?              @map("delivered_at") @db.Timestamp(6)
+  cancelledAt          DateTime?              @map("cancelled_at") @db.Timestamp(6)
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  branch   Branch            @relation(fields: [branchId], references: [id])
+  customer Customer?         @relation(fields: [customerId], references: [personId])
+  sale     Sale?             @relation(fields: [saleId], references: [id])
+  items    OnlineOrderItem[]
+
+  @@index([branchId, status])
+  @@index([status, expiresAt])
+  @@index([createdAt])
+  @@map("online_order")
+}
+
+model OnlineOrderItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  orderId   String  @map("order_id") @db.Uuid
+  productId String  @map("product_id") @db.Uuid
+  quantity  Int
+  unitPrice Decimal @map("unit_price") @db.Decimal(12, 2)
+  total     Decimal @db.Decimal(12, 2)
+
+  order   OnlineOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product     @relation(fields: [productId], references: [id])
+
+  @@unique([orderId, productId])
+  @@index([productId])
+  @@map("online_order_item")
 }
 
 model Notification {
@@ -613,14 +727,18 @@ model Supply {
   name            String   @unique @db.VarChar(150)
   unitOfMeasureId String   @map("unit_of_measure_id") @db.Uuid
   active          Boolean  @default(true)
+  sourceProductId     String?  @map("source_product_id") @db.Uuid
+  productUnitQuantity Decimal? @map("product_unit_quantity") @db.Decimal(12, 3)
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   unitOfMeasure UnitMeasure           @relation(fields: [unitOfMeasureId], references: [id])
+  sourceProduct Product?              @relation(fields: [sourceProductId], references: [id], onDelete: Restrict)
   stocks        SupplyStock[]
   movements     SupplyStockMovement[]
   recipeIngredients RecipeIngredient[]
   closureDetails    InventoryClosureSupplyDetail[]
+  purchaseDetails   SupplyPurchaseDetail[]
 
   @@index([unitOfMeasureId])
   @@map("supply")
@@ -631,11 +749,13 @@ model Recipe {
   name        String   @db.VarChar(150)
   description String?  @db.Text
   active      Boolean  @default(true)
+  productId   String?  @unique @map("product_id") @db.Uuid
   createdById String   @map("created_by") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   createdBy   UserAccount       @relation(fields: [createdById], references: [personId])
+  product     Product?          @relation(fields: [productId], references: [id], onDelete: Restrict)
   ingredients RecipeIngredient[]
   saleDetails SaleDetail[]
 
@@ -686,14 +806,17 @@ model SupplyStockMovement {
   quantity     Decimal            @db.Decimal(12, 3)
   observation  String?            @db.Text
   userId       String             @map("user_id") @db.Uuid
+  saleId       String?            @map("sale_id") @db.Uuid
   movementAt   DateTime           @default(now()) @map("movement_at") @db.Timestamp(6)
 
   branch Branch      @relation(fields: [branchId], references: [id])
   supply Supply      @relation(fields: [supplyId], references: [id])
   user   UserAccount @relation(fields: [userId], references: [personId])
+  sale   Sale?       @relation(fields: [saleId], references: [id])
 
   @@index([branchId, supplyId])
   @@index([movementAt])
+  @@index([saleId])
   @@map("supply_stock_movement")
 }
 

@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
 import {
+  IsBoolean,
   IsNotEmpty,
   IsString,
   Matches,
@@ -42,4 +43,12 @@ export class UpdateBranchDto {
   @MaxLength(30)
   @Matches(/^\d+$/)
   phone?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Whether the branch dispatches home deliveries of web orders (Tunja).",
+  })
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  deliveryEnabled?: boolean;
 }

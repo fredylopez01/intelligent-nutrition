@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
+import { SupplyConversionForm } from '../../components/supplies/SupplyConversionForm'
 import { SupplyForm } from '../../components/supplies/SupplyForm'
+import { SupplyLinkForm } from '../../components/supplies/SupplyLinkForm'
 import { SupplyMinimumForm } from '../../components/supplies/SupplyMinimumForm'
 import { SupplyMovementForm } from '../../components/supplies/SupplyMovementForm'
 import { SupplyStockTable } from '../../components/supplies/SupplyStockTable'
@@ -18,13 +20,14 @@ import { useInventoryBranches } from '../../hooks/useInventoryBranches'
 import { usePagination } from '../../hooks/usePagination'
 import { useSupplyStock } from '../../hooks/useSupplyStock'
 import { AppLayout } from '../../layouts/AppLayout'
-import type { Supply, SupplyMovement, SupplyStockRow } from '../../types/supply'
+import type { ProductConversion, Supply, SupplyMovement, SupplyStockRow } from '../../types/supply'
 import { hasRole } from '../../utils/categories'
 import {
   SUPPLY_MANAGE_ROLES,
   SUPPLY_MINIMUM_ROLES,
   SUPPLY_MOVEMENT_ROLES,
   formatSupplyQuantity,
+  productUnitsLabel,
 } from '../../utils/supplies'
 
 import './InventoryPage.css'
@@ -67,6 +70,8 @@ export function SuppliesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [moving, setMoving] = useState<SupplyStockRow | null>(null)
   const [editingMinimum, setEditingMinimum] = useState<SupplyStockRow | null>(null)
+  const [converting, setConverting] = useState<SupplyStockRow | null>(null)
+  const [linking, setLinking] = useState<SupplyStockRow | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
 
   const changeBranch = (value: string) =>
@@ -100,6 +105,25 @@ export function SuppliesPage() {
     setMoving(null)
     setFeedback(
       `${movement.movementType === 'ENTRY' ? 'Entrada' : 'Salida'} de ${formatSupplyQuantity(movement.quantity, unit)} de ${movement.supply.name} registrada. Quedan ${formatSupplyQuantity(movement.resultingQuantity, unit)}.`,
+    )
+    refetch()
+  }
+
+  const handleConverted = (conversion: ProductConversion) => {
+    const unit = converting?.supply.unitOfMeasure.abbreviation
+    setConverting(null)
+    setFeedback(
+      `${conversion.productUnits === 1 ? 'Se abrió' : 'Se abrieron'} ${productUnitsLabel(conversion.productUnits)} de ${conversion.product.name} y se sumaron ${formatSupplyQuantity(conversion.supplyQuantity, unit)} de ${conversion.supply.name}. Quedan ${formatSupplyQuantity(conversion.resultingSupplyQuantity, unit)} del insumo y ${productUnitsLabel(conversion.remainingProductUnits)} del producto.`,
+    )
+    refetch()
+  }
+
+  const handleLinked = (supply: Supply) => {
+    setLinking(null)
+    setFeedback(
+      supply.sourceProduct
+        ? `${supply.name} quedó ligado a ${supply.sourceProduct.name}. Ya puedes convertir unidades en cualquier sede.`
+        : `${supply.name} ya no está ligado a un producto del catálogo.`,
     )
     refetch()
   }
@@ -181,6 +205,22 @@ export function SuppliesPage() {
             ? (row) => {
                 setFeedback(null)
                 setEditingMinimum(row)
+              }
+            : undefined
+        }
+        onConvert={
+          canMove
+            ? (row) => {
+                setFeedback(null)
+                setConverting(row)
+              }
+            : undefined
+        }
+        onLink={
+          canCreate
+            ? (row) => {
+                setFeedback(null)
+                setLinking(row)
               }
             : undefined
         }
@@ -278,11 +318,6 @@ export function SuppliesPage() {
             onLimitChange={setLimit}
           />
         )}
-        {!canMove && isSuperadmin && (
-          <p className="inventory-page__note">
-            Las entradas y salidas de insumos las registra el personal de cada sede.
-          </p>
-        )}
       </div>
 
       <Modal
@@ -318,6 +353,32 @@ export function SuppliesPage() {
             onSaved={handleMinimumSaved}
             onCancel={() => setEditingMinimum(null)}
           />
+        )}
+      </Modal>
+
+      <Modal
+        open={converting !== null}
+        title={converting ? `Convertir producto a ${converting.supply.name}` : 'Convertir producto'}
+        description="Abre unidades del producto en la sede para sumarlas al insumo."
+        onClose={() => setConverting(null)}
+      >
+        {converting && (
+          <SupplyConversionForm
+            row={converting}
+            onSaved={handleConverted}
+            onCancel={() => setConverting(null)}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        open={linking !== null}
+        title={linking ? `Producto de origen de ${linking.supply.name}` : 'Producto de origen'}
+        description="Elige el producto del catálogo del que sale este insumo."
+        onClose={() => setLinking(null)}
+      >
+        {linking && (
+          <SupplyLinkForm row={linking} onSaved={handleLinked} onCancel={() => setLinking(null)} />
         )}
       </Modal>
     </AppLayout>

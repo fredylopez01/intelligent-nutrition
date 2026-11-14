@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../../services/http'
+import { productsService } from '../../services/products.service'
 import { recipesService } from '../../services/recipes.service'
 import { suppliesService } from '../../services/supplies.service'
 import { unitsService } from '../../services/units.service'
@@ -34,6 +35,10 @@ vi.mock('../../services/recipes.service', () => ({
 
 vi.mock('../../services/supplies.service', () => ({
   suppliesService: { list: vi.fn() },
+}))
+
+vi.mock('../../services/products.service', () => ({
+  productsService: { list: vi.fn() },
 }))
 
 vi.mock('../../services/units.service', () => ({
@@ -299,6 +304,74 @@ describe('RecipesPage form', () => {
     const { dialog } = await openCreate()
 
     expect(dialog.getByText(/No hay insumos activos/)).toBeInTheDocument()
+  })
+
+  it('links the new recipe to the catalog product sold in the POS', async () => {
+    vi.mocked(productsService.list).mockResolvedValue({
+      data: [
+        {
+          id: 'product-shake',
+          name: 'Batido de proteína 16 oz',
+          referenceCode: 'BAT-16',
+          category: { id: 'cat-drinks', name: 'Bebidas' },
+        },
+      ],
+      meta: { page: 1, limit: 6, total: 1, totalPages: 1 },
+    } as never)
+    createRecipe.mockResolvedValue(buildRecipe({ name: 'Batido verde' }))
+    const { user, dialog } = await openCreate()
+
+    await user.type(dialog.getByLabelText('Nombre'), 'Batido verde')
+    await user.selectOptions(dialog.getByLabelText('Insumo'), WHEY.id)
+    await user.type(dialog.getByLabelText('Cantidad'), '30')
+    await user.click(dialog.getByLabelText(/Se vende en el POS/))
+    await user.click(dialog.getByRole('button', { name: 'Registrar receta' }))
+    expect(
+      await dialog.findByText('Elige el producto del catálogo que se vende con esta receta.'),
+    ).toBeInTheDocument()
+    expect(createRecipe).not.toHaveBeenCalled()
+
+    await user.click(await dialog.findByRole('button', { name: /Batido de proteína 16 oz/ }))
+    await user.click(dialog.getByRole('button', { name: 'Registrar receta' }))
+
+    await waitFor(() =>
+      expect(createRecipe).toHaveBeenCalledWith(
+        {
+          name: 'Batido verde',
+          ingredients: [{ supplyId: WHEY.id, quantity: 30, unitOfMeasureId: GRAMS.id }],
+          productId: 'product-shake',
+        },
+        'test-token',
+      ),
+    )
+  })
+
+  it('removes the product of a recipe that was sold in the POS', async () => {
+    getRecipe.mockResolvedValue(
+      buildRecipe({
+        product: {
+          id: 'product-shake',
+          name: 'Batido de proteína 16 oz',
+          referenceCode: 'BAT-16',
+          price: '12000.00',
+        },
+      }),
+    )
+    updateRecipe.mockResolvedValue(buildRecipe())
+    const { user } = renderPage()
+    await screen.findByRole('table')
+
+    await user.click(screen.getByRole('button', { name: 'Acciones para Batido de proteína' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Editar' }))
+    const dialog = within(await screen.findByRole('dialog', { name: 'Editar Batido de proteína' }))
+    await dialog.findAllByLabelText('Cantidad')
+    expect(dialog.getByText('Batido de proteína 16 oz')).toBeInTheDocument()
+    await user.click(dialog.getByLabelText(/Se vende en el POS/))
+    await user.click(dialog.getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() =>
+      expect(updateRecipe).toHaveBeenCalledWith('recipe-shake', { productId: null }, 'test-token'),
+    )
   })
 
   it('edits only the ingredients that changed', async () => {
