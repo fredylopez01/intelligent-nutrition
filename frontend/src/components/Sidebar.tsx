@@ -75,6 +75,7 @@ const NAV_ITEMS: NavItem[] = [
     subs: [
       { label: 'Reportes', to: '/reportes' },
       { label: 'Reposición sugerida', to: '/reportes/reposicion' },
+      { label: 'Dashboard', to: '/reportes/dashboard' },
     ],
   },
   {

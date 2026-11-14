@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '../services/http'
 
-import { defaultReportRange, resolveReportError, shiftDate, summarizeSalesReport } from './reports'
+import {
+  defaultReportRange,
+  resolveDashboardEmbedError,
+  resolveReportError,
+  shiftDate,
+  summarizeSalesReport,
+} from './reports'
 
 const row = (day: string, salesCount: number, totalAmount: string) => ({
   day,
@@ -40,5 +46,20 @@ describe('report helpers', () => {
     ).toBe('No tienes acceso a esta sede.')
     expect(resolveReportError(new ApiError('x', 403), 'f')).toMatch(/superadmin y el líder/)
     expect(resolveReportError(new Error('down'), 'fallback')).toBe('fallback')
+  })
+
+  it('explains the errors of the dashboard', () => {
+    expect(
+      resolveDashboardEmbedError(new ApiError('x', 503, undefined, 'DASHBOARD_NOT_CONFIGURED')),
+    ).toMatch(/todavía no está configurado/)
+    expect(resolveDashboardEmbedError(new ApiError('x', 403))).toBe(
+      'Solo el superadmin puede ver el dashboard.',
+    )
+    expect(resolveDashboardEmbedError(new ApiError('x', 500))).toBe(
+      'No fue posible cargar el dashboard. Intenta de nuevo.',
+    )
+    expect(resolveDashboardEmbedError(new Error('down'))).toBe(
+      'No fue posible cargar el dashboard. Intenta de nuevo.',
+    )
   })
 })
