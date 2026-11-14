@@ -1,4 +1,9 @@
-import type { RestockReportRow, SalesReportParams, SalesReportResponse } from '../types/report'
+import type {
+  DashboardEmbed,
+  RestockReportRow,
+  SalesReportParams,
+  SalesReportResponse,
+} from '../types/report'
 
 import { http } from './http'
 
@@ -19,4 +24,7 @@ export const reportsService = {
 
   restock: (params: { branchId?: string }, token: string | null) =>
     http.get<RestockReportRow[]>(`${REPORTS_PATH}/restock${buildQuery(params)}`, { token }),
+
+  dashboardEmbed: (token: string | null) =>
+    http.get<DashboardEmbed>(`${REPORTS_PATH}/dashboard-embed`, { token }),
 }

@@ -49,3 +49,13 @@ export function resolveReportError(error: unknown, fallback: string): string {
   if (error.status === 400) return 'Revisa los filtros: hay un valor que el servidor no aceptó.'
   return fallback
 }
+
+export function resolveDashboardEmbedError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === 'DASHBOARD_NOT_CONFIGURED') {
+      return 'El dashboard todavía no está configurado en el servidor. Avisa al equipo técnico para que agregue la URL del informe.'
+    }
+    if (error.status === 403) return 'Solo el superadmin puede ver el dashboard.'
+  }
+  return 'No fue posible cargar el dashboard. Intenta de nuevo.'
+}

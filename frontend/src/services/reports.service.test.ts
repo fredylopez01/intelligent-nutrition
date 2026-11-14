@@ -51,4 +51,12 @@ describe('reportsService', () => {
 
     expect(http.get).toHaveBeenCalledWith('/reports/restock', { token: 'token' })
   })
+
+  it('asks for the embed URL of the dashboard', async () => {
+    const embed = { url: 'https://lookerstudio.google.com/embed/reporting/report/page/page' }
+    vi.mocked(http.get).mockResolvedValue(embed)
+
+    await expect(reportsService.dashboardEmbed('token')).resolves.toEqual(embed)
+    expect(http.get).toHaveBeenCalledWith('/reports/dashboard-embed', { token: 'token' })
+  })
 })

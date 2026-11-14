@@ -20,6 +20,10 @@ export interface SalesReportResponse {
   meta: PaginationMeta
 }
 
+export interface DashboardEmbed {
+  url: string
+}
+
 export interface RestockReportRow {
   productId: string
   name: string

@@ -34,6 +34,7 @@ import { ProfilePage } from '../pages/profile/ProfilePage'
 import { PromotionsPage } from '../pages/promotions/PromotionsPage'
 import { PublicCatalogPage } from '../pages/public/PublicCatalogPage'
 import { PublicProductPage } from '../pages/public/PublicProductPage'
+import { BiDashboardPage } from '../pages/reports/BiDashboardPage'
 import { ReportsPage } from '../pages/reports/ReportsPage'
 import { RestockPage } from '../pages/reports/RestockPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
@@ -295,6 +296,15 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/reportes/reposicion']}>
             <RestockPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reportes/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/reportes/dashboard']}>
+            <BiDashboardPage />
           </ProtectedRoute>
         }
       />

@@ -134,6 +134,23 @@ describe('Sidebar menu by role', () => {
     expect(reports).toEqual(['Reportes', 'Reportes', 'Reposición sugerida'])
   })
 
+  it('shows the dashboard under the reports only to the superadmin', () => {
+    auth.role = 'SUPERADMIN'
+    renderSidebar('/reportes')
+
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' })
+    const links = within(nav)
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href')?.startsWith('/reportes'))
+    expect(links.map((link) => link.textContent)).toEqual([
+      'Reportes',
+      'Reportes',
+      'Reposición sugerida',
+      'Dashboard',
+    ])
+    expect(links.at(-1)).toHaveAttribute('href', '/reportes/dashboard')
+  })
+
   it('does not render disabled entries for hidden modules', () => {
     auth.role = 'BRANCH_ASSISTANT'
     renderSidebar()
