@@ -25,18 +25,24 @@ function menuLabels() {
   const nav = screen.getByRole('navigation', { name: 'Navegación principal' })
   return within(nav)
     .getAllByRole('link')
+    .filter((link) => link.classList.contains('sidebar__link'))
     .map((link) => link.textContent)
 }
 
 function renderSidebar(path = '/dashboard') {
   render(
     <MemoryRouter initialEntries={[path]}>
-      <Sidebar />
+      <Sidebar
+        collapsed={false}
+        onToggleCollapsed={vi.fn()}
+        mobileOpen={false}
+        onCloseMobile={vi.fn()}
+      />
     </MemoryRouter>,
   )
 }
 
-const ALWAYS = ['Dashboard', 'Inventario', 'Catálogo', 'POS']
+const ALWAYS = ['Dashboard', 'POS', 'Inventario', 'Catálogo']
 
 beforeEach(() => {
   auth.role = 'SUPERADMIN'
@@ -48,17 +54,15 @@ describe('Sidebar menu by role', () => {
 
     expect(menuLabels()).toEqual([
       'Dashboard',
-      'Sedes',
+      'POS',
       'Inventario',
       'Catálogo',
-      'POS',
-      'Caja',
       'Promociones',
-      'Clientes',
       'Proveedores',
+      'Clientes',
       'Usuarios',
+      'Sedes',
       'Reportes',
-      'Auditoría',
     ])
   })
 
@@ -132,23 +136,40 @@ describe('Sidebar menu by role', () => {
       .filter((link) => link.getAttribute('href')?.startsWith('/reportes'))
       .map((link) => link.textContent)
     expect(reports).toEqual(['Reportes', 'Reportes', 'Reposición sugerida'])
+    expect(within(nav).queryByRole('link', { name: 'Auditoría' })).not.toBeInTheDocument()
   })
 
-  it('shows the dashboard under the reports only to the superadmin', () => {
+  it('shows BI under the dashboard only to the superadmin', () => {
     auth.role = 'SUPERADMIN'
-    renderSidebar('/reportes')
+    renderSidebar('/reportes/dashboard')
 
     const nav = screen.getByRole('navigation', { name: 'Navegación principal' })
-    const links = within(nav)
-      .getAllByRole('link')
-      .filter((link) => link.getAttribute('href')?.startsWith('/reportes'))
-    expect(links.map((link) => link.textContent)).toEqual([
-      'Reportes',
-      'Reportes',
-      'Reposición sugerida',
-      'Dashboard',
-    ])
-    expect(links.at(-1)).toHaveAttribute('href', '/reportes/dashboard')
+    expect(within(nav).getByRole('link', { name: 'BI / Analítica' })).toHaveAttribute(
+      'href',
+      '/reportes/dashboard',
+    )
+    expect(within(nav).queryByRole('link', { name: 'Reposición sugerida' })).not.toBeInTheDocument()
+  })
+
+  it('places audit under reports for superadmins and keeps DEV access standalone', () => {
+    renderSidebar('/reportes')
+
+    const superadminNav = screen.getByRole('navigation', { name: 'Navegación principal' })
+    expect(within(superadminNav).getByRole('link', { name: 'Auditoría' })).toHaveAttribute(
+      'href',
+      '/auditoria',
+    )
+
+    auth.role = 'DEV'
+    renderSidebar('/auditoria')
+    const devNav = screen.getAllByRole('navigation', { name: 'Navegación principal' }).at(-1)
+    expect(devNav && within(devNav).getByRole('link', { name: 'Auditoría' })).toHaveAttribute(
+      'href',
+      '/auditoria',
+    )
+    expect(
+      devNav && within(devNav).queryByRole('link', { name: 'Reportes' }),
+    ).not.toBeInTheDocument()
   })
 
   it('does not render disabled entries for hidden modules', () => {
@@ -240,5 +261,15 @@ describe('Sidebar inventory submenu', () => {
 
     expect(screen.queryByText('Alcance de datos')).not.toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Intelligent Nutrition' })).toBeInTheDocument()
+  })
+
+  it('keeps the POS submenu open and highlights Caja on its route', () => {
+    renderSidebar('/caja/turno')
+
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' })
+    const caja = within(nav).getByRole('link', { name: 'Caja' })
+    expect(caja).toHaveAttribute('href', '/caja/turno')
+    expect(caja).toHaveClass('sidebar__sub--active')
+    expect(within(nav).getByRole('link', { name: 'Métodos de pago' })).toBeInTheDocument()
   })
 })
