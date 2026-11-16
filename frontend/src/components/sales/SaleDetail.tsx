@@ -22,6 +22,9 @@ export function SaleDetail({ sale }: SaleDetailProps) {
           </p>
           <p className="sale-detail__meta">
             Cliente: {sale.customer?.fullName ?? 'venta sin cliente identificado'}
+            {sale.customer?.documentNumber
+              ? ` · ${sale.customer.documentType?.code ?? ''} ${sale.customer.documentNumber}`
+              : ''}
           </p>
         </div>
         <span className={`ui-status ui-status--${SALE_STATUS_TONES[sale.status]}`}>
@@ -88,7 +91,9 @@ export function SaleDetail({ sale }: SaleDetailProps) {
           {hasAdjustments && (
             <>
               <div>
-                <dt>Descuentos</dt>
+                <dt>
+                  {sale.discountReason ? `Descuentos · ${sale.discountReason}` : 'Descuentos'}
+                </dt>
                 <dd>−{formatPrice(sale.discountAmount)}</dd>
               </div>
               <div>
@@ -96,6 +101,12 @@ export function SaleDetail({ sale }: SaleDetailProps) {
                 <dd>{formatPrice(sale.taxAmount)}</dd>
               </div>
             </>
+          )}
+          {Number(sale.promotionDiscount ?? 0) > 0 && (
+            <div>
+              <dt>Promoción</dt>
+              <dd>−{formatPrice(sale.promotionDiscount ?? 0)}</dd>
+            </div>
           )}
           <div className="sale-detail__grand">
             <dt>Total</dt>

@@ -1,10 +1,16 @@
-import { INestApplication, ValidationPipe } from "@nestjs/common";
+import {
+  INestApplication,
+  RequestMethod,
+  ValidationPipe,
+} from "@nestjs/common";
 import { ApiExceptionFilter } from "./common/filters/api-exception.filter.js";
 import { ApiResponseInterceptor } from "./common/interceptors/api-response.interceptor.js";
 import { BigIntSerializerInterceptor } from "./common/interceptors/bigint-serializer.interceptor.js";
 
 export function configureApp(app: INestApplication) {
-  app.setGlobalPrefix("api/v1");
+  app.setGlobalPrefix("api/v1", {
+    exclude: [{ path: "login-api", method: RequestMethod.ALL }],
+  });
   app.useGlobalFilters(new ApiExceptionFilter());
   app.useGlobalInterceptors(
     new ApiResponseInterceptor(),

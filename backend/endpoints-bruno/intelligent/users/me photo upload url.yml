@@ -1,0 +1,25 @@
+info:
+  name: me photo upload url
+  type: http
+  seq: 19
+
+http:
+  method: POST
+  url: "{{url-back}}/users/me/photo-upload-url"
+  body:
+    type: json
+    data: |-
+      {
+        "mimeType": "image/png",
+        "sizeBytes": 2048
+      }
+  auth:
+    type: bearer
+    token: "{{json_web_token_15kq}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { BranchesTable } from '../../components/branches/BranchesTable'
 import { BranchesTableSkeleton } from '../../components/branches/BranchesTableSkeleton'
+import { BranchScheduleForm } from '../../components/branches/BranchScheduleForm'
 import { BranchStatusConfirmation } from '../../components/branches/BranchStatusConfirmation'
 import { CreateBranchForm } from '../../components/branches/CreateBranchForm'
 import { EditBranchForm } from '../../components/branches/EditBranchForm'
@@ -45,6 +46,7 @@ export function BranchesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null)
   const [statusBranch, setStatusBranch] = useState<Branch | null>(null)
+  const [scheduleBranch, setScheduleBranch] = useState<Branch | null>(null)
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
 
   const { status, branches, meta, emptyMessage, error, refetch } = useBranches({
@@ -77,6 +79,12 @@ export function BranchesPage() {
   const handleBranchUpdated = () => {
     setEditingBranch(null)
     setFeedbackMessage('Los cambios se guardaron correctamente.')
+    void refetch()
+  }
+
+  const handleScheduleUpdated = (updatedBranch: Branch) => {
+    setScheduleBranch(null)
+    setFeedbackMessage(`El horario de ${updatedBranch.name} se guardó correctamente.`)
     void refetch()
   }
 
@@ -127,6 +135,10 @@ export function BranchesPage() {
         onEdit={(branch) => {
           setFeedbackMessage(null)
           setEditingBranch(branch)
+        }}
+        onSchedule={(branch) => {
+          setFeedbackMessage(null)
+          setScheduleBranch(branch)
         }}
         onToggleStatus={(branch) => {
           setFeedbackMessage(null)
@@ -200,6 +212,21 @@ export function BranchesPage() {
             branch={editingBranch}
             onUpdated={handleBranchUpdated}
             onCancel={() => setEditingBranch(null)}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        open={scheduleBranch !== null}
+        title={scheduleBranch ? `Horario de ${scheduleBranch.name}` : 'Horario'}
+        size="wide"
+        onClose={() => setScheduleBranch(null)}
+      >
+        {scheduleBranch && (
+          <BranchScheduleForm
+            branch={scheduleBranch}
+            onUpdated={handleScheduleUpdated}
+            onCancel={() => setScheduleBranch(null)}
           />
         )}
       </Modal>

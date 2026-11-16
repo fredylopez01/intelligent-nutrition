@@ -4,6 +4,37 @@
   gap: 1.125rem;
 }
 
+.branch-form__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.branch-form__check input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.125rem;
+  accent-color: var(--color-primary-strong);
+}
+
+.branch-form__check > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.branch-form__check strong {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
 .branch-form__actions {
   display: flex;
   justify-content: flex-end;

@@ -1,0 +1,163 @@
+.branch-schedule__intro {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
+.branch-schedule {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 12px;
+}
+
+.branch-schedule__day {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem 1rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.branch-schedule__day:last-child {
+  border-bottom: 0;
+}
+
+.branch-schedule__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 38px;
+  cursor: pointer;
+}
+
+.branch-schedule__toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-primary-strong);
+}
+
+.branch-schedule__name {
+  font-size: 0.845rem;
+  color: var(--color-text);
+  text-transform: capitalize;
+}
+
+.branch-schedule__intervals {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.branch-schedule__interval {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.branch-schedule__time {
+  height: 38px;
+  padding: 0 0.625rem;
+  background: var(--color-surface-field);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color-scheme: dark light;
+}
+
+.branch-schedule__time[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.branch-schedule__time:focus-visible,
+.branch-schedule__remove:focus-visible,
+.branch-schedule__add:focus-visible,
+.branch-schedule__copy:focus-visible {
+  outline: 2px solid var(--color-primary-strong);
+  outline-offset: 2px;
+}
+
+.branch-schedule__to {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.branch-schedule__remove {
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.branch-schedule__remove:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.branch-schedule__add,
+.branch-schedule__copy {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--color-text-secondary);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.branch-schedule__add:hover,
+.branch-schedule__copy:hover {
+  color: var(--color-text);
+}
+
+.branch-schedule__copy {
+  align-self: center;
+  white-space: nowrap;
+}
+
+.branch-schedule__closed {
+  align-self: center;
+  font-size: 0.8rem;
+  color: var(--color-text-faint);
+}
+
+.branch-schedule__error {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-danger);
+}
+
+@media (max-width: 599px) {
+  .branch-schedule__day {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .branch-schedule__intervals,
+  .branch-schedule__closed {
+    grid-column: 1 / -1;
+  }
+
+  .branch-schedule__copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .branch-schedule__interval {
+    flex-wrap: wrap;
+  }
+}

@@ -8,12 +8,45 @@ import {
 import { Prisma } from "../../../generated/prisma/client.js";
 import { PrismaService } from "../../database/prisma/prisma.service.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
+import { normalizeSearchTerm } from "../../common/utils/search.util.js";
 import { AuditService } from "../audit/audit.service.js";
 import { CreateBranchDto } from "./dto/create-branch.dto.js";
 import { ListBranchesQueryDto } from "./dto/list-branches-query.dto.js";
 import { ListSellableProductsQueryDto } from "./dto/list-sellable-products-query.dto.js";
 import { startOfTodayUtc } from "../../common/utils/expiration.util.js";
 import { UpdateBranchDto } from "./dto/update-branch.dto.js";
+import { UpdateBranchScheduleDto } from "./dto/update-branch-schedule.dto.js";
+import {
+  reservationKey,
+  reservedUnits,
+} from "../../common/utils/stock-reservations.util.js";
+import {
+  groupSchedule,
+  isOpenAt,
+  toMinutes,
+  type ScheduleRow,
+} from "../../common/utils/branch-schedule.util.js";
+import {
+  loadRecipes,
+  preparedAvailability,
+  supplyStockMap,
+} from "../recipes/recipe-consumption.js";
+
+const SCHEDULE_SELECT = {
+  select: { dayOfWeek: true, opensAt: true, closesAt: true },
+} as const;
+
+function withSchedule<T extends { active: boolean; schedules: ScheduleRow[] }>(
+  branch: T,
+  now = new Date(),
+) {
+  const { schedules, ...rest } = branch;
+  return {
+    ...rest,
+    schedule: groupSchedule(schedules),
+    openNow: branch.active && isOpenAt(schedules, now),
+  };
+}
 
 @Injectable()
 export class BranchesService {
@@ -61,12 +94,15 @@ export class BranchesService {
           address: true,
           phone: true,
           active: true,
+          deliveryEnabled: true,
+          schedules: SCHEDULE_SELECT,
         },
       }),
     ]);
 
+    const now = new Date();
     return {
-      data: branches,
+      data: branches.map((branch) => withSchedule(branch, now)),
       meta: {
         page,
         limit,
@@ -85,6 +121,8 @@ export class BranchesService {
         address: true,
         phone: true,
         active: true,
+        deliveryEnabled: true,
+        schedules: SCHEDULE_SELECT,
       },
     });
 
@@ -92,7 +130,90 @@ export class BranchesService {
       throw new NotFoundException("Branch not found");
     }
 
-    return branch;
+    return withSchedule(branch);
+  }
+
+  async updateSchedule(
+    id: string,
+    dto: UpdateBranchScheduleDto,
+    currentUser: AuthenticatedUser,
+    ipAddress?: string,
+  ) {
+    const seenDays = new Set<number>();
+    const rows: ScheduleRow[] = [];
+    for (const day of dto.days) {
+      if (seenDays.has(day.dayOfWeek)) {
+        throw new BadRequestException({
+          code: "DUPLICATED_DAY",
+          message: `Day ${day.dayOfWeek} is repeated.`,
+        });
+      }
+      seenDays.add(day.dayOfWeek);
+      const intervals = [...day.intervals].sort(
+        (a, b) => toMinutes(a.opensAt) - toMinutes(b.opensAt),
+      );
+      intervals.forEach((interval, index) => {
+        if (toMinutes(interval.opensAt) >= toMinutes(interval.closesAt)) {
+          throw new BadRequestException({
+            code: "INVALID_INTERVAL",
+            message: `The interval ${interval.opensAt}-${interval.closesAt} must close after it opens.`,
+          });
+        }
+        const previous = intervals[index - 1];
+        if (
+          previous &&
+          toMinutes(interval.opensAt) < toMinutes(previous.closesAt)
+        ) {
+          throw new BadRequestException({
+            code: "OVERLAPPING_INTERVALS",
+            message: `The intervals of day ${day.dayOfWeek} overlap.`,
+          });
+        }
+        rows.push({ dayOfWeek: day.dayOfWeek, ...interval });
+      });
+    }
+
+    return this.prisma.$transaction(async (transaction) => {
+      const branch = await transaction.branch.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          phone: true,
+          active: true,
+          deliveryEnabled: true,
+          schedules: SCHEDULE_SELECT,
+        },
+      });
+
+      if (!branch) {
+        throw new NotFoundException("Branch not found");
+      }
+
+      await transaction.branchSchedule.deleteMany({ where: { branchId: id } });
+      if (rows.length > 0) {
+        await transaction.branchSchedule.createMany({
+          data: rows.map((row) => ({ branchId: id, ...row })),
+        });
+      }
+
+      await this.auditService.createAuditLog(
+        {
+          userId: currentUser.id,
+          action: "UPDATE",
+          entity: "BRANCH",
+          entityId: id,
+          oldData: { schedule: groupSchedule(branch.schedules) },
+          newData: { schedule: groupSchedule(rows) },
+          reason: `Actualización del horario de la sede ${branch.name}`,
+          ipAddress,
+        },
+        transaction,
+      );
+
+      return withSchedule({ ...branch, schedules: rows });
+    });
   }
 
   async update(
@@ -115,7 +236,7 @@ export class BranchesService {
           throw new NotFoundException("Branch not found");
         }
 
-        const { name, address, phone } = updateBranchDto;
+        const { name, address, phone, deliveryEnabled } = updateBranchDto;
         if (name !== undefined && name !== existingBranch.name) {
           const branchWithSameName = await transaction.branch.findUnique({
             where: { name },
@@ -133,6 +254,7 @@ export class BranchesService {
             ...(name === undefined ? {} : { name }),
             ...(address === undefined ? {} : { address }),
             ...(phone === undefined ? {} : { phone }),
+            ...(deliveryEnabled === undefined ? {} : { deliveryEnabled }),
           },
           select: {
             id: true,
@@ -140,6 +262,7 @@ export class BranchesService {
             address: true,
             phone: true,
             active: true,
+            deliveryEnabled: true,
           },
         });
 
@@ -214,6 +337,7 @@ export class BranchesService {
           address: true,
           phone: true,
           active: true,
+          deliveryEnabled: true,
         },
       });
 
@@ -265,6 +389,7 @@ export class BranchesService {
             address: true,
             phone: true,
             active: true,
+            deliveryEnabled: true,
           },
         });
 
@@ -332,17 +457,39 @@ export class BranchesService {
       where: { branchId, expirationDate: { gte: startOfTodayUtc() } },
       _sum: { quantity: true },
     });
+    const reserved = await reservedUnits(this.prisma, {
+      productIds: grouped.map((g) => g.productId),
+      branchIds: [branchId],
+    });
+    const preparedRecipes = await loadRecipes(this.prisma, {
+      active: true,
+      productId: { not: null },
+    });
+    const supplyStock = await supplyStockMap(this.prisma, branchId, [
+      ...new Set(
+        preparedRecipes.flatMap((recipe) =>
+          recipe.ingredients.map((ingredient) => ingredient.supplyId),
+        ),
+      ),
+    ]);
+    const preparedByProduct = new Map(
+      preparedRecipes.map((recipe) => [
+        recipe.productId as string,
+        {
+          recipeId: recipe.id,
+          available: preparedAvailability(recipe, supplyStock),
+        },
+      ]),
+    );
 
-    if (grouped.length === 0) {
-      return {
-        data: [],
-        meta: { page, limit, total: 0, totalPages: 0 },
-      };
-    }
-
-    const productIdsWithStock = grouped
-      .filter((g) => (g._sum.quantity ?? 0) > 0)
-      .map((g) => g.productId);
+    const productIdsWithStock = [
+      ...new Set([
+        ...grouped
+          .filter((g) => (g._sum.quantity ?? 0) > 0)
+          .map((g) => g.productId),
+        ...preparedByProduct.keys(),
+      ]),
+    ];
 
     if (productIdsWithStock.length === 0) {
       return {
@@ -356,12 +503,7 @@ export class BranchesService {
       active: true,
       ...(categoryId ? { categoryId } : {}),
       ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { referenceCode: { contains: search, mode: "insensitive" } },
-            ],
-          }
+        ? { searchText: { contains: normalizeSearchTerm(search) } }
         : {}),
     };
 
@@ -402,16 +544,42 @@ export class BranchesService {
       grouped.map((g) => [g.productId, g._sum.quantity ?? 0]),
     );
 
-    const data = products.map((product) => ({
-      productId: product.id,
-      name: product.name,
-      referenceCode: product.referenceCode,
-      primaryImageUrl: this.getPrimaryImageUrl(product.images),
-      price: product.price.toFixed(2),
-      availableQuantity: quantityMap.get(product.id) ?? 0,
-      unit: product.unitOfMeasure.abreviation,
-      category: product.category,
-    }));
+    const data = products.map((product) => {
+      const prepared = preparedByProduct.get(product.id);
+      if (prepared) {
+        return {
+          productId: product.id,
+          name: product.name,
+          referenceCode: product.referenceCode,
+          primaryImageUrl: this.getPrimaryImageUrl(product.images),
+          price: product.price.toFixed(2),
+          availableQuantity: prepared.available,
+          reservedQuantity: 0,
+          unit: product.unitOfMeasure.abreviation,
+          category: product.category,
+          prepared: true,
+          recipeId: prepared.recipeId,
+        };
+      }
+      const reservedQuantity =
+        reserved.get(reservationKey(branchId, product.id)) ?? 0;
+      return {
+        productId: product.id,
+        name: product.name,
+        referenceCode: product.referenceCode,
+        primaryImageUrl: this.getPrimaryImageUrl(product.images),
+        price: product.price.toFixed(2),
+        availableQuantity: Math.max(
+          0,
+          (quantityMap.get(product.id) ?? 0) - reservedQuantity,
+        ),
+        reservedQuantity,
+        unit: product.unitOfMeasure.abreviation,
+        category: product.category,
+        prepared: false,
+        recipeId: null,
+      };
+    });
 
     return {
       data,

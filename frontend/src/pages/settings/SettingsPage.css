@@ -42,8 +42,8 @@
 
 .settings-page__tab--active,
 .settings-page__tab--active:hover {
-  color: var(--color-text);
-  background: var(--color-primary);
+  color: var(--color-on-primary);
+  background: var(--color-primary-strong);
 }
 
 .settings-page__tab-icon {

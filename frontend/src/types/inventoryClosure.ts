@@ -14,9 +14,20 @@ export interface ClosureItem {
   difference?: number | null
 }
 
+export interface ClosureSupplyItem {
+  supplyId: string
+  supplyName: string
+  unit: string
+  systemQuantity: string
+  physicalQuantity: string | null
+  observation: string | null
+  difference?: string | null
+}
+
 export interface InventoryClosure {
   id: string
   branchId: string
+  cashShiftId?: string | null
   branchName: string
   closureDate: string
   status: ClosureStatus
@@ -28,9 +39,16 @@ export interface InventoryClosure {
   totalItems: number
   totalDifferences?: number
   items: ClosureItem[]
+  countedSupplies?: number
+  totalSupplies?: number
+  totalSupplyDifferences?: number
+  supplyItems?: ClosureSupplyItem[]
 }
 
-export type ClosureSummary = Omit<InventoryClosure, 'items' | 'totalDifferences'> & {
+export type ClosureSummary = Omit<
+  InventoryClosure,
+  'items' | 'totalDifferences' | 'supplyItems' | 'totalSupplyDifferences'
+> & {
   totalDifferences?: number | null
 }
 
@@ -53,4 +71,15 @@ export interface ClosureCount {
   expirationDate: string
   physicalQuantity: number
   observation?: string
+}
+
+export interface ClosureSupplyCount {
+  supplyId: string
+  physicalQuantity: number
+  observation?: string
+}
+
+export interface ClosureCountsPayload {
+  items?: ClosureCount[]
+  supplyItems?: ClosureSupplyCount[]
 }

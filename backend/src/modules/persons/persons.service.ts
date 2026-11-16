@@ -325,6 +325,9 @@ export class PersonsService {
         ...(email === undefined ? {} : { email }),
         ...(changes.phone === undefined ? {} : { phone: changes.phone }),
         ...(changes.address === undefined ? {} : { address: changes.address }),
+        ...(changes.profilePhotoUrl === undefined
+          ? {}
+          : { profilePhotoUrl: changes.profilePhotoUrl }),
       },
       select: {
         id: true,
@@ -336,6 +339,7 @@ export class PersonsService {
         email: true,
         phone: true,
         address: true,
+        profilePhotoUrl: true,
         active: true,
         documentType: { select: { code: true, name: true } },
       },

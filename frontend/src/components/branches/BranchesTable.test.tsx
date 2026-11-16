@@ -25,10 +25,18 @@ const branches: Branch[] = [
 
 function renderTable(rows: Branch[] = branches) {
   const onEdit = vi.fn()
+  const onSchedule = vi.fn()
   const onToggleStatus = vi.fn()
   const user = userEvent.setup()
-  render(<BranchesTable branches={rows} onEdit={onEdit} onToggleStatus={onToggleStatus} />)
-  return { user, onEdit, onToggleStatus }
+  render(
+    <BranchesTable
+      branches={rows}
+      onEdit={onEdit}
+      onSchedule={onSchedule}
+      onToggleStatus={onToggleStatus}
+    />,
+  )
+  return { user, onEdit, onSchedule, onToggleStatus }
 }
 
 function getRow(name: string) {
@@ -42,7 +50,7 @@ describe('BranchesTable', () => {
     renderTable()
 
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
-    expect(headers).toEqual(['Nombre', 'Dirección', 'Teléfono', 'Estado', 'Acciones'])
+    expect(headers).toEqual(['Nombre', 'Dirección', 'Teléfono', 'Horario', 'Estado', 'Acciones'])
   })
 
   it('renders one row per branch with its data and status', () => {
@@ -58,6 +66,33 @@ describe('BranchesTable', () => {
     const sogamoso = within(getRow('Sede Sogamoso'))
     expect(sogamoso.getByText('Calle 11 # 14-20, Sogamoso')).toBeInTheDocument()
     expect(sogamoso.getByText('Inactivo')).toBeInTheDocument()
+    expect(sogamoso.getByText('Sede inactiva')).toBeInTheDocument()
+    expect(makro.getByText('Horario por confirmar')).toBeInTheDocument()
+  })
+
+  it('shows whether an active branch is open by its schedule', () => {
+    renderTable([
+      {
+        ...branches[0],
+        schedule: [1, 2, 3, 4, 5, 6, 7].map((dayOfWeek) => ({
+          dayOfWeek,
+          intervals: [{ opensAt: '00:00', closesAt: '23:59' }],
+        })),
+      },
+    ])
+
+    expect(
+      within(getRow('Sede Makro')).getByText('Abierta · cierra a las 11:59 p. m.'),
+    ).toBeInTheDocument()
+  })
+
+  it('opens the schedule of the selected branch', async () => {
+    const { user, onSchedule } = renderTable()
+
+    await user.click(screen.getByRole('button', { name: 'Acciones para Sede Makro' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Horario' }))
+
+    expect(onSchedule).toHaveBeenCalledWith(branches[0])
   })
 
   it('renders only the header when there are no branches', () => {

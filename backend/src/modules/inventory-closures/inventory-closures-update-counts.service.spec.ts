@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { ValidationPipe } from "@nestjs/common";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 import { UpdateCountsDto } from "./dto/update-counts.dto.js";
+import { Prisma } from "../../../generated/prisma/client.js";
 import { InventoryClosuresService } from "./inventory-closures.service.js";
 
 type AsyncMock = (...args: unknown[]) => Promise<unknown>;
@@ -39,6 +40,7 @@ const tx = {
     update: jest.fn<AsyncMock>(),
   },
   inventoryClosureDetail: { update: jest.fn<AsyncMock>() },
+  inventoryClosureSupplyDetail: { update: jest.fn<AsyncMock>() },
 };
 const prisma = {
   $transaction: jest.fn<(arg: unknown) => Promise<unknown>>(),
@@ -83,6 +85,17 @@ function closure(
     branch: { name: "Centro" },
     user: { person: { firstName: "Laura", lastName: null } },
     details,
+    supplyDetails: [
+      {
+        id: "supply-detail-milk",
+        supplyId: "supply-milk",
+        systemQuantity: new Prisma.Decimal("500"),
+        physicalQuantity: null as Prisma.Decimal | null,
+        difference: null as Prisma.Decimal | null,
+        observation: null as string | null,
+        supply: { name: "Leche", unitOfMeasure: { abreviation: "ml" } },
+      },
+    ],
   };
 }
 
@@ -120,6 +133,68 @@ describe("InventoryClosuresService.updateCounts", () => {
       closure([lot("2026-09-30", 2, 0), lot("2027-06-30", 8, 7)]),
     );
     service = new InventoryClosuresService(prisma as never, audit as never);
+  });
+
+  it("rejects a save without product nor supply counts", async () => {
+    await expect(
+      service.updateCounts(closureId, { items: [] }, assistant),
+    ).rejects.toMatchObject({ response: { code: "VALIDATION_ERROR" } });
+    expect(tx.inventoryClosureDetail.update).not.toHaveBeenCalled();
+  });
+
+  it("stores the count of a supply with its decimal difference", async () => {
+    await service.updateCounts(
+      closureId,
+      {
+        supplyItems: [
+          {
+            supplyId: "supply-milk",
+            physicalQuantity: 480.5,
+            observation: "Derrame",
+          },
+        ],
+      },
+      assistant,
+    );
+
+    const [args] = tx.inventoryClosureSupplyDetail.update.mock.calls[0] as [
+      {
+        where: { id: string };
+        data: {
+          physicalQuantity: Prisma.Decimal;
+          difference: Prisma.Decimal;
+          observation: string | null;
+        };
+      },
+    ];
+    expect(args.where).toEqual({ id: "supply-detail-milk" });
+    expect(args.data.physicalQuantity.toString()).toBe("480.5");
+    expect(args.data.difference.toString()).toBe("-19.5");
+    expect(args.data.observation).toBe("Derrame");
+    expect(tx.inventoryClosureDetail.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a supply that is not part of the closure or is repeated", async () => {
+    await expect(
+      service.updateCounts(
+        closureId,
+        { supplyItems: [{ supplyId: "supply-other", physicalQuantity: 1 }] },
+        assistant,
+      ),
+    ).rejects.toMatchObject({ response: { code: "SUPPLY_NOT_IN_CLOSURE" } });
+    await expect(
+      service.updateCounts(
+        closureId,
+        {
+          supplyItems: [
+            { supplyId: "supply-milk", physicalQuantity: 1 },
+            { supplyId: "supply-milk", physicalQuantity: 2 },
+          ],
+        },
+        assistant,
+      ),
+    ).rejects.toMatchObject({ response: { code: "DUPLICATED_SUPPLY" } });
+    expect(tx.inventoryClosureSupplyDetail.update).not.toHaveBeenCalled();
   });
 
   it("stores the count of each lot with its difference and observation", async () => {
@@ -265,7 +340,14 @@ describe("InventoryClosuresService.updateCounts", () => {
     });
 
     it.each([
-      ["an empty list", { items: [] }],
+      [
+        "a supply count with four decimals",
+        { supplyItems: [{ supplyId: wheyId, physicalQuantity: 1.2345 }] },
+      ],
+      [
+        "a negative supply count",
+        { supplyItems: [{ supplyId: wheyId, physicalQuantity: -1 }] },
+      ],
       ["the old counts field", { counts: [count("2027-06-30", 1)] }],
       ["a negative count", { items: [count("2027-06-30", -1)] }],
       ["a decimal count", { items: [count("2027-06-30", 1.5)] }],

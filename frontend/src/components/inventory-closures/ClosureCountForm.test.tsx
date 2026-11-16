@@ -20,13 +20,18 @@ vi.mock('../../hooks/useAuth', () => ({
 const saveCounts = vi.mocked(inventoryClosuresService.saveCounts)
 const confirm = vi.mocked(inventoryClosuresService.confirm)
 
-function renderForm(closure: InventoryClosure = buildClosure(), withConfirm = true) {
+function renderForm(
+  closure: InventoryClosure = buildClosure(),
+  withConfirm = true,
+  cashShiftId: string | null = 'shift-1',
+) {
   const onSaved = vi.fn()
   const onConfirmed = vi.fn()
   const user = userEvent.setup()
   render(
     <ClosureCountForm
       closure={closure}
+      cashShiftId={cashShiftId}
       onSaved={onSaved}
       onConfirmed={withConfirm ? onConfirmed : undefined}
     />,
@@ -39,8 +44,8 @@ const quantity = (lot: string) =>
 
 beforeEach(() => {
   vi.resetAllMocks()
-  saveCounts.mockImplementation((_id, items) =>
-    Promise.resolve(buildClosure({ countedItems: items.length })),
+  saveCounts.mockImplementation((_id, payload) =>
+    Promise.resolve(buildClosure({ countedItems: payload.items?.length ?? 0 })),
   )
   confirm.mockResolvedValue(buildClosure({ status: 'CONFIRMED', confirmed: true, locked: true }))
 })
@@ -79,14 +84,16 @@ describe('ClosureCountForm', () => {
     await waitFor(() =>
       expect(saveCounts).toHaveBeenCalledWith(
         'closure-1',
-        [
-          {
-            productId: 'product-whey',
-            expirationDate: '2027-06-30',
-            physicalQuantity: 7,
-            observation: 'Un tarro abierto',
-          },
-        ],
+        {
+          items: [
+            {
+              productId: 'product-whey',
+              expirationDate: '2027-06-30',
+              physicalQuantity: 7,
+              observation: 'Un tarro abierto',
+            },
+          ],
+        },
         'test-token',
       ),
     )
@@ -161,13 +168,15 @@ describe('ClosureCountForm', () => {
     await waitFor(() => expect(onConfirmed).toHaveBeenCalled())
     expect(saveCounts).toHaveBeenCalledWith(
       'closure-1',
-      [
-        { productId: 'product-whey', expirationDate: '2026-09-30', physicalQuantity: 1 },
-        { productId: 'product-whey', expirationDate: '2027-06-30', physicalQuantity: 8 },
-      ],
+      {
+        items: [
+          { productId: 'product-whey', expirationDate: '2026-09-30', physicalQuantity: 1 },
+          { productId: 'product-whey', expirationDate: '2027-06-30', physicalQuantity: 8 },
+        ],
+      },
       'test-token',
     )
-    expect(confirm).toHaveBeenCalledWith('closure-1', 'test-token')
+    expect(confirm).toHaveBeenCalledWith('closure-1', 'shift-1', 'test-token')
   })
 
   it('cancels the confirmation without saving or confirming', async () => {
@@ -245,5 +254,109 @@ describe('ClosureCountForm', () => {
     await user.click(screen.getByRole('button', { name: 'Sí, confirmar cierre' }))
 
     await waitFor(() => expect(onConfirmed).toHaveBeenCalled())
+  })
+
+  describe('supplies', () => {
+    const withSupplies = () =>
+      buildClosure({
+        items: [buildItem({ expirationDate: '2027-06-30', systemQuantity: 8 })],
+        supplyItems: [
+          {
+            supplyId: 'supply-milk',
+            supplyName: 'Leche entera',
+            unit: 'ml',
+            systemQuantity: '1500',
+            physicalQuantity: null,
+            observation: null,
+          },
+        ],
+        countedSupplies: 0,
+        totalSupplies: 1,
+      })
+
+    it('lists the supplies next to the products with their expected quantity', () => {
+      renderForm(withSupplies())
+
+      const table = screen.getByRole('table', { name: 'Insumos a contar' })
+      expect(within(table).getByText('Leche entera')).toBeInTheDocument()
+      expect(within(table).getByText('1.500 ml')).toBeInTheDocument()
+      expect(screen.getByRole('table', { name: 'Lotes a contar' })).toBeInTheDocument()
+      expect(screen.getByText('0 de 1 lotes y 0 de 1 insumos')).toBeInTheDocument()
+    })
+
+    it('saves supply counts with decimals and a comma', async () => {
+      const { user } = renderForm(withSupplies())
+
+      await user.type(screen.getByLabelText('Cantidad contada de Leche entera'), '1480,5')
+      await user.type(screen.getByLabelText('Observación de Leche entera'), 'Derrame')
+      await user.click(screen.getByRole('button', { name: 'Guardar conteo' }))
+
+      await waitFor(() =>
+        expect(saveCounts).toHaveBeenCalledWith(
+          'closure-1',
+          {
+            supplyItems: [
+              { supplyId: 'supply-milk', physicalQuantity: 1480.5, observation: 'Derrame' },
+            ],
+          },
+          'test-token',
+        ),
+      )
+    })
+
+    it('rejects a supply count with more than three decimals', async () => {
+      const { user } = renderForm(withSupplies())
+
+      await user.type(screen.getByLabelText('Cantidad contada de Leche entera'), '1,2345')
+      await user.click(screen.getByRole('button', { name: 'Guardar conteo' }))
+
+      expect(
+        await screen.findByText('Escribe un número de 0 en adelante, con máximo 3 decimales.'),
+      ).toBeInTheDocument()
+      expect(saveCounts).not.toHaveBeenCalled()
+    })
+
+    it('asks to count the supplies before confirming', async () => {
+      const { user } = renderForm(withSupplies())
+
+      await user.type(quantity('30 jun 2027'), '8')
+      await user.click(screen.getByRole('button', { name: 'Confirmar cierre' }))
+
+      expect(
+        await screen.findByText(
+          'Faltan 1 insumo por contar. Escribe 0 si no encontraste unidades.',
+        ),
+      ).toBeInTheDocument()
+      expect(screen.getByText('Falta contar este insumo.')).toBeInTheDocument()
+      expect(confirm).not.toHaveBeenCalled()
+    })
+
+    it('names the supplies the server still finds missing', async () => {
+      confirm.mockRejectedValue(
+        new ApiError(
+          'Incomplete',
+          422,
+          { pending: [], pendingSupplies: [{ supplyName: 'Avena' }] },
+          'INCOMPLETE_COUNT',
+        ),
+      )
+      const { user } = renderForm(withSupplies())
+
+      await user.type(quantity('30 jun 2027'), '8')
+      await user.type(screen.getByLabelText('Cantidad contada de Leche entera'), '1500')
+      await user.click(screen.getByRole('button', { name: 'Confirmar cierre' }))
+      await user.click(screen.getByRole('button', { name: 'Sí, confirmar cierre' }))
+
+      expect(await screen.findByText('Faltan por contar: Avena.')).toBeInTheDocument()
+    })
+  })
+
+  describe('cash shift', () => {
+    it('does not let the closure be confirmed without an open cash shift', () => {
+      renderForm(buildClosure(), true, null)
+
+      expect(screen.getByRole('button', { name: 'Confirmar cierre' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Guardar conteo' })).toBeEnabled()
+    })
   })
 })

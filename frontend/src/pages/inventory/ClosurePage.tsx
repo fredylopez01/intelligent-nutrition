@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
+import { ClosureCashShift } from '../../components/inventory-closures/ClosureCashShift'
 import { ClosureCountForm } from '../../components/inventory-closures/ClosureCountForm'
 import { ClosureResult } from '../../components/inventory-closures/ClosureResult'
 import { ClosuresTable } from '../../components/inventory-closures/ClosuresTable'
@@ -12,12 +13,14 @@ import { Modal } from '../../components/ui/Modal'
 import { Pagination } from '../../components/ui/Pagination'
 import { ReloadButton } from '../../components/ui/ReloadButton'
 import { TableSkeleton } from '../../components/ui/TableSkeleton'
+import { useActiveCashShift } from '../../hooks/useActiveCashShift'
 import { useAuth } from '../../hooks/useAuth'
 import { useInventoryBranches } from '../../hooks/useInventoryBranches'
 import { useInventoryClosures } from '../../hooks/useInventoryClosures'
 import { usePagination } from '../../hooks/usePagination'
 import { useTodayClosure } from '../../hooks/useTodayClosure'
 import { AppLayout } from '../../layouts/AppLayout'
+import { canAccess } from '../../routes/access'
 import { inventoryClosuresService } from '../../services/inventoryClosures.service'
 import type { ClosureStatus, ClosureSummary, InventoryClosure } from '../../types/inventoryClosure'
 import { hasRole } from '../../utils/categories'
@@ -53,6 +56,10 @@ export function ClosurePage() {
   const branchId = branch?.id ?? null
 
   const today = useTodayClosure(canCount ? branchId : null)
+  const closureOpen =
+    today.status === 'success' && (!today.closure || today.closure.status === 'PENDING')
+  const activeShift = useActiveCashShift(canCount && closureOpen ? branchId : null)
+  const canOpenShift = canAccess('/caja/turno', roleName)
   const invalidRange = filters.desde !== '' && filters.hasta !== '' && filters.desde > filters.hasta
   const history = useInventoryClosures(
     {
@@ -124,9 +131,19 @@ export function ClosurePage() {
         </div>
       )
     }
+    const shiftCard = (
+      <ClosureCashShift
+        status={activeShift.status}
+        shift={activeShift.shift}
+        branchName={branch.name}
+        canOpenShift={canOpenShift}
+        onRetry={activeShift.refetch}
+      />
+    )
     if (!today.closure) {
       return (
         <div className="closure-page__today">
+          {shiftCard}
           <ClosureStart
             branchId={branch.id}
             branchName={branch.name}
@@ -147,9 +164,11 @@ export function ClosurePage() {
               </h2>
             </div>
           </div>
+          {shiftCard}
           <ClosureCountForm
             key={today.closure.id}
             closure={today.closure}
+            cashShiftId={activeShift.status === 'success' ? (activeShift.shift?.id ?? null) : null}
             onSaved={handleClosureChange}
             onConfirmed={handleClosureChange}
           />

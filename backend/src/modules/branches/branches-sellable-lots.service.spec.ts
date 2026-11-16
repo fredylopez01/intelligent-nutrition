@@ -15,6 +15,7 @@ const branchId = "8f5c2d0e-6a1b-4c3d-9e8f-0a1b2c3d4e5f";
 const prisma = {
   branch: { findUnique: jest.fn<AsyncMock>() },
   branchInventory: { groupBy: jest.fn<AsyncMock>() },
+  recipe: { findMany: jest.fn<AsyncMock>() },
 };
 
 describe("BranchesService sellable products", () => {
@@ -23,6 +24,7 @@ describe("BranchesService sellable products", () => {
     jest.resetAllMocks();
     prisma.branch.findUnique.mockResolvedValue({ id: branchId });
     prisma.branchInventory.groupBy.mockResolvedValue([]);
+    prisma.recipe.findMany.mockResolvedValue([]);
   });
 
   afterEach(() => {

@@ -6,23 +6,184 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-variables:
-  - group: github-sync-secrets # Grupo con GH_PAT
+stages:
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: BuildApplications
+        displayName: Build backend and frontend
+        steps:
+          - checkout: self
 
-steps:
-  - checkout: self
-    fetchDepth: 0
+          - task: NodeTool@0
+            displayName: Use Node.js 22
+            inputs:
+              versionSpec: 22.x
 
-  - script: |
-      git config --global user.email "ci-bot@intelligentnutrition.shop"
-      git config --global user.name "CI-CD Bot"
+          - script: npm ci
+            displayName: Install backend dependencies
+            workingDirectory: backend
 
-      git remote add deploy "https://github.com/fredylopez01/intelligent-nutrition.git"
+          - script: npx prisma generate
+            displayName: Generate Prisma client
+            workingDirectory: backend
 
-      git checkout -B main
+          - script: npm run build
+            displayName: Build backend
+            workingDirectory: backend
 
-      AUTH_HEADER="AUTHORIZATION: basic $(echo -n x-access-token:$GH_PAT | base64 -w0)"
-      git -c http.https://github.com/.extraheader="$AUTH_HEADER" push deploy main --force
-    displayName: "Sync main branch to GitHub"
-    env:
-      GH_PAT: $(GH_PAT)
+          - script: npm ci
+            displayName: Install frontend dependencies
+            workingDirectory: frontend
+
+          - script: npm run build
+            displayName: Build frontend
+            workingDirectory: frontend
+
+  - stage: Test
+    displayName: Test
+    dependsOn: Build
+    jobs:
+      - job: TestApplications
+        displayName: Test backend and frontend
+        variables:
+          POSTGRES_USER: intelligent_nutrition
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: intelligent_nutrition
+          JWT_SECRET: test-secret
+          RESEND_API_KEY: re_test_dummy
+          RESEND_FROM_EMAIL: test@example.com
+          FRONTEND_URL: http://localhost:5173
+          # AppModule instancia StorageService en todos los e2e y su constructor
+          # exige estas variables. Son ficticias: nunca se descarga nada.
+          STORAGE_ENDPOINT: http://localhost:9090
+          STORAGE_BUCKET: products-images-test
+          STORAGE_ACCESS_KEY: test-access-key
+          STORAGE_SECRET_KEY: test-secret-key
+          STORAGE_PUBLIC_URL: http://cdn.products-images.test
+          STORAGE_REGION: us-east-1
+          STORAGE_FORCE_PATH_STYLE: "true"
+        services:
+          postgres:
+            image: postgres:17-alpine
+            ports:
+              - 5432:5432
+            env:
+              POSTGRES_USER: $(POSTGRES_USER)
+              POSTGRES_PASSWORD: $(POSTGRES_PASSWORD)
+              POSTGRES_DB: $(POSTGRES_DB)
+            options: >-
+              --health-cmd pg_isready
+              --health-interval 10s
+              --health-timeout 5s
+              --health-retries 10
+        steps:
+          - checkout: self
+
+          - task: NodeTool@0
+            displayName: Use Node.js 22
+            inputs:
+              versionSpec: 22.x
+
+          - script: npm ci
+            displayName: Install backend dependencies
+            workingDirectory: backend
+
+          - script: npx prisma generate
+            displayName: Generate Prisma client
+            workingDirectory: backend
+
+          - script: |
+              PGPASSWORD=$(POSTGRES_PASSWORD) psql -h localhost -U $(POSTGRES_USER) \
+                -d $(POSTGRES_DB) -c "CREATE DATABASE intelligent_nutrition_test"
+            displayName: Create test database
+            env:
+              PGPASSWORD: $(POSTGRES_PASSWORD)
+
+          # El umbral está en coverageThreshold (backend/package.json).
+          - script: npm run test:cov
+            displayName: Backend unit tests with coverage
+            workingDirectory: backend
+            env:
+              DATABASE_URL: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?schema=public
+
+          # El spec de storage necesita un S3 real que este job no tiene.
+          - script: npm run test:e2e -- --testPathIgnorePatterns "product-images-storage"
+            displayName: Backend integration tests
+            workingDirectory: backend
+            env:
+              DATABASE_URL: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?schema=public
+              DATABASE_URL_TEST: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/intelligent_nutrition_test?schema=public
+
+          - script: npm ci
+            displayName: Install frontend dependencies
+            workingDirectory: frontend
+
+          - script: npm test
+            displayName: Frontend component tests
+            workingDirectory: frontend
+            env:
+              NODE_ENV: test
+
+          - script: npx playwright install --with-deps chromium
+            displayName: Install Playwright browsers
+            workingDirectory: frontend
+
+          - script: npm run test:e2e
+            displayName: Frontend end-to-end tests
+            workingDirectory: frontend
+            env:
+              NODE_ENV: test
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish coverage report
+            condition: always()
+            inputs:
+              targetPath: backend/coverage
+              artifact: backend-coverage
+
+          - script: mkdir -p frontend/playwright-report
+            displayName: Create Playwright report folder (publish fails if missing)
+            condition: always()
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Playwright report
+            condition: always()
+            inputs:
+              targetPath: frontend/playwright-report
+              artifact: playwright-report
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Playwright traces
+            condition: always()
+            inputs:
+              targetPath: frontend/test-results
+              artifact: playwright-test-results
+
+  - stage: Sync
+    displayName: Sync GitHub mirror
+    dependsOn:
+      - Build
+      - Test
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      - group: github-sync-secrets
+    jobs:
+      - job: SyncToGitHub
+        displayName: Sync main to GitHub
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - script: |
+              git config --global user.email "ci-bot@intelligentnutrition.shop"
+              git config --global user.name "CI-CD Bot"
+
+              git remote add deploy "https://github.com/fredylopez01/intelligent-nutrition.git"
+              git checkout -B main
+
+              AUTH_HEADER="AUTHORIZATION: basic $(echo -n x-access-token:$GH_PAT | base64 -w0)"
+              git -c http.https://github.com/.extraheader="$AUTH_HEADER" push deploy main --force
+            displayName: Push main to GitHub
+            env:
+              GH_PAT: $(GH_PAT)

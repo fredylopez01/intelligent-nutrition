@@ -1,0 +1,24 @@
+info:
+  name: me photo update
+  type: http
+  seq: 20
+
+http:
+  method: PATCH
+  url: "{{url-back}}/users/me"
+  body:
+    type: json
+    data: |-
+      {
+        "profilePhotoUrl": "https://cdn-dev.intelligentnutrition.shop/users/d27485a5-74b5-4938-bae6-e761dcf69a94/profile-photo.png"
+      }
+  auth:
+    type: bearer
+    token: "{{json_web_token_15kq}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

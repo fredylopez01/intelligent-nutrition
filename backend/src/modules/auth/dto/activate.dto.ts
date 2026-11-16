@@ -1,3 +1,4 @@
+import { ApiProperty } from "@nestjs/swagger";
 import {
   IsNotEmpty,
   IsString,
@@ -7,10 +8,18 @@ import {
 } from "class-validator";
 
 export class ActivateAccountDto {
+  @ApiProperty({ description: "Activation token received by email." })
   @IsString()
   @IsNotEmpty()
   token!: string;
 
+  @ApiProperty({
+    format: "password",
+    minLength: 8,
+    maxLength: 128,
+    description:
+      "Password to set. It must contain a lowercase letter, an uppercase letter, a number and a special character.",
+  })
   @IsString()
   @MinLength(8)
   @MaxLength(128)

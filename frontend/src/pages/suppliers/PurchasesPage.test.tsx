@@ -192,7 +192,7 @@ describe('PurchasesPage', () => {
     await user.click(screen.getByRole('button', { name: 'Confirmar recepción' }))
 
     expect(
-      await screen.findByText(/quedó recibida completa y sus unidades entraron al stock general/),
+      await screen.findByText(/quedó recibida completa y sus unidades entraron al inventario/),
     ).toBeInTheDocument()
   })
 

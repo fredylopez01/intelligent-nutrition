@@ -25,6 +25,15 @@ import { SalesModule } from "./modules/sales/sales.module.js";
 import { GeneralStockModule } from "./modules/general-stock/general-stock.module.js";
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
 import { NightlyJobsModule } from "./modules/nightly-jobs/nightly-jobs.module.js";
+import { DashboardModule } from "./modules/dashboard/dashboard.module.js";
+import { ReportsModule } from "./modules/reports/reports.module.js";
+import { PromotionsModule } from "./modules/promotions/promotions.module.js";
+import { SuppliesModule } from "./modules/supplies/supplies.module.js";
+import { CashShiftsModule } from "./modules/cash-shifts/cash-shifts.module.js";
+import { RecipesModule } from "./modules/recipes/recipes.module.js";
+import { CatalogModule } from "./modules/catalog/catalog.module.js";
+import { OnlineOrdersModule } from "./modules/online-orders/online-orders.module.js";
+import { SupplyPurchasesModule } from "./modules/supply-purchases/supply-purchases.module.js";
 
 @Module({
   imports: [
@@ -54,6 +63,15 @@ import { NightlyJobsModule } from "./modules/nightly-jobs/nightly-jobs.module.js
     GeneralStockModule,
     NotificationsModule,
     NightlyJobsModule,
+    DashboardModule,
+    ReportsModule,
+    PromotionsModule,
+    SuppliesModule,
+    CashShiftsModule,
+    RecipesModule,
+    CatalogModule,
+    OnlineOrdersModule,
+    SupplyPurchasesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

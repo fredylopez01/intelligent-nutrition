@@ -136,7 +136,9 @@ describe("PATCH /api/v1/branches/:id (e2e)", () => {
         phone: "6017111111",
         active: true,
       };
-      expect(response.body).toEqual({ data: { id: branch.id, ...expected } });
+      expect(response.body).toEqual({
+        data: { id: branch.id, ...expected, deliveryEnabled: false },
+      });
       expect(await findBranch(branch.id)).toEqual(expected);
 
       const auditLog = await prisma.auditLog.findFirst({

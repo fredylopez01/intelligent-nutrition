@@ -114,4 +114,33 @@ describe('SellableProductCard', () => {
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
+
+  it('marks a prepared product and counts what its supplies allow', () => {
+    renderCard({ prepared: true, recipeId: 'recipe-shake', availableQuantity: 6 })
+
+    expect(screen.getByText('Preparado con receta')).toBeInTheDocument()
+    expect(screen.getByText('Insumos para 6 und')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Agregar Whey Protein 2 lb a la venta' }),
+    ).toBeEnabled()
+  })
+
+  it('blocks a prepared product when its supplies are not enough', () => {
+    renderCard({ prepared: true, recipeId: 'recipe-shake', availableQuantity: 0 })
+
+    expect(screen.getByText('Sin insumos suficientes')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Whey Protein 2 lb: no hay insumos suficientes para prepararlo',
+      }),
+    ).toBeDisabled()
+  })
+
+  it('tells how many units are held by web orders', () => {
+    renderCard({ availableQuantity: 4, reservedQuantity: 2 })
+
+    expect(screen.getByText(/apartadas en pedidos web/)).toHaveTextContent(
+      '2 und apartadas en pedidos web',
+    )
+  })
 })

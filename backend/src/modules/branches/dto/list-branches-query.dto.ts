@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
 import {
   IsBoolean,
@@ -10,12 +11,23 @@ import {
 } from "class-validator";
 
 export class ListBranchesQueryDto {
+  @ApiPropertyOptional({
+    minimum: 1,
+    default: 1,
+    description: "Page number (1-based).",
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   page: number = 1;
 
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 100,
+    default: 10,
+    description: "Items per page.",
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -23,6 +35,9 @@ export class ListBranchesQueryDto {
   @Max(100)
   limit: number = 10;
 
+  @ApiPropertyOptional({
+    description: "Filter by active status. Omit to list all branches.",
+  })
   @IsOptional()
   @Transform(({ value }) => {
     if (value === "true") return true;
@@ -32,6 +47,10 @@ export class ListBranchesQueryDto {
   @IsBoolean()
   active?: boolean;
 
+  @ApiPropertyOptional({
+    maxLength: 100,
+    description: "Case-insensitive search on the branch name.",
+  })
   @IsOptional()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsString()

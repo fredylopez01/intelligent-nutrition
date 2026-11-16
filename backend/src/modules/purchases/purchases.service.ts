@@ -338,14 +338,50 @@ export class PurchasesService {
   ) {
     const { items } = dto;
 
+    const branchIds = new Set(
+      items
+        .map((i) => i.branchId)
+        .filter((branchId): branchId is string => Boolean(branchId)),
+    );
+
+    if (branchIds.size > 0) {
+      const branches: { id: string; active: boolean }[] = await (
+        this.prisma as any
+      ).branch.findMany({
+        where: { id: { in: [...branchIds] } },
+        select: { id: true, active: true },
+      });
+
+      const branchMap = new Map<string, { id: string; active: boolean }>(
+        branches.map((b) => [b.id, b]),
+      );
+
+      for (const branchId of branchIds) {
+        const branch = branchMap.get(branchId);
+        if (!branch) {
+          throw new NotFoundException({
+            code: "BRANCH_NOT_FOUND",
+            message: `Branch ${branchId} not found.`,
+          });
+        }
+        if (!branch.active) {
+          throw new UnprocessableEntityException({
+            code: "BRANCH_INACTIVE",
+            message: "The destination branch is inactive.",
+          });
+        }
+      }
+    }
+
     const lotKeys = items.map(
-      (i) => `${i.purchaseDetailId}:${i.expirationDate.slice(0, 10)}`,
+      (i) =>
+        `${i.purchaseDetailId}:${i.expirationDate.slice(0, 10)}:${i.branchId ?? ""}`,
     );
     if (new Set(lotKeys).size !== lotKeys.length) {
       throw new UnprocessableEntityException({
         code: "DUPLICATED_PURCHASE_DETAIL",
         message:
-          "Items contain the same purchase detail twice with the same expiration date.",
+          "Items contain the same purchase detail with the same expiration date and destination.",
       });
     }
 
@@ -382,6 +418,7 @@ export class PurchasesService {
             select: {
               id: true,
               productId: true,
+              branchId: true,
               requestedQuantity: true,
               receivedQuantity: true,
               unitPrice: true,
@@ -434,7 +471,12 @@ export class PurchasesService {
       const observationsByDetail = new Map<string, string | undefined>();
       const lotsByDetail = new Map<
         string,
-        Array<{ expirationDate: Date; quantity: number; observation?: string }>
+        Array<{
+          expirationDate: Date;
+          quantity: number;
+          observation?: string;
+          branchId?: string | null;
+        }>
       >();
 
       for (const item of items) {
@@ -466,6 +508,7 @@ export class PurchasesService {
               expirationDate: toExpirationDate(item.expirationDate),
               quantity: item.receivedQuantity,
               observation: item.observation,
+              branchId: item.branchId ?? null,
             },
           ]);
         }
@@ -475,6 +518,7 @@ export class PurchasesService {
         productId: string;
         quantity: number;
         purchaseDetailId: string;
+        branchId: string | null;
         expirationDate: string;
       }> = [];
 
@@ -487,12 +531,17 @@ export class PurchasesService {
         const newReceivedQuantity = detail.receivedQuantity + receivedNow;
         const isComplete = newReceivedQuantity === detail.requestedQuantity;
         const itemObservation = observationsByDetail.get(detail.id);
+        const detailBranchId = this.singleBranchOf(
+          lotsByDetail.get(detail.id) ?? [],
+          detail.branchId,
+        );
 
         await (tx as any).purchaseDetail.update({
           where: { id: detail.id },
           data: {
             receivedQuantity: newReceivedQuantity,
             received: isComplete,
+            ...(detailBranchId ? { branchId: detailBranchId } : {}),
             ...(itemObservation !== undefined
               ? { observation: itemObservation }
               : {}),
@@ -500,24 +549,35 @@ export class PurchasesService {
         });
 
         for (const lot of lotsByDetail.get(detail.id) ?? []) {
-          await this.generalStockService.increase(
-            tx,
-            detail.productId,
-            lot.expirationDate,
-            lot.quantity,
-          );
+          if (lot.branchId) {
+            await this.increaseBranchLot(
+              tx,
+              lot.branchId,
+              detail.productId,
+              lot.expirationDate,
+              lot.quantity,
+            );
+          } else {
+            await this.generalStockService.increase(
+              tx,
+              detail.productId,
+              lot.expirationDate,
+              lot.quantity,
+            );
+          }
 
           movementsData.push({
             productId: detail.productId,
             quantity: lot.quantity,
             purchaseDetailId: detail.id,
+            branchId: lot.branchId ?? null,
             expirationDate: formatExpirationDate(lot.expirationDate),
           });
 
           await (tx as any).inventoryMovement.create({
             data: {
               productId: detail.productId,
-              branchId: null,
+              branchId: lot.branchId ?? null,
               originBranchId: null,
               userId: currentUser.id,
               movementType: "ENTRY",
@@ -602,5 +662,67 @@ export class PurchasesService {
     }
 
     return `${prefix}${seq.toString().padStart(4, "0")}`;
+  }
+
+  private singleBranchOf(
+    lots: Array<{ branchId?: string | null }>,
+    existingBranchId?: string | null,
+  ): string | undefined {
+    if (existingBranchId) return undefined;
+    const destinations = new Set(lots.map((lot) => lot.branchId ?? null));
+    if (destinations.size !== 1) return undefined;
+    const [only] = [...destinations];
+    return only ?? undefined;
+  }
+
+  private async increaseBranchLot(
+    tx: any,
+    branchId: string,
+    productId: string,
+    expirationDate: Date,
+    quantity: number,
+  ) {
+    // shortcut: mirrors InventoryMovementsService.increaseLot, which is private in
+    // another module; extract a shared helper when a third caller appears.
+    const lots: Array<{
+      id: string;
+      expirationDate: Date;
+      minimumStock: number;
+    }> = await tx.branchInventory.findMany({
+      where: { branchId, productId },
+      select: { id: true, expirationDate: true, minimumStock: true },
+    });
+
+    if (lots.length === 0) {
+      throw new NotFoundException({
+        code: "PRODUCT_NOT_ASSIGNED",
+        message: "The product is not assigned to this branch.",
+      });
+    }
+
+    const existing = lots.find(
+      (lot) => lot.expirationDate.getTime() === expirationDate.getTime(),
+    );
+    if (existing) {
+      await tx.branchInventory.update({
+        where: { id: existing.id },
+        data: { quantity: { increment: quantity } },
+      });
+      return;
+    }
+
+    await tx.branchInventory.upsert({
+      where: {
+        branchId_productId_expirationDate: { branchId, productId, expirationDate },
+      },
+      create: {
+        branchId,
+        productId,
+        expirationDate,
+        quantity,
+        minimumStock: Math.max(0, ...lots.map((lot) => lot.minimumStock)),
+      },
+      update: { quantity: { increment: quantity } },
+    });
   }
 }

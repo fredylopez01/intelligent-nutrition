@@ -7,6 +7,7 @@ import {
   it,
   jest,
 } from "@jest/globals";
+import { UnprocessableEntityException } from "@nestjs/common";
 import type { TestingModule } from "@nestjs/testing";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
 
@@ -74,6 +75,13 @@ const transactionMock = {
     update: jest.fn<AsyncMock>(),
   },
   inventoryMovement: { create: jest.fn<AsyncMock>() },
+  onlineOrderItem: { findMany: jest.fn<AsyncMock>() },
+  recipe: { findMany: jest.fn<AsyncMock>() },
+  supplyStock: {
+    findMany: jest.fn<AsyncMock>(),
+    update: jest.fn<AsyncMock>(),
+  },
+  supplyStockMovement: { create: jest.fn<AsyncMock>() },
   sale: {
     findFirst: jest.fn<AsyncMock>(),
     create: jest.fn<AsyncMock>(),
@@ -92,6 +100,10 @@ const prismaMock = {
 const auditMock = {
   createAuditLog: jest.fn<AsyncMock>(),
 };
+const promotionsMock = {
+  findActive: jest.fn<AsyncMock>(),
+  findApplicableById: jest.fn<AsyncMock>(),
+};
 
 jest.unstable_mockModule("../../database/prisma/prisma.service.js", () => ({
   PrismaService: jest.fn().mockImplementation(() => prismaMock),
@@ -103,6 +115,8 @@ const { PrismaService } =
 const { AuditService } = await import("../audit/audit.service.js");
 const { LowStockService } =
   await import("../notifications/low-stock.service.js");
+const { PromotionsService } =
+  await import("../promotions/promotions.service.js");
 const { SalesService } = await import("./sales.service.js");
 
 type SaleCreateData = {
@@ -112,8 +126,11 @@ type SaleCreateData = {
   customerId: string | null;
   subtotal: string;
   discountAmount: string;
+  discountReason: string | null;
   taxAmount: string;
   total: string;
+  promotionId: string | null;
+  promotionDiscount: string | null;
   status: string;
   details: { create: Array<Record<string, unknown>> };
   payments: { create: Array<Record<string, unknown>> };
@@ -144,6 +161,8 @@ const buildSaleRecord = (overrides: Record<string, unknown> = {}) => ({
   discountAmount: "0.00",
   taxAmount: "0.00",
   total: "24.70",
+  promotionId: null,
+  promotionDiscount: null,
   reversalReason: null,
   reversedAt: null,
   branch: { id: branchId, name: "Sede Centro" },
@@ -227,10 +246,16 @@ describe("SalesService.create", () => {
       { id: firstLotId, quantity: 10, minimumStock: 2 },
     ]);
     transactionMock.branchInventory.update.mockResolvedValue({});
+    transactionMock.onlineOrderItem.findMany.mockResolvedValue([]);
+    transactionMock.recipe.findMany.mockResolvedValue([]);
+    transactionMock.supplyStock.findMany.mockResolvedValue([]);
+    transactionMock.supplyStock.update.mockResolvedValue({});
+    transactionMock.supplyStockMovement.create.mockResolvedValue({});
     transactionMock.inventoryMovement.create.mockResolvedValue({});
     transactionMock.sale.findFirst.mockResolvedValue(null);
     transactionMock.sale.create.mockResolvedValue(buildSaleRecord());
     auditMock.createAuditLog.mockResolvedValue({});
+    promotionsMock.findActive.mockResolvedValue(null);
 
     testingModule = await Test.createTestingModule({
       providers: [
@@ -238,6 +263,7 @@ describe("SalesService.create", () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: AuditService, useValue: auditMock },
         { provide: LowStockService, useValue: lowStockMock },
+        { provide: PromotionsService, useValue: promotionsMock },
       ],
     }).compile();
     service = testingModule.get(SalesService);
@@ -517,6 +543,31 @@ describe("SalesService.create", () => {
       });
     });
 
+    it("persists the recipe id for a prepared sale item", async () => {
+      const recipeId = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+      transactionMock.recipe.findMany.mockResolvedValue([
+        preparedRecipe(recipeId, null),
+      ]);
+      transactionMock.supplyStock.findMany.mockResolvedValue([
+        { supplyId: wheySupplyId, quantity: "500.000" },
+        { supplyId: milkSupplyId, quantity: "2.000" },
+      ]);
+
+      await service.create(
+        {
+          ...baseDto,
+          items: [{ productId: productAId, recipeId, quantity: 2 }],
+        },
+        superadmin,
+      );
+
+      const [detail] = createdSaleData().details.create;
+      expect(detail).toMatchObject({
+        productId: productAId,
+        recipeId,
+      });
+    });
+
     it("sums the item discounts and the general discount", async () => {
       const dto = {
         ...baseDto,
@@ -583,6 +634,128 @@ describe("SalesService.create", () => {
       expect(data.discountAmount).toBe("0.00");
       expect(data.taxAmount).toBe("0.00");
       expect(data.total).toBe("24.70");
+      expect(data.promotionId).toBeNull();
+      expect(data.promotionDiscount).toBeNull();
+    });
+
+    it("applies the active promotion to the sale subtotal and records it", async () => {
+      promotionsMock.findActive.mockResolvedValue({
+        id: "promotion-id",
+        discountPercentage: "15.00",
+      });
+      transactionMock.sale.create.mockResolvedValue(
+        buildSaleRecord({
+          total: "20.99",
+          promotionId: "promotion-id",
+          promotionDiscount: "3.71",
+          payments: [
+            {
+              amount: "20.99",
+              reference: null,
+              paidAt: saleDate,
+              paymentMethod: {
+                id: cashMethodId,
+                code: "CASH",
+                name: "Efectivo",
+              },
+            },
+          ],
+        }),
+      );
+      const dto = {
+        ...baseDto,
+        payments: [{ paymentMethodId: cashMethodId, amount: "20.99" }],
+      };
+
+      const result = await service.create(dto, superadmin);
+
+      expect(promotionsMock.findActive).toHaveBeenCalledTimes(1);
+      expect(createdSaleData()).toMatchObject({
+        subtotal: "24.70",
+        promotionId: "promotion-id",
+        promotionDiscount: "3.71",
+        total: "20.99",
+      });
+      expect(result).toMatchObject({
+        promotionId: "promotion-id",
+        promotionDiscount: "3.71",
+      });
+    });
+  });
+
+  describe("promotion chosen by the seller", () => {
+    it("sells without a promotion when promotionId is null", async () => {
+      await service.create({ ...baseDto, promotionId: null }, superadmin);
+
+      expect(promotionsMock.findActive).not.toHaveBeenCalled();
+      expect(promotionsMock.findApplicableById).not.toHaveBeenCalled();
+      expect(createdSaleData()).toMatchObject({
+        promotionId: null,
+        promotionDiscount: null,
+        total: "24.70",
+      });
+    });
+
+    it("applies the promotion chosen instead of the active one", async () => {
+      promotionsMock.findApplicableById.mockResolvedValue({
+        id: "chosen-id",
+        discountPercentage: "10.00",
+      });
+      const dto = {
+        ...baseDto,
+        promotionId: "chosen-id",
+        payments: [{ paymentMethodId: cashMethodId, amount: "22.23" }],
+      };
+
+      await service.create(dto, superadmin);
+
+      expect(promotionsMock.findApplicableById).toHaveBeenCalledWith(
+        "chosen-id",
+      );
+      expect(promotionsMock.findActive).not.toHaveBeenCalled();
+      expect(createdSaleData()).toMatchObject({
+        promotionId: "chosen-id",
+        promotionDiscount: "2.47",
+        total: "22.23",
+      });
+    });
+
+    it("stops the sale when the chosen promotion is not valid", async () => {
+      promotionsMock.findApplicableById.mockRejectedValue(
+        new UnprocessableEntityException({ code: "PROMOTION_NOT_APPLICABLE" }),
+      );
+
+      await expect(
+        service.create({ ...baseDto, promotionId: "old-id" }, superadmin),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: "PROMOTION_NOT_APPLICABLE" },
+      });
+      expect(transactionMock.sale.create).not.toHaveBeenCalled();
+    });
+
+    it("records the custom discount with its reason", async () => {
+      const dto = {
+        ...baseDto,
+        promotionId: null,
+        discountAmount: "4.70",
+        discountReason: "  Cliente frecuente  ",
+        payments: [{ paymentMethodId: cashMethodId, amount: "20.00" }],
+      };
+
+      await service.create(dto, superadmin);
+
+      expect(createdSaleData()).toMatchObject({
+        discountAmount: "4.70",
+        discountReason: "Cliente frecuente",
+        total: "20.00",
+      });
+    });
+
+    it("stores no reason when none is sent", async () => {
+      await service.create(baseDto, superadmin);
+
+      expect(createdSaleData().discountReason).toBeNull();
     });
   });
 
@@ -692,6 +865,45 @@ describe("SalesService.create", () => {
   });
 
   describe("stock", () => {
+    it("does not sell the units held by web orders of the branch", async () => {
+      transactionMock.branchInventory.findMany.mockResolvedValue([
+        { id: firstLotId, quantity: 3, minimumStock: 0 },
+      ]);
+      transactionMock.onlineOrderItem.findMany.mockResolvedValue([
+        { productId: productAId, quantity: 2, order: { branchId } },
+      ]);
+
+      await expect(service.create(baseDto, superadmin)).rejects.toMatchObject({
+        response: {
+          code: "INSUFFICIENT_STOCK",
+          details: {
+            items: [expect.objectContaining({ requested: 2, available: 1 })],
+          },
+        },
+      });
+      expect(transactionMock.onlineOrderItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            order: expect.objectContaining({ branchId: { in: [branchId] } }),
+          }),
+        }),
+      );
+    });
+
+    it("ignores the reservation of the web order being completed", async () => {
+      transactionMock.branchInventory.findMany.mockResolvedValue([
+        { id: firstLotId, quantity: 2, minimumStock: 0 },
+      ]);
+
+      await service.create(baseDto, superadmin, { onlineOrderId: "order-1" });
+
+      const [args] = transactionMock.onlineOrderItem.findMany.mock.calls[0] as [
+        { where: { order: { id?: unknown } } },
+      ];
+      expect(args.where.order.id).toEqual({ not: "order-1" });
+      expect(transactionMock.sale.create).toHaveBeenCalled();
+    });
+
     it("rejects a sale when an item does not have enough stock", async () => {
       transactionMock.branchInventory.findMany.mockResolvedValue([
         { id: firstLotId, quantity: 1, minimumStock: 2 },
@@ -898,7 +1110,18 @@ describe("SalesService.create", () => {
           discountAmount: "2.00",
           taxAmount: "1.00",
           total: "23.70",
-          customer: { personId: customerId, fullName: "Cliente Prueba" },
+          customer: {
+            personId: customerId,
+            fullName: "Cliente Prueba",
+            person: {
+              documentNumber: "1049632145",
+              email: "cliente@correo.com",
+              phone: "3114827719",
+              address: "Calle 19 # 9-35, Tunja",
+              businessName: null,
+              documentType: { code: "CC", name: "Cédula de ciudadanía" },
+            },
+          },
           details: [
             {
               productId: productAId,
@@ -944,17 +1167,30 @@ describe("SalesService.create", () => {
         status: "COMPLETED",
         branch: { id: branchId, name: "Sede Centro" },
         user: { id: userId, fullName: "Fabian Correa" },
-        customer: { id: customerId, fullName: "Cliente Prueba" },
+        customer: {
+          id: customerId,
+          fullName: "Cliente Prueba",
+          documentType: { code: "CC", name: "Cédula de ciudadanía" },
+          documentNumber: "1049632145",
+          email: "cliente@correo.com",
+          phone: "3114827719",
+          address: "Calle 19 # 9-35, Tunja",
+          isCompany: false,
+        },
         saleAt: saleDate,
         subtotal: "24.70",
         discountAmount: "2.00",
+        discountReason: null,
         taxAmount: "1.00",
         total: "23.70",
+        promotionId: null,
+        promotionDiscount: null,
         items: [
           {
             productId: productAId,
             productName: "Proteína",
             referenceCode: "P-001",
+            recipeId: null,
             quantity: 2,
             unitPrice: "12.35",
             subtotal: "24.70",
@@ -1014,5 +1250,222 @@ describe("SalesService.create", () => {
 
       expect(auditMock.createAuditLog).not.toHaveBeenCalled();
     });
+  });
+});
+
+const wheySupplyId = "bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb";
+const milkSupplyId = "cccccccc-1111-4111-8111-cccccccccccc";
+
+function preparedRecipe(
+  id: string,
+  productId: string | null,
+  overrides: { active?: boolean; milkUnit?: string } = {},
+) {
+  return {
+    id,
+    name: "Batido de proteína",
+    active: overrides.active ?? true,
+    productId,
+    ingredients: [
+      {
+        quantity: "30.000",
+        unitOfMeasure: { abreviation: "g" },
+        supply: {
+          id: wheySupplyId,
+          name: "Proteína en polvo",
+          unitOfMeasure: { abreviation: "g" },
+        },
+      },
+      {
+        quantity: "250.000",
+        unitOfMeasure: { abreviation: overrides.milkUnit ?? "ml" },
+        supply: {
+          id: milkSupplyId,
+          name: "Leche",
+          unitOfMeasure: { abreviation: "l" },
+        },
+      },
+    ],
+  };
+}
+
+describe("SalesService.create prepared products", () => {
+  let service: InstanceType<typeof SalesService>;
+  const recipeId = "dddddddd-1111-4111-8111-dddddddddddd";
+  const preparedDto = {
+    branchId,
+    customerId: null,
+    items: [{ productId: productAId, quantity: 2 }],
+    payments: [{ paymentMethodId: cashMethodId, amount: "24.70" }],
+  };
+
+  beforeEach(async () => {
+    jest.useFakeTimers({ now: saleDate });
+    jest.clearAllMocks();
+    prismaMock.$transaction.mockImplementation((callback) =>
+      callback(transactionMock),
+    );
+    transactionMock.$queryRaw.mockResolvedValue([]);
+    transactionMock.branch.findUnique.mockResolvedValue({
+      id: branchId,
+      name: "Sede Centro",
+      active: true,
+    });
+    transactionMock.product.findMany.mockResolvedValue([productA, productB]);
+    transactionMock.paymentMethod.findMany.mockResolvedValue([
+      cashMethod,
+      cardMethod,
+    ]);
+    transactionMock.inventoryClosure.findUnique.mockResolvedValue(null);
+    transactionMock.branchInventory.findMany.mockResolvedValue([]);
+    transactionMock.onlineOrderItem.findMany.mockResolvedValue([]);
+    transactionMock.recipe.findMany.mockResolvedValue([
+      preparedRecipe(recipeId, productAId),
+    ]);
+    transactionMock.supplyStock.findMany.mockResolvedValue([
+      { supplyId: wheySupplyId, quantity: "100.000" },
+      { supplyId: milkSupplyId, quantity: "1.000" },
+    ]);
+    transactionMock.supplyStock.update.mockResolvedValue({});
+    transactionMock.supplyStockMovement.create.mockResolvedValue({});
+    transactionMock.sale.findFirst.mockResolvedValue(null);
+    transactionMock.sale.create.mockResolvedValue(buildSaleRecord());
+    promotionsMock.findActive.mockResolvedValue(null);
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        SalesService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+        { provide: LowStockService, useValue: lowStockMock },
+        { provide: PromotionsService, useValue: promotionsMock },
+      ],
+    }).compile();
+    service = moduleRef.get(SalesService);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("sells the product of a recipe from the supplies, not from the lots", async () => {
+    await service.create(preparedDto, superadmin);
+
+    expect(transactionMock.branchInventory.findMany).not.toHaveBeenCalled();
+    expect(transactionMock.branchInventory.update).not.toHaveBeenCalled();
+    const [detail] = createdSaleData().details.create;
+    expect(detail).toMatchObject({ productId: productAId, recipeId });
+    expect(transactionMock.supplyStock.update.mock.calls).toEqual([
+      [
+        {
+          where: {
+            branchId_supplyId: { branchId, supplyId: wheySupplyId },
+          },
+          data: { quantity: { decrement: expect.anything() } },
+        },
+      ],
+      [
+        {
+          where: {
+            branchId_supplyId: { branchId, supplyId: milkSupplyId },
+          },
+          data: { quantity: { decrement: expect.anything() } },
+        },
+      ],
+    ]);
+    const movements = transactionMock.supplyStockMovement.create.mock.calls.map(
+      ([args]) => {
+        const { data } = args as {
+          data: { supplyId: string; quantity: unknown; observation: string };
+        };
+        return [data.supplyId, String(data.quantity), data.observation];
+      },
+    );
+    expect(movements).toEqual([
+      [wheySupplyId, "60", expect.stringMatching(/^Sale /)],
+      [milkSupplyId, "0.5", expect.stringMatching(/^Sale /)],
+    ]);
+  });
+
+  it("stops the sale with the detail of every missing supply", async () => {
+    transactionMock.supplyStock.findMany.mockResolvedValue([
+      { supplyId: wheySupplyId, quantity: "45.000" },
+      { supplyId: milkSupplyId, quantity: "1.000" },
+    ]);
+
+    await expect(service.create(preparedDto, superadmin)).rejects.toMatchObject(
+      {
+        response: {
+          code: "INSUFFICIENT_SUPPLY_STOCK",
+          details: {
+            items: [
+              {
+                supplyId: wheySupplyId,
+                supplyName: "Proteína en polvo",
+                unit: "g",
+                required: 60,
+                available: 45,
+              },
+            ],
+          },
+        },
+      },
+    );
+    expect(transactionMock.sale.create).not.toHaveBeenCalled();
+    expect(transactionMock.supplyStock.update).not.toHaveBeenCalled();
+  });
+
+  it("does not sell a product whose recipe is inactive", async () => {
+    transactionMock.recipe.findMany.mockResolvedValue([
+      preparedRecipe(recipeId, productAId, { active: false }),
+    ]);
+
+    await expect(service.create(preparedDto, superadmin)).rejects.toMatchObject(
+      {
+        response: { code: "RECIPE_INACTIVE" },
+      },
+    );
+  });
+
+  it("rejects a recipe that belongs to another product", async () => {
+    transactionMock.recipe.findMany.mockResolvedValue([
+      preparedRecipe(recipeId, productBId),
+    ]);
+
+    await expect(
+      service.create(
+        {
+          ...preparedDto,
+          items: [{ productId: productAId, recipeId, quantity: 2 }],
+        },
+        superadmin,
+      ),
+    ).rejects.toMatchObject({ response: { code: "RECIPE_PRODUCT_MISMATCH" } });
+  });
+
+  it("answers RECIPE_NOT_FOUND for an unknown recipe id", async () => {
+    transactionMock.recipe.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.create(
+        {
+          ...preparedDto,
+          items: [{ productId: productAId, recipeId, quantity: 2 }],
+        },
+        superadmin,
+      ),
+    ).rejects.toMatchObject({ response: { code: "RECIPE_NOT_FOUND" } });
+  });
+
+  it("refuses a recipe unit that cannot be converted to the supply unit", async () => {
+    transactionMock.recipe.findMany.mockResolvedValue([
+      preparedRecipe(recipeId, productAId, { milkUnit: "und" }),
+    ]);
+
+    await expect(service.create(preparedDto, superadmin)).rejects.toMatchObject(
+      {
+        response: { code: "RECIPE_UNIT_MISMATCH" },
+      },
+    );
   });
 });

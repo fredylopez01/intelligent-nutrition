@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { branchesService } from '../../services/branches.service'
+import { cashShiftsService } from '../../services/cashShifts.service'
 import { ApiError } from '../../services/http'
 import { inventoryClosuresService } from '../../services/inventoryClosures.service'
 import { buildClosure, buildItem, buildSummary } from '../../test-utils/inventoryClosures'
@@ -31,6 +32,10 @@ vi.mock('../../services/branches.service', () => ({
   branchesService: { list: vi.fn() },
 }))
 
+vi.mock('../../services/cashShifts.service', () => ({
+  cashShiftsService: { active: vi.fn() },
+}))
+
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => ({
     token: 'test-token',
@@ -49,6 +54,19 @@ vi.mock('../../layouts/AppLayout', () => ({
 
 const list = vi.mocked(inventoryClosuresService.list)
 const get = vi.mocked(inventoryClosuresService.get)
+const activeShift = vi.mocked(cashShiftsService.active)
+
+const OPEN_SHIFT = {
+  id: 'shift-1',
+  branch: { id: 'branch-centro', name: 'Centro' },
+  user: { id: 'assistant-1', fullName: 'Santiago Pardo' },
+  status: 'OPEN' as const,
+  openedAt: '2026-10-26T13:00:00.000Z',
+  closedAt: null,
+  openingAmount: '50000.00',
+  closingAmount: null,
+  observation: null,
+}
 
 const yesterday = buildSummary({ id: 'closure-yesterday', closureDate: '2026-10-25' })
 
@@ -86,6 +104,7 @@ beforeEach(() => {
   auth.role = 'BRANCH_LEADER'
   auth.branches = [{ id: 'branch-centro', name: 'Centro' }]
   mockClosures(null)
+  activeShift.mockResolvedValue(OPEN_SHIFT)
 })
 
 afterEach(() => {
@@ -180,7 +199,48 @@ describe('ClosurePage today', () => {
       await screen.findByText('Cierre del lunes, 26 de octubre confirmado'),
     ).toBeInTheDocument()
     expect(screen.getByText('−1 und')).toBeInTheDocument()
-    expect(inventoryClosuresService.confirm).toHaveBeenCalledWith('closure-1', 'test-token')
+    expect(inventoryClosuresService.confirm).toHaveBeenCalledWith(
+      'closure-1',
+      'shift-1',
+      'test-token',
+    )
+  })
+
+  it('shows the active cash shift of the branch when starting the closure', async () => {
+    renderPage()
+
+    const shift = await screen.findByRole('region', { name: 'Turno de caja activo' })
+    expect(within(shift).getByText('Turno de Santiago Pardo')).toBeInTheDocument()
+    expect(within(shift).getByText(/Base \$\s50\.000/)).toBeInTheDocument()
+    expect(activeShift).toHaveBeenCalledWith('branch-centro', 'test-token')
+    expect(screen.getByRole('button', { name: 'Iniciar cierre del día' })).toBeInTheDocument()
+  })
+
+  it('warns when there is no open cash shift and blocks the confirmation', async () => {
+    activeShift.mockResolvedValue(null)
+    mockClosures(buildSummary({ id: 'closure-1', closureDate: '2026-10-26', status: 'PENDING' }))
+    get.mockResolvedValue(buildClosure())
+    renderPage()
+
+    expect(await screen.findByText('No hay un turno de caja abierto en Centro')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Abrir turno en Caja' })).toHaveAttribute(
+      'href',
+      '/caja/turno',
+    )
+    expect(await screen.findByText('Conteo de Centro')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirmar cierre' })).toBeDisabled()
+  })
+
+  it('lets the user retry when the cash shift cannot be checked', async () => {
+    activeShift.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(OPEN_SHIFT)
+    const { user } = renderPage()
+
+    expect(
+      await screen.findByText('No fue posible revisar el turno de caja de la sede.'),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    expect(await screen.findByText('Turno de Santiago Pardo')).toBeInTheDocument()
   })
 
   it('shows the error of today and retries', async () => {

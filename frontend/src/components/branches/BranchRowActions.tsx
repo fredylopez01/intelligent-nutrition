@@ -7,6 +7,7 @@ interface BranchRowActionsProps {
   branchName: string
   active: boolean
   onEdit: () => void
+  onSchedule: () => void
   onToggleStatus: () => void
 }
 
@@ -19,6 +20,7 @@ export function BranchRowActions({
   branchName,
   active,
   onEdit,
+  onSchedule,
   onToggleStatus,
 }: BranchRowActionsProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -94,6 +96,17 @@ export function BranchRowActions({
               }}
             >
               Editar
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="branch-row-actions__item"
+              onClick={() => {
+                setIsOpen(false)
+                onSchedule()
+              }}
+            >
+              Horario
             </button>
             <button
               type="button"

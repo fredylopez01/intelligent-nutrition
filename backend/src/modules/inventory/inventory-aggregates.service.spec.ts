@@ -351,10 +351,7 @@ describe("InventoryService aggregated queries", () => {
       const expectedWhere = {
         id: { in: [productId] },
         categoryId,
-        OR: [
-          { name: { contains: "whey", mode: "insensitive" } },
-          { referenceCode: { contains: "whey", mode: "insensitive" } },
-        ],
+        searchText: { contains: "whey" },
       };
       expect(prismaMock.product.count).toHaveBeenCalledWith({
         where: expectedWhere,

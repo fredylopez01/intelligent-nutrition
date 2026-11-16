@@ -6,6 +6,7 @@ import { SaleDetail } from '../../components/sales/SaleDetail'
 import { SalesTable } from '../../components/sales/SalesTable'
 import { Alert } from '../../components/ui/Alert'
 import { Button } from '../../components/ui/Button'
+import { DownloadPdfButton } from '../../components/ui/DownloadPdfButton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Modal } from '../../components/ui/Modal'
 import { Pagination } from '../../components/ui/Pagination'
@@ -20,7 +21,9 @@ import { AppLayout } from '../../layouts/AppLayout'
 import { salesService } from '../../services/sales.service'
 import type { Sale, SaleStatus, SaleSummary } from '../../types/sale'
 import { hasRole } from '../../utils/categories'
+import { downloadSaleReceipt } from '../../utils/pdf/saleReceiptPdf'
 import { formatPrice } from '../../utils/products'
+import { receiptButtonLabel } from '../../utils/saleDocuments'
 import { SALE_REVERSE_ROLES, SALE_STATUS_LABELS, resolveSaleError } from '../../utils/sales'
 
 import '../inventory/InventoryPage.css'
@@ -317,13 +320,18 @@ function SaleDialog({ summary, canReverse, onReversed, onClose }: SaleDialogProp
       />
     )
   }
+  const { sale } = result
   return (
     <div className="sale-detail">
-      <SaleDetail sale={result.sale} />
+      <SaleDetail sale={sale} />
       <div className="sale-detail__actions">
         <Button variant="outline" onClick={onClose}>
           Cerrar
         </Button>
+        <DownloadPdfButton
+          label={receiptButtonLabel(sale)}
+          onDownload={() => downloadSaleReceipt(sale)}
+        />
         {canReverse && result.sale.status === 'COMPLETED' && (
           <Button variant="danger" onClick={() => setReversing(true)}>
             Reversar por {formatPrice(result.sale.total)}

@@ -120,6 +120,7 @@ describe("POST /api/v1/branches (e2e)", () => {
         address: "Carrera 10 # 20-30",
         phone: "6017000000",
         active: true,
+        deliveryEnabled: false,
       },
     });
 

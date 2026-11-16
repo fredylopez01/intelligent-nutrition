@@ -10,6 +10,7 @@ interface SearchBarProps {
   value: string
   onSearch: (term: string) => void
   minLength?: number
+  embedded?: boolean
 }
 
 const iconProps = {
@@ -29,6 +30,7 @@ export function SearchBar({
   value,
   onSearch,
   minLength = 2,
+  embedded = false,
 }: SearchBarProps) {
   const [draft, setDraft] = useState(value)
   const [appliedValue, setAppliedValue] = useState(value)
@@ -42,8 +44,7 @@ export function SearchBar({
 
   const errorId = `${id}-error`
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const runSearch = () => {
     const term = draft.trim()
     if (term.length > 0 && term.length < minLength) {
       setError(`Escribe al menos ${minLength} caracteres para buscar.`)
@@ -53,14 +54,19 @@ export function SearchBar({
     onSearch(term)
   }
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    runSearch()
+  }
+
   const handleClear = () => {
     setDraft('')
     setError(null)
     if (value !== '') onSearch('')
   }
 
-  return (
-    <form className="ui-search" role="search" onSubmit={handleSubmit} noValidate>
+  const content = (
+    <>
       <label className="sr-only" htmlFor={id}>
         {label}
       </label>
@@ -78,6 +84,15 @@ export function SearchBar({
             setDraft(event.target.value)
             if (error) setError(null)
           }}
+          onKeyDown={
+            embedded
+              ? (event) => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  runSearch()
+                }
+              : undefined
+          }
         />
         {draft !== '' && (
           <button
@@ -91,7 +106,12 @@ export function SearchBar({
             </svg>
           </button>
         )}
-        <button type="submit" className="ui-search__submit" aria-label="Buscar">
+        <button
+          type={embedded ? 'button' : 'submit'}
+          className="ui-search__submit"
+          aria-label="Buscar"
+          onClick={embedded ? runSearch : undefined}
+        >
           <svg {...iconProps}>
             <circle cx="11" cy="11" r="6.5" />
             <path d="m20 20-4.2-4.2" />
@@ -103,6 +123,20 @@ export function SearchBar({
           {error}
         </p>
       )}
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <div className="ui-search" role="search">
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <form className="ui-search" role="search" onSubmit={handleSubmit} noValidate>
+      {content}
     </form>
   )
 }

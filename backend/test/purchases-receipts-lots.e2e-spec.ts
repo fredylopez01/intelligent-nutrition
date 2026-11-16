@@ -28,8 +28,11 @@ describe("POST /api/v1/purchases/:purchaseId/receipts by lot (e2e)", () => {
   let categoryId = "";
   let unitId = "";
   let productId = "";
+  let generalProductId = "";
   let supplierId = "";
+  let branchId = "";
   let purchaseId = "";
+  let distributedPurchaseId = "";
   let detailId = "";
   const personIds: string[] = [];
   const tokens = {} as Record<RoleName, string>;
@@ -123,6 +126,35 @@ describe("POST /api/v1/purchases/:purchaseId/receipts by lot (e2e)", () => {
         },
       })
     ).id;
+    generalProductId = (
+      await prisma.product.create({
+        data: {
+          name: `${runId} BCAA`,
+          referenceCode: `PRC-GEN-${runId}`.slice(0, 50),
+          categoryId,
+          unitOfMeasureId: unitId,
+          price: "65000.00",
+        },
+      })
+    ).id;
+    branchId = (
+      await prisma.branch.create({
+        data: {
+          name: `${runId} Sucursal`,
+          address: "Calle 1",
+          phone: "3000000000",
+        },
+      })
+    ).id;
+    await prisma.branchInventory.create({
+      data: {
+        branchId,
+        productId,
+        quantity: 0,
+        minimumStock: 0,
+        expirationDate: at("2027-01-31"),
+      },
+    });
     const purchase = await prisma.purchase.create({
       data: {
         purchaseNumber: `C-E2E-${runId}`,
@@ -148,14 +180,35 @@ describe("POST /api/v1/purchases/:purchaseId/receipts by lot (e2e)", () => {
 
   afterAll(async () => {
     try {
-      await prisma?.inventoryMovement.deleteMany({ where: { productId } });
-      await prisma?.generalStock.deleteMany({ where: { productId } });
-      await prisma?.purchaseDetail.deleteMany({ where: { purchaseId } });
-      await prisma?.purchase.deleteMany({ where: { id: purchaseId } });
-      await prisma?.auditLog.deleteMany({
-        where: { userId: { in: personIds } },
+      const purchaseIds = [purchaseId, distributedPurchaseId].filter(Boolean);
+      const productIds = [productId, generalProductId].filter(Boolean);
+      await prisma?.inventoryMovement.deleteMany({
+        where: { purchaseId: { in: purchaseIds } },
       });
-      await prisma?.product.deleteMany({ where: { id: productId } });
+      await prisma?.generalStock.deleteMany({
+        where: { productId: { in: productIds } },
+      });
+      await prisma?.branchInventory.deleteMany({
+        where: { branchId, productId: { in: productIds } },
+      });
+      await prisma?.purchaseDetail.deleteMany({
+        where: { purchaseId: { in: purchaseIds } },
+      });
+      await prisma?.purchase.deleteMany({
+        where: { id: { in: purchaseIds } },
+      });
+      await prisma?.auditLog.deleteMany({
+        where: {
+          OR: [
+            { userId: { in: personIds } },
+            { entityId: { in: purchaseIds } },
+          ],
+        },
+      });
+      await prisma?.product.deleteMany({
+        where: { id: { in: productIds } },
+      });
+      await prisma?.branch.deleteMany({ where: { id: branchId } });
       await prisma?.category.deleteMany({ where: { id: categoryId } });
       await prisma?.unitMeasure.deleteMany({ where: { id: unitId } });
       await prisma?.supplier.deleteMany({ where: { personId: supplierId } });
@@ -262,5 +315,111 @@ describe("POST /api/v1/purchases/:purchaseId/receipts by lot (e2e)", () => {
       },
     ]).expect(409);
     expect(errorOf(again.body).code).toBe("PURCHASE_ALREADY_RECEIVED");
+  });
+
+  it("distributes received purchase lines between branch and general stock", async () => {
+    const createdResponse = await request(app.getHttpServer())
+      .post("/api/v1/purchases")
+      .set("Authorization", `Bearer ${tokens.SUPERADMIN}`)
+      .send({
+        supplierId,
+        items: [
+          { productId, requestedQuantity: 4, unitPrice: "98000.00" },
+          {
+            productId: generalProductId,
+            requestedQuantity: 6,
+            unitPrice: "65000.00",
+          },
+        ],
+      })
+      .expect(201);
+    const purchase = (
+      createdResponse.body as {
+        data: {
+          id: string;
+          items: Array<{ id: string; productId: string }>;
+        };
+      }
+    ).data;
+    distributedPurchaseId = purchase.id;
+    expect(purchase.items).toHaveLength(2);
+
+    const detailIdFor = (targetProductId: string) => {
+      const detail = purchase.items.find(
+        (item) => item.productId === targetProductId,
+      );
+      if (!detail)
+        throw new Error(`Missing purchase line for ${targetProductId}`);
+      return detail.id;
+    };
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/purchases/${purchase.id}/receipts`)
+      .set("Authorization", `Bearer ${tokens.SUPERADMIN}`)
+      .send({
+        items: [
+          {
+            purchaseDetailId: detailIdFor(productId),
+            receivedQuantity: 4,
+            expirationDate: "2028-04-30",
+            branchId,
+          },
+          {
+            purchaseDetailId: detailIdFor(generalProductId),
+            receivedQuantity: 6,
+            expirationDate: "2028-04-30",
+          },
+        ],
+      })
+      .expect(200);
+
+    expect(
+      await prisma.branchInventory.findFirst({
+        where: {
+          branchId,
+          productId,
+          expirationDate: at("2028-04-30"),
+        },
+      }),
+    ).toMatchObject({ quantity: 4 });
+    expect(
+      await prisma.generalStock.findFirst({
+        where: { productId, expirationDate: at("2028-04-30") },
+      }),
+    ).toBeNull();
+    expect(
+      await prisma.generalStock.findFirst({
+        where: {
+          productId: generalProductId,
+          expirationDate: at("2028-04-30"),
+        },
+      }),
+    ).toMatchObject({ quantity: 6 });
+    expect(
+      await prisma.branchInventory.count({
+        where: { branchId, productId: generalProductId },
+      }),
+    ).toBe(0);
+
+    const movements = await prisma.inventoryMovement.findMany({
+      where: { purchaseId: purchase.id },
+    });
+    expect(movements).toHaveLength(2);
+    expect(movements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          productId,
+          branchId,
+          quantity: 4,
+          movementType: "ENTRY",
+        }),
+        expect.objectContaining({
+          productId: generalProductId,
+          branchId: null,
+          quantity: 6,
+          movementType: "ENTRY",
+        }),
+      ]),
+    );
   });
 });

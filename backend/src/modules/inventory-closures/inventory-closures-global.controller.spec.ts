@@ -9,6 +9,7 @@ type AsyncMock = (...args: unknown[]) => Promise<unknown>;
 
 const branchId = "11111111-1111-4111-8111-111111111111";
 const closureId = "33333333-3333-4333-8333-333333333333";
+const cashShiftId = "77777777-7777-4777-8777-777777777777";
 
 const currentUser: AuthenticatedUser = {
   id: "22222222-2222-4222-8222-222222222222",
@@ -49,6 +50,7 @@ describe("InventoryClosuresGlobalController.confirm", () => {
 
     const result = await controller.confirm(
       closureId,
+      { cashShiftId },
       currentUser,
       "127.0.0.1",
     );
@@ -58,6 +60,7 @@ describe("InventoryClosuresGlobalController.confirm", () => {
       closureId,
       currentUser,
       "127.0.0.1",
+      { cashShiftId },
     );
     expect(result).toBe(closure);
   });
@@ -67,7 +70,7 @@ describe("InventoryClosuresGlobalController.confirm", () => {
     serviceMock.confirm.mockRejectedValue(error);
 
     await expect(
-      controller.confirm(closureId, currentUser, "127.0.0.1"),
+      controller.confirm(closureId, {}, currentUser, "127.0.0.1"),
     ).rejects.toBe(error);
   });
 

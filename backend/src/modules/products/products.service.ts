@@ -8,6 +8,7 @@ import {
 import { PrismaService } from "../../database/prisma/prisma.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
+import { normalizeSearchTerm } from "../../common/utils/search.util.js";
 import { CreateProductDto } from "./dto/create-product.dto.js";
 import { Prisma } from "../../../generated/prisma/client.js";
 import { ListProductsQueryDto } from "./dto/list-products-query.dto.js";
@@ -173,12 +174,7 @@ export class ProductsService {
       ...(categoryId ? { categoryId } : {}),
       ...(unitOfMeasureId ? { unitOfMeasureId } : {}),
       ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { referenceCode: { contains: search, mode: "insensitive" } },
-            ],
-          }
+        ? { searchText: { contains: normalizeSearchTerm(search) } }
         : {}),
     };
 

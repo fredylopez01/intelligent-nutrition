@@ -172,4 +172,17 @@ describe('EditBranchForm', () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(updateBranch).not.toHaveBeenCalled()
   })
+
+  it('turns on the home deliveries of the branch', async () => {
+    updateBranch.mockResolvedValue({ ...branch, deliveryEnabled: true })
+    const { user, onUpdated } = renderForm()
+
+    const checkbox = screen.getByRole('checkbox', { name: /Hace domicilios en Tunja/ })
+    expect(checkbox).not.toBeChecked()
+    await user.click(checkbox)
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    expect(updateBranch).toHaveBeenCalledWith(branch.id, { deliveryEnabled: true }, 'test-token')
+    expect(onUpdated).toHaveBeenCalled()
+  })
 })

@@ -63,5 +63,6 @@ export interface ReceiptItemPayload {
   purchaseDetailId: string
   receivedQuantity: number
   expirationDate: string
+  branchId?: string
   observation?: string
 }

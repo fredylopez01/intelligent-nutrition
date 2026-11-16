@@ -1,27 +1,36 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-import { CheckoutDialog } from '../../components/sales/CheckoutDialog'
+import { CheckoutDialog, type CheckoutPayment } from '../../components/sales/CheckoutDialog'
 import { PosSelection, type SelectionLine } from '../../components/sales/PosSelection'
 import { SaleDetail } from '../../components/sales/SaleDetail'
 import { SellableProductCard } from '../../components/sales/SellableProductCard'
 import { Alert } from '../../components/ui/Alert'
 import { Button } from '../../components/ui/Button'
+import { DownloadPdfButton } from '../../components/ui/DownloadPdfButton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Modal } from '../../components/ui/Modal'
 import { Pagination } from '../../components/ui/Pagination'
 import { ReloadButton } from '../../components/ui/ReloadButton'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { useActivePaymentMethods } from '../../hooks/useActivePaymentMethods'
+import { useApplicablePromotions } from '../../hooks/useApplicablePromotions'
 import { useAuth } from '../../hooks/useAuth'
 import { useCatalogOptions } from '../../hooks/useCatalogOptions'
 import { useInventoryBranches } from '../../hooks/useInventoryBranches'
 import { usePagination } from '../../hooks/usePagination'
 import { useSellableProducts } from '../../hooks/useSellableProducts'
 import { AppLayout } from '../../layouts/AppLayout'
-import type { Sale, SellableProduct } from '../../types/sale'
+import type { DiscountChoice, PaymentDraft, Sale, SellableProduct } from '../../types/sale'
 import { hasRole } from '../../utils/categories'
-import { SALE_REGISTER_ROLES } from '../../utils/sales'
+import { downloadSaleReceipt } from '../../utils/pdf/saleReceiptPdf'
+import { receiptButtonLabel } from '../../utils/saleDocuments'
+import {
+  SALE_REGISTER_ROLES,
+  createPaymentDraft,
+  resolveDiscount,
+  selectionTotalCents,
+} from '../../utils/sales'
 
 import '../inventory/InventoryPage.css'
 import '../../components/sales/PointOfSale.css'
@@ -56,14 +65,31 @@ export function PosPage() {
   })
   const lines = selection.branchId === branch?.id ? selection.lines : []
   const payments = useActivePaymentMethods(canSell)
-  const [chosenMethodId, setChosenMethodId] = useState('')
-  const [reference, setReference] = useState('')
+  const applicablePromotions = useApplicablePromotions(canSell)
+  const [discountChoice, setDiscountChoice] = useState<DiscountChoice | null>(null)
+  const [paymentDrafts, setPaymentDrafts] = useState<PaymentDraft[]>(() => [createPaymentDraft()])
   const [checkingOut, setCheckingOut] = useState(false)
   const [completedSale, setCompletedSale] = useState<Sale | null>(null)
-  const paymentMethod =
-    payments.paymentMethods.find((method) => method.id === chosenMethodId) ??
-    payments.paymentMethods[0] ??
-    null
+  const resolvedPayments = paymentDrafts.map((draft, index) => {
+    const available = payments.paymentMethods.some((method) => method.id === draft.paymentMethodId)
+    if (available) return draft
+    return { ...draft, paymentMethodId: index === 0 ? (payments.paymentMethods[0]?.id ?? '') : '' }
+  })
+  const discount = resolveDiscount(
+    discountChoice,
+    applicablePromotions.promotions,
+    selectionTotalCents(lines),
+  )
+  const checkoutPayments = resolvedPayments.flatMap<CheckoutPayment>((draft) => {
+    const paymentMethod = payments.paymentMethods.find(
+      (method) => method.id === draft.paymentMethodId,
+    )
+    return paymentMethod
+      ? [{ paymentMethod, amount: draft.amount, reference: draft.reference }]
+      : []
+  })
+  const paymentsReady =
+    checkoutPayments.length > 0 && checkoutPayments.length === resolvedPayments.length
 
   const { status, products, meta, error, refetch } = useSellableProducts(branch?.id ?? null, {
     ...params,
@@ -101,7 +127,8 @@ export function PosPage() {
   const handleCompleted = (sale: Sale) => {
     setCheckingOut(false)
     setSelection({ branchId: branch?.id ?? '', lines: [] })
-    setReference('')
+    setPaymentDrafts([createPaymentDraft()])
+    setDiscountChoice(null)
     setCompletedSale(sale)
     refetch()
   }
@@ -291,14 +318,21 @@ export function PosPage() {
             onChangeQuantity={changeQuantity}
             onRemove={removeProduct}
             onClear={() => updateLines(() => [])}
+            promotions={applicablePromotions.promotions}
+            promotionsStatus={applicablePromotions.status}
+            discountChoice={discountChoice}
+            discount={discount}
+            onDiscountChange={setDiscountChoice}
+            onRetryPromotions={applicablePromotions.reload}
             paymentMethods={payments.paymentMethods}
             paymentStatus={payments.status}
-            paymentMethodId={paymentMethod?.id ?? ''}
-            onPaymentMethodChange={setChosenMethodId}
-            reference={reference}
-            onReferenceChange={setReference}
+            payments={resolvedPayments}
+            onPaymentsChange={setPaymentDrafts}
             onRetryPaymentMethods={payments.reload}
-            onCheckout={() => setCheckingOut(true)}
+            onCheckout={() => {
+              applicablePromotions.reload()
+              setCheckingOut(true)
+            }}
           />
         )}
       </div>
@@ -307,14 +341,17 @@ export function PosPage() {
         open={checkingOut}
         title="Confirmar venta"
         description="Revisa los productos y el cobro antes de registrar la venta."
+        size="wide"
         onClose={() => setCheckingOut(false)}
       >
-        {checkingOut && branch && paymentMethod && (
+        {checkingOut && branch && paymentsReady && (
           <CheckoutDialog
             branch={branch}
             lines={lines}
-            paymentMethod={paymentMethod}
-            reference={reference}
+            payments={checkoutPayments}
+            discount={discount}
+            promotionsStatus={applicablePromotions.status}
+            onReloadPromotions={applicablePromotions.reload}
             onCompleted={handleCompleted}
             onStockChanged={refetch}
             onCancel={() => setCheckingOut(false)}
@@ -333,6 +370,10 @@ export function PosPage() {
           <div className="pos-ticket">
             <SaleDetail sale={completedSale} />
             <div className="pos-checkout__actions">
+              <DownloadPdfButton
+                label={receiptButtonLabel(completedSale)}
+                onDownload={() => downloadSaleReceipt(completedSale)}
+              />
               <Button onClick={() => setCompletedSale(null)}>Nueva venta</Button>
             </div>
           </div>

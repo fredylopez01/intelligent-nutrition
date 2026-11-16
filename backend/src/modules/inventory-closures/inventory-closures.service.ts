@@ -6,10 +6,11 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import type { Prisma } from "../../../generated/prisma/client.js";
+import { Prisma } from "../../../generated/prisma/client.js";
 import { PrismaService } from "../../database/prisma/prisma.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
+import { ConfirmClosureDto } from "./dto/confirm-closure.dto.js";
 import { UpdateCountsDto } from "./dto/update-counts.dto.js";
 import { ListClosuresQueryDto } from "./dto/list-closures-query.dto.js";
 import { businessDate } from "../../common/utils/business-day.util.js";
@@ -21,6 +22,7 @@ import {
 const CLOSURE_SELECT = {
   id: true,
   branchId: true,
+  cashShiftId: true,
   closureDate: true,
   status: true,
   confirmed: true,
@@ -43,6 +45,22 @@ const CLOSURE_SELECT = {
         select: {
           name: true,
           referenceCode: true,
+          unitOfMeasure: { select: { abreviation: true } },
+        },
+      },
+    },
+  },
+  supplyDetails: {
+    select: {
+      id: true,
+      supplyId: true,
+      systemQuantity: true,
+      physicalQuantity: true,
+      difference: true,
+      observation: true,
+      supply: {
+        select: {
+          name: true,
           unitOfMeasure: { select: { abreviation: true } },
         },
       },
@@ -80,11 +98,36 @@ function isScopedRole(currentUser: AuthenticatedUser): boolean {
   return roleName === "BRANCH_LEADER" || roleName === "BRANCH_ASSISTANT";
 }
 
+function hasSupplyDifference(detail: {
+  difference: Prisma.Decimal | null;
+}): boolean {
+  return detail.difference !== null && !detail.difference.isZero();
+}
+
+function decimalText(value: Prisma.Decimal | null): string | null {
+  return value === null ? null : value.toString();
+}
+
+function toSupplyItems(closure: ClosureRow, reveal: boolean) {
+  return [...closure.supplyDetails]
+    .sort((a, b) => a.supply.name.localeCompare(b.supply.name, "es"))
+    .map((detail) => ({
+      supplyId: detail.supplyId,
+      supplyName: detail.supply.name,
+      unit: detail.supply.unitOfMeasure.abreviation,
+      systemQuantity: detail.systemQuantity.toString(),
+      physicalQuantity: decimalText(detail.physicalQuantity),
+      observation: detail.observation,
+      ...(reveal ? { difference: decimalText(detail.difference) } : {}),
+    }));
+}
+
 function toClosureResponse(
   closure: ClosureRow,
   currentUser: AuthenticatedUser,
 ) {
   const reveal = closure.status !== "PENDING" && canSeeDifferences(currentUser);
+  const supplyItems = toSupplyItems(closure, reveal);
   const items = [...closure.details]
     .sort(
       (a, b) =>
@@ -108,6 +151,7 @@ function toClosureResponse(
   return {
     id: closure.id,
     branchId: closure.branchId,
+    cashShiftId: closure.cashShiftId,
     branchName: closure.branch.name,
     closureDate: formatExpirationDate(closure.closureDate),
     status: closure.status,
@@ -122,9 +166,16 @@ function toClosureResponse(
           totalDifferences: closure.details.filter(
             (detail) => detail.difference !== null && detail.difference !== 0,
           ).length,
+          totalSupplyDifferences:
+            closure.supplyDetails.filter(hasSupplyDifference).length,
         }
       : {}),
     items,
+    countedSupplies: supplyItems.filter(
+      (item) => item.physicalQuantity !== null,
+    ).length,
+    totalSupplies: supplyItems.length,
+    supplyItems,
   };
 }
 
@@ -174,6 +225,14 @@ export class InventoryClosuresService {
         select: { productId: true, expirationDate: true, quantity: true },
       });
 
+      const supplies = await tx.supply.findMany({
+        where: { active: true },
+        select: {
+          id: true,
+          stocks: { where: { branchId }, select: { quantity: true } },
+        },
+      });
+
       const closure = await tx.inventoryClosure.create({
         data: {
           branchId,
@@ -187,6 +246,13 @@ export class InventoryClosuresService {
               productId: lot.productId,
               expirationDate: lot.expirationDate,
               systemQuantity: lot.quantity,
+            })),
+          },
+          supplyDetails: {
+            create: supplies.map((supply) => ({
+              supplyId: supply.id,
+              systemQuantity:
+                supply.stocks[0]?.quantity ?? new Prisma.Decimal(0),
             })),
           },
         },
@@ -221,7 +287,16 @@ export class InventoryClosuresService {
       this.assertBranchScope(closure.branchId, currentUser);
       this.assertPending(closure);
 
-      const keys = dto.items.map((item) =>
+      const items = dto.items ?? [];
+      const supplyItems = dto.supplyItems ?? [];
+      if (items.length === 0 && supplyItems.length === 0) {
+        throw new BadRequestException({
+          code: "VALIDATION_ERROR",
+          message: "Send at least one product or supply count.",
+        });
+      }
+
+      const keys = items.map((item) =>
         lotKey(item.productId, toExpirationDate(item.expirationDate)),
       );
       if (new Set(keys).size !== keys.length) {
@@ -237,7 +312,7 @@ export class InventoryClosuresService {
           detail,
         ]),
       );
-      for (const [index, item] of dto.items.entries()) {
+      for (const [index, item] of items.entries()) {
         if (!details.has(keys[index])) {
           throw new UnprocessableEntityException({
             code: "PRODUCT_NOT_IN_CLOSURE",
@@ -250,7 +325,40 @@ export class InventoryClosuresService {
         }
       }
 
-      for (const [index, item] of dto.items.entries()) {
+      const supplyIds = supplyItems.map((item) => item.supplyId);
+      if (new Set(supplyIds).size !== supplyIds.length) {
+        throw new UnprocessableEntityException({
+          code: "DUPLICATED_SUPPLY",
+          message: "The counts repeat the same supply.",
+        });
+      }
+      const supplyDetails = new Map(
+        closure.supplyDetails.map((detail) => [detail.supplyId, detail]),
+      );
+      for (const item of supplyItems) {
+        if (!supplyDetails.has(item.supplyId)) {
+          throw new UnprocessableEntityException({
+            code: "SUPPLY_NOT_IN_CLOSURE",
+            message: "The supply is not part of this closure.",
+            details: { supplyId: item.supplyId },
+          });
+        }
+      }
+
+      for (const item of supplyItems) {
+        const detail = supplyDetails.get(item.supplyId)!;
+        const physicalQuantity = new Prisma.Decimal(item.physicalQuantity);
+        await tx.inventoryClosureSupplyDetail.update({
+          where: { id: detail.id },
+          data: {
+            physicalQuantity,
+            difference: physicalQuantity.minus(detail.systemQuantity),
+            observation: item.observation || null,
+          },
+        });
+      }
+
+      for (const [index, item] of items.entries()) {
         const detail = details.get(keys[index])!;
         await tx.inventoryClosureDetail.update({
           where: { id: detail.id },
@@ -274,6 +382,7 @@ export class InventoryClosuresService {
     closureId: string,
     currentUser: AuthenticatedUser,
     ipAddress?: string,
+    dto: ConfirmClosureDto = {},
   ) {
     return this.prisma.$transaction(async (tx) => {
       const closure = await tx.inventoryClosure.findUnique({
@@ -284,14 +393,41 @@ export class InventoryClosuresService {
       this.assertBranchScope(closure.branchId, currentUser);
       this.assertPending(closure);
 
+      const cashShift = await tx.cashShift.findFirst({
+        where: {
+          ...(dto.cashShiftId ? { id: dto.cashShiftId } : {}),
+          branchId: closure.branchId,
+          status: "OPEN",
+        },
+        orderBy: { openedAt: "desc" },
+        select: { id: true },
+      });
+      if (!cashShift && dto.cashShiftId) {
+        throw new UnprocessableEntityException({
+          code: "CASH_SHIFT_NOT_ACTIVE",
+          message:
+            "The cash shift is not open or does not belong to the closure branch.",
+          details: { cashShiftId: dto.cashShiftId },
+        });
+      }
+      if (!cashShift) {
+        throw new BadRequestException({
+          code: "ACTIVE_CASH_SHIFT_REQUIRED",
+          message: "An active cash shift is required to close inventory.",
+        });
+      }
+
       const pending = closure.details.filter(
         (detail) => detail.physicalQuantity === null,
       );
-      if (pending.length > 0) {
+      const pendingSupplies = closure.supplyDetails.filter(
+        (detail) => detail.physicalQuantity === null,
+      );
+      if (pending.length > 0 || pendingSupplies.length > 0) {
         throw new UnprocessableEntityException({
           code: "INCOMPLETE_COUNT",
           message:
-            "Every lot of the closure must be counted before confirming.",
+            "Every lot and supply of the closure must be counted before confirming.",
           details: {
             pending: pending.map((detail) => ({
               productId: detail.productId,
@@ -300,6 +436,21 @@ export class InventoryClosuresService {
                 ? formatExpirationDate(detail.expirationDate)
                 : null,
             })),
+            pendingSupplies: pendingSupplies.map((detail) => ({
+              supplyId: detail.supplyId,
+              supplyName: detail.supply.name,
+            })),
+          },
+        });
+      }
+
+      for (const detail of closure.supplyDetails) {
+        await tx.inventoryClosureSupplyDetail.update({
+          where: { id: detail.id },
+          data: {
+            difference: (
+              detail.physicalQuantity ?? new Prisma.Decimal(0)
+            ).minus(detail.systemQuantity),
           },
         });
       }
@@ -317,6 +468,7 @@ export class InventoryClosuresService {
       const updated = await tx.inventoryClosure.update({
         where: { id: closureId },
         data: {
+          cashShiftId: cashShift.id,
           status: "CONFIRMED",
           confirmed: true,
           locked: true,
@@ -340,6 +492,10 @@ export class InventoryClosuresService {
             closureDate: formatExpirationDate(updated.closureDate),
             countedLots: updated.details.length,
             lotsWithDifference: differences,
+            countedSupplies: updated.supplyDetails.length,
+            suppliesWithDifference:
+              updated.supplyDetails.filter(hasSupplyDifference).length,
+            cashShiftId: cashShift.id,
           },
           reason: `Inventory closure of ${updated.branch.name} confirmed`,
           ipAddress,

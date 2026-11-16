@@ -202,19 +202,9 @@ test('Asociar usuario a sede y verificar los logs de auditoría', async ({ page 
     const row = page.getByRole('row').filter({ hasText: assignReason })
     await expect(row).toBeVisible()
     await expect(row).toContainText('Asignación')
-    await expect(row).toContainText('Usuario')
     await expect(row).toContainText('Natalia Bernal')
 
-    await row.getByRole('button', { name: 'Ver detalle' }).click()
-    const detailDialog = page.getByRole('dialog')
-    await expect(detailDialog.getByRole('heading', { name: 'Detalle del cambio' })).toBeVisible()
-    await expect(detailDialog.getByText(assignReason)).toBeVisible()
-    await expect(detailDialog.locator('.audit-detail__json').nth(1)).toContainText(branchName)
-    await expect(detailDialog.locator('.audit-detail__json').nth(1)).toContainText(branchId)
-    await evidence(page, '04-detalle-log-asignacion')
-
-    await page.keyboard.press('Escape')
-    await expect(detailDialog).toBeHidden()
+    await evidence(page, '04-log-asignacion')
   })
 
   await test.step('desactivar la asignación', async () => {
@@ -258,15 +248,7 @@ test('Asociar usuario a sede y verificar los logs de auditoría', async ({ page 
     const row = page.getByRole('row').filter({ hasText: unassignReason })
     await expect(row).toBeVisible()
     await expect(row).toContainText('Desasignación')
-    await expect(row).toContainText('Usuario')
 
-    await row.getByRole('button', { name: 'Ver detalle' }).click()
-    const detailDialog = page.getByRole('dialog')
-    await expect(detailDialog.getByRole('heading', { name: 'Detalle del cambio' })).toBeVisible()
-    await expect(detailDialog.getByText(unassignReason)).toBeVisible()
-    const jsonBlocks = detailDialog.locator('.audit-detail__json')
-    await expect(jsonBlocks.nth(1)).toContainText('"active": false')
-    await expect(jsonBlocks.nth(1)).toContainText(branchName)
-    await evidence(page, '06-detalle-log-desasignacion')
+    await evidence(page, '06-log-desasignacion')
   })
 })

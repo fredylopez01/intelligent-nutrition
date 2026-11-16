@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { useAuth } from '../hooks/useAuth'
 import { AppLayout } from '../layouts/AppLayout'
+import { canAccess } from '../routes/access'
+import { getRoleHome } from '../routes/roleHome'
 import { getRoleLabel } from '../utils/format'
 
 import './ForbiddenPage.css'
@@ -16,6 +18,8 @@ export function ForbiddenPage() {
   const historyIndex = (window.history.state as { idx?: number } | null)?.idx ?? 0
   const canGoBack = historyIndex > 0
   const roleLabel = user ? getRoleLabel(user.role.name) : null
+  const showsDashboard = !user || canAccess('/dashboard', user.role.name)
+  const homePath = showsDashboard ? '/dashboard' : getRoleHome(user.role.name)
 
   return (
     <AppLayout title="Acceso no autorizado">
@@ -41,8 +45,8 @@ export function ForbiddenPage() {
           </p>
         )}
         <div className="forbidden__actions">
-          <Link className="forbidden__home" to="/dashboard">
-            Volver al dashboard
+          <Link className="forbidden__home" to={homePath}>
+            {showsDashboard ? 'Volver al dashboard' : 'Volver al inicio'}
           </Link>
           {canGoBack && (
             <Button variant="outline" onClick={() => navigate(-1)}>

@@ -7,28 +7,42 @@ import { BranchesPage } from '../pages/branches/BranchesPage'
 import { CategoriesPage } from '../pages/catalog/CategoriesPage'
 import { ProductDetailPage } from '../pages/catalog/ProductDetailPage'
 import { ProductsPage } from '../pages/catalog/ProductsPage'
+import { RecipesPage } from '../pages/catalog/RecipesPage'
 import { UnitsPage } from '../pages/catalog/UnitsPage'
 import { ComingSoonPage } from '../pages/ComingSoonPage'
 import { CustomerDetailPage } from '../pages/customers/CustomerDetailPage'
 import { CustomersPage } from '../pages/customers/CustomersPage'
+import { DashboardPage } from '../pages/dashboard/DashboardPage'
 import { ForbiddenPage } from '../pages/ForbiddenPage'
 import { GoogleAuthCallbackPage } from '../pages/GoogleAuthCallbackPage'
+import { CashShiftPage } from '../pages/cash-shifts/CashShiftPage'
 import { ClosurePage } from '../pages/inventory/ClosurePage'
 import { ConsolidatedInventoryPage } from '../pages/inventory/ConsolidatedInventoryPage'
 import { InventoryPage } from '../pages/inventory/InventoryPage'
 import { MovementsPage } from '../pages/inventory/MovementsPage'
+import { SuppliesPage } from '../pages/inventory/SuppliesPage'
 import { LandingPage } from '../pages/LandingPage'
 import { PrivacyPolicyPage } from '../pages/legal/PrivacyPolicyPage'
 import { TermsOfServicePage } from '../pages/legal/TermsOfServicePage'
 import { LoginPage } from '../pages/LoginPage'
 import { ForgotPasswordPage } from '../pages/password-reset/ForgotPasswordPage'
 import { ResetPasswordPage } from '../pages/password-reset/ResetPasswordPage'
+import { OnlineOrdersPage } from '../pages/pos/OnlineOrdersPage'
 import { PaymentMethodsPage } from '../pages/pos/PaymentMethodsPage'
 import { PosPage } from '../pages/pos/PosPage'
 import { SalesPage } from '../pages/pos/SalesPage'
+import { ProfilePage } from '../pages/profile/ProfilePage'
+import { PromotionsPage } from '../pages/promotions/PromotionsPage'
+import { OrderPage } from '../pages/public/OrderPage'
+import { PublicCatalogPage } from '../pages/public/PublicCatalogPage'
+import { PublicProductPage } from '../pages/public/PublicProductPage'
+import { BiDashboardPage } from '../pages/reports/BiDashboardPage'
+import { ReportsPage } from '../pages/reports/ReportsPage'
+import { RestockPage } from '../pages/reports/RestockPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
 import { PurchasesPage } from '../pages/suppliers/PurchasesPage'
 import { SupplierDetailPage } from '../pages/suppliers/SupplierDetailPage'
+import { SupplyPurchasesPage } from '../pages/suppliers/SupplyPurchasesPage'
 import { SuppliersPage } from '../pages/suppliers/SuppliersPage'
 import { UserDetailPage } from '../pages/users/UserDetailPage'
 import { UsersPage } from '../pages/users/UsersPage'
@@ -62,6 +76,18 @@ export function AppRouter() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/terminos" element={<TermsOfServicePage />} />
       <Route path="/privacidad" element={<PrivacyPolicyPage />} />
+      <Route path="/productos" element={<PublicCatalogPage />} />
+      <Route path="/productos/:productId" element={<PublicProductPage />} />
+      <Route path="/pedido" element={<OrderPage />} />
+
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/dashboard']}>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/sedes"
@@ -108,6 +134,15 @@ export function AppRouter() {
       />
 
       <Route
+        path="/inventario/insumos"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/inventario/insumos']}>
+            <SuppliesPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/catalogo"
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/catalogo']}>
@@ -141,6 +176,15 @@ export function AppRouter() {
       />
 
       <Route
+        path="/catalogo/recetas"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/catalogo/recetas']}>
+            <RecipesPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/pos"
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/pos']}>
@@ -153,6 +197,14 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/pos/ventas']}>
             <SalesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/pos/pedidos"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/pos/pedidos']}>
+            <OnlineOrdersPage />
           </ProtectedRoute>
         }
       />
@@ -170,6 +222,14 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/proveedores']}>
             <SuppliersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/proveedores/compras-insumos"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/proveedores/compras-insumos']}>
+            <SupplyPurchasesPage />
           </ProtectedRoute>
         }
       />
@@ -229,6 +289,60 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/auditoria']}>
             <AuditLogsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/promociones"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/promociones']}>
+            <PromotionsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reportes"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/reportes']}>
+            <ReportsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reportes/reposicion"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/reportes/reposicion']}>
+            <RestockPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reportes/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/reportes/dashboard']}>
+            <BiDashboardPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/caja/turno"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/caja/turno']}>
+            <CashShiftPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/perfil"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
           </ProtectedRoute>
         }
       />

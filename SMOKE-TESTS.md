@@ -34,9 +34,13 @@ Verifica que `AppModule` compila sin errores de inyección de dependencias, incl
 Desde la raíz del repositorio:
 
 ```bash
-npm run smoke:docker   # smoke test del stack completo
-npm run test:docker    # tests unitarios + e2e del backend
+npm run smoke:docker        # smoke test del stack completo
+npm run test:docker         # pruebas del backend (unit + e2e) y del frontend (vitest)
 ```
+
+`test:docker` corre los dos runners aunque uno falle, y termina con error si alguno falló (el detalle de cuál, al final de la salida). Se pueden correr por separado con `npm run test:docker:backend` y `npm run test:docker:frontend`.
+
+Ambos runners tienen tope de CPU (`cpus` en `docker-compose.test.yml`) y de workers, para que las pruebas no acaparen la CPU. Subirlos acelera la corrida a cambio de más carga.
 
 Ambos scripts están en el `package.json` de la raíz. Por debajo ejecutan, siempre con **ambos** archivos `-f` (porque `postgres`, `backend` y `frontend` están definidos en `docker-compose.yml`):
 
@@ -44,11 +48,14 @@ Ambos scripts están en el `package.json` de la raíz. Por debajo ejecutan, siem
 # Equivalente a npm run smoke:docker
 docker compose -f docker-compose.yml -f docker-compose.test.yml --profile smoke up --build --abort-on-container-exit --exit-code-from smoke-test smoke-test
 
-# Equivalente a npm run test:docker
+# Equivalente a npm run test:docker:backend
 docker compose -f docker-compose.yml -f docker-compose.test.yml --profile test up --build --abort-on-container-exit --exit-code-from test-runner test-runner
+
+# Equivalente a npm run test:docker:frontend
+docker compose -f docker-compose.yml -f docker-compose.test.yml --profile test up --build --abort-on-container-exit --exit-code-from frontend-test frontend-test
 ```
 
-`--abort-on-container-exit --exit-code-from <servicio>` es obligatorio para que el comando termine y devuelva el veredicto; sin ellos el stack queda corriendo y `up` no reporta el resultado.
+`--abort-on-container-exit --exit-code-from <servicio>` es obligatorio para que el comando termine y devuelva el veredicto; sin ellos el stack queda corriendo y `up` no reporta el resultado. Como `--exit-code-from` acepta un solo servicio, cada runner se levanta en su propio `up`.
 
 Si el backend no arranca (por ejemplo, por variables de entorno faltantes), el smoke test **no llega a ejecutarse** y Docker Compose aborta con `dependency failed to start`.
 

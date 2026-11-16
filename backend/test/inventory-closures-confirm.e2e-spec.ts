@@ -85,6 +85,7 @@ describe("POST /api/v1/inventory-closures/:id/confirm (e2e)", () => {
    * allCounted: if true, sets physicalQuantity for all details (closure is ready to confirm).
    * partialCounted: if true, counts only product A, leaving product B uncounted.
    * unassigned: branch won't have BRANCH_LEADER/BRANCH_ASSISTANT assigned.
+   * withoutCashShift: skips creating the open shift the confirm step requires.
    */
   const createClosure = async (opts: {
     status?: "PENDING" | "CONFIRMED" | "NOT_CONFIRMED";
@@ -92,6 +93,7 @@ describe("POST /api/v1/inventory-closures/:id/confirm (e2e)", () => {
     allCounted?: boolean;
     partialCounted?: boolean;
     unassigned?: boolean;
+    withoutCashShift?: boolean;
   } = {}) => {
     closureSeq += 1;
     const branch = await prisma.branch.create({
@@ -124,6 +126,16 @@ describe("POST /api/v1/inventory-closures/:id/confirm (e2e)", () => {
         ],
       });
     }
+
+    const cashShift = opts.withoutCashShift
+      ? null
+      : await prisma.cashShift.create({
+          data: {
+            branchId: branch.id,
+            userId: actorIds.BRANCH_LEADER,
+            openingAmount: "0.00",
+          },
+        });
 
     const closure = await prisma.inventoryClosure.create({
       data: {
@@ -161,7 +173,7 @@ describe("POST /api/v1/inventory-closures/:id/confirm (e2e)", () => {
         },
       },
     });
-    return { closureId: closure.id, branchId: branch.id };
+    return { closureId: closure.id, branchId: branch.id, cashShiftId: cashShift?.id };
   };
 
   beforeAll(async () => {
@@ -325,6 +337,9 @@ describe("POST /api/v1/inventory-closures/:id/confirm (e2e)", () => {
       await prisma.inventoryClosure.deleteMany({
         where: { id: { in: closureIds } },
       });
+      await prisma.cashShift.deleteMany({
+        where: { branchId: { in: testBranchIds } },
+      });
       await prisma.userBranch.deleteMany({
         where: { userId: { in: personIds } },
       });
@@ -443,6 +458,18 @@ describe("POST /api/v1/inventory-closures/:id/confirm (e2e)", () => {
       expect(detailB?.difference).toBe(PHY_QTY_B - SYS_QTY_B);
     });
 
+    it("links the confirmed closure to the open cash shift of the branch", async () => {
+      const { closureId, cashShiftId } = await createClosure({ allCounted: true });
+
+      await confirm(closureId, tokens.BRANCH_LEADER);
+
+      const inDb = await prisma.inventoryClosure.findUnique({
+        where: { id: closureId },
+        select: { cashShiftId: true },
+      });
+      expect(inDb?.cashShiftId).toBe(cashShiftId);
+    });
+
     it("creates an audit log with action CONFIRM after a successful confirmation", async () => {
       const { closureId } = await createClosure({ allCounted: true });
 
@@ -521,6 +548,15 @@ describe("POST /api/v1/inventory-closures/:id/confirm (e2e)", () => {
 
       const details = error.details as { pending: unknown[] };
       expect(details.pending).toHaveLength(2);
+    });
+
+    it("returns 400 ACTIVE_CASH_SHIFT_REQUIRED when the branch has no open shift", async () => {
+      const { closureId } = await createClosure({ allCounted: true, withoutCashShift: true });
+
+      const response = await confirm(closureId, tokens.BRANCH_LEADER);
+      expect(response.status).toBe(400);
+
+      expect(errorOf(response.body).code).toBe("ACTIVE_CASH_SHIFT_REQUIRED");
     });
   });
 

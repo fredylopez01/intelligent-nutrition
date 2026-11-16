@@ -7,6 +7,7 @@ import {
   jest,
 } from "@jest/globals";
 import type { AuthenticatedUser } from "../../common/interfaces/AuthenticatedUser.js";
+import { Prisma } from "../../../generated/prisma/client.js";
 import { InventoryClosuresService } from "./inventory-closures.service.js";
 
 type AsyncMock = (...args: unknown[]) => Promise<unknown>;
@@ -50,6 +51,7 @@ const tx = {
     create: jest.fn<AsyncMock>(),
   },
   branchInventory: { findMany: jest.fn<AsyncMock>() },
+  supply: { findMany: jest.fn<AsyncMock>() },
 };
 const prisma = {
   $transaction: jest.fn<(arg: unknown) => Promise<unknown>>(),
@@ -113,6 +115,33 @@ function closureRow(
     branch: { name: "Centro" },
     user: { person: { firstName: "Laura", lastName: "Pérez" } },
     details,
+    supplyDetails: [] as ReturnType<typeof supplyDetail>[],
+  };
+}
+
+function supplyDetail(
+  supplyId: string,
+  name: string,
+  values: Partial<{
+    systemQuantity: string;
+    physicalQuantity: string | null;
+    difference: string | null;
+  }> = {},
+) {
+  return {
+    id: `detail-${supplyId}`,
+    supplyId,
+    systemQuantity: new Prisma.Decimal(values.systemQuantity ?? "500"),
+    physicalQuantity:
+      values.physicalQuantity === undefined || values.physicalQuantity === null
+        ? null
+        : new Prisma.Decimal(values.physicalQuantity),
+    difference:
+      values.difference === undefined || values.difference === null
+        ? null
+        : new Prisma.Decimal(values.difference),
+    observation: null,
+    supply: { name, unitOfMeasure: { abreviation: "ml" } },
   };
 }
 
@@ -129,6 +158,7 @@ describe("InventoryClosuresService", () => {
     );
     tx.branch.findUnique.mockResolvedValue({ id: branchId, active: true });
     tx.inventoryClosure.findUnique.mockResolvedValue(null);
+    tx.supply.findMany.mockResolvedValue([]);
     tx.branchInventory.findMany.mockResolvedValue([
       { productId: wheyId, expirationDate: day("2027-06-30"), quantity: 8 },
       { productId: wheyId, expirationDate: day("2026-09-30"), quantity: 2 },
@@ -177,6 +207,50 @@ describe("InventoryClosuresService", () => {
           ],
         },
       });
+    });
+
+    it("snapshots the stock of every active supply of the branch, 0 when it has none", async () => {
+      tx.supply.findMany.mockResolvedValue([
+        {
+          id: "supply-milk",
+          stocks: [{ quantity: new Prisma.Decimal("750.5") }],
+        },
+        { id: "supply-oats", stocks: [] },
+      ]);
+      const created = closureRow("PENDING", []);
+      created.supplyDetails = [
+        supplyDetail("supply-oats", "Avena", { systemQuantity: "0" }),
+        supplyDetail("supply-milk", "Leche", { systemQuantity: "750.5" }),
+      ];
+      tx.inventoryClosure.create.mockResolvedValue(created);
+
+      const result = await service.create(branchId, leader);
+
+      expect(tx.supply.findMany).toHaveBeenCalledWith({
+        where: { active: true },
+        select: {
+          id: true,
+          stocks: { where: { branchId }, select: { quantity: true } },
+        },
+      });
+      const [args] = tx.inventoryClosure.create.mock.calls[0] as [
+        {
+          data: {
+            supplyDetails: { create: { systemQuantity: Prisma.Decimal }[] };
+          };
+        },
+      ];
+      expect(
+        args.data.supplyDetails.create.map((item) =>
+          item.systemQuantity.toString(),
+        ),
+      ).toEqual(["750.5", "0"]);
+      expect(result.supplyItems.map((item) => item.supplyName)).toEqual([
+        "Avena",
+        "Leche",
+      ]);
+      expect(result).toMatchObject({ countedSupplies: 0, totalSupplies: 2 });
+      expect(result.supplyItems[0]).not.toHaveProperty("difference");
     });
 
     it("uses the Bogota business date, not the UTC date", async () => {

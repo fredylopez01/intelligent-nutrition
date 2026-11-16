@@ -139,6 +139,7 @@ describe("PATCH /api/v1/branches/:id/status (e2e)", () => {
           address: branch.address,
           phone: branch.phone,
           active: false,
+          deliveryEnabled: false,
         },
       });
       expect(await isActive(branch.id)).toBe(false);

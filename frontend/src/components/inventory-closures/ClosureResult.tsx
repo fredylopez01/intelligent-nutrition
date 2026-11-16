@@ -1,13 +1,89 @@
-import type { InventoryClosure } from '../../types/inventoryClosure'
+import type { ClosureSupplyItem, InventoryClosure } from '../../types/inventoryClosure'
 import { formatExpirationDate, formatQuantity } from '../../utils/inventory'
-import { differenceLabel, formatClosureDay, lotKey } from '../../utils/inventoryClosures'
+import {
+  differenceLabel,
+  formatClosureDay,
+  lotKey,
+  supplyDifferenceLabel,
+} from '../../utils/inventoryClosures'
 import { formatMovementDate } from '../../utils/inventoryMovements'
+import { formatSupplyQuantity } from '../../utils/supplies'
 
 import './InventoryClosures.css'
 
 interface ClosureResultProps {
   closure: InventoryClosure
   showDifferences: boolean
+}
+
+function SupplyResults({
+  items,
+  showDifferences,
+}: {
+  items: ClosureSupplyItem[]
+  showDifferences: boolean
+}) {
+  return (
+    <div className="closure-result__table-wrap">
+      <table className="closure-result__table">
+        <caption className="sr-only">
+          {showDifferences ? 'Diferencias de los insumos' : 'Conteo físico de los insumos'}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Insumo</th>
+            <th scope="col" className="closure-result__number">
+              {showDifferences ? 'Sistema' : 'Esperado'}
+            </th>
+            <th scope="col" className="closure-result__number">
+              Contado
+            </th>
+            {showDifferences && (
+              <th scope="col" className="closure-result__number">
+                Diferencia
+              </th>
+            )}
+            <th scope="col" className="closure-result__note">
+              Observación
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const difference = showDifferences ? Number(item.difference ?? 0) : 0
+            const tone =
+              !showDifferences || item.difference === null || difference === 0
+                ? ''
+                : difference < 0
+                  ? ' closure-result__row--negative'
+                  : ' closure-result__row--positive'
+            return (
+              <tr key={item.supplyId} className={`closure-result__row${tone}`}>
+                <td>
+                  <span className="closure-count__name">{item.supplyName}</span>
+                  <span className="closure-count__meta">Insumo</span>
+                </td>
+                <td className="closure-result__number">
+                  {formatSupplyQuantity(item.systemQuantity, item.unit)}
+                </td>
+                <td className="closure-result__number">
+                  {item.physicalQuantity === null
+                    ? 'Sin contar'
+                    : formatSupplyQuantity(item.physicalQuantity, item.unit)}
+                </td>
+                {showDifferences && (
+                  <td className="closure-result__number closure-result__difference">
+                    {supplyDifferenceLabel(item.difference, item.unit)}
+                  </td>
+                )}
+                <td className="closure-result__note">{item.observation || '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 export function ClosureResult({ closure, showDifferences }: ClosureResultProps) {
@@ -21,6 +97,11 @@ export function ClosureResult({ closure, showDifferences }: ClosureResultProps) 
   const extraUnits = withDifference
     .filter((item) => (item.difference ?? 0) > 0)
     .reduce((sum, item) => sum + (item.difference ?? 0), 0)
+  const supplyItems = closure.supplyItems ?? []
+  const suppliesWithDifference = supplyItems.filter(
+    (item) =>
+      item.difference !== null && item.difference !== undefined && Number(item.difference) !== 0,
+  ).length
 
   return (
     <div className="closure-result">
@@ -71,6 +152,14 @@ export function ClosureResult({ closure, showDifferences }: ClosureResultProps) 
                 {extraUnits}
               </dd>
             </div>
+            {supplyItems.length > 0 && (
+              <div>
+                <dt>Insumos con diferencia</dt>
+                <dd>
+                  {suppliesWithDifference} de {supplyItems.length}
+                </dd>
+              </div>
+            )}
           </dl>
 
           <div className="closure-result__table-wrap">
@@ -130,9 +219,10 @@ export function ClosureResult({ closure, showDifferences }: ClosureResultProps) 
               </tbody>
             </table>
           </div>
+          {supplyItems.length > 0 && <SupplyResults items={supplyItems} showDifferences />}
           <p className="closure-count__hint">
             El cierre no corrige el stock: si una diferencia es real, el superadmin la registra como
-            un ajuste en Movimientos.
+            un ajuste en Movimientos, y la sede ajusta los insumos en Inventario › Insumos.
           </p>
         </>
       ) : (
@@ -181,6 +271,7 @@ export function ClosureResult({ closure, showDifferences }: ClosureResultProps) 
               </tbody>
             </table>
           </div>
+          {supplyItems.length > 0 && <SupplyResults items={supplyItems} showDifferences={false} />}
           <p className="closure-count__hint">
             El líder de la sede revisa las diferencias contra el sistema.
           </p>

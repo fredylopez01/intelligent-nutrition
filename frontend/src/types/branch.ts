@@ -1,9 +1,26 @@
+export interface BranchScheduleInterval {
+  opensAt: string
+  closesAt: string
+}
+
+export interface BranchScheduleDay {
+  dayOfWeek: number
+  intervals: BranchScheduleInterval[]
+}
+
 export interface Branch {
   id: string
   name: string
   address: string
   phone: string
   active: boolean
+  deliveryEnabled?: boolean
+  schedule?: BranchScheduleDay[]
+  openNow?: boolean
+}
+
+export interface UpdateBranchSchedulePayload {
+  days: BranchScheduleDay[]
 }
 
 export interface CreateBranchPayload {
@@ -16,6 +33,7 @@ export interface UpdateBranchPayload {
   name?: string
   address?: string
   phone?: string
+  deliveryEnabled?: boolean
 }
 
 export interface UpdateBranchStatusPayload {

@@ -105,9 +105,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw err
     }
   }, [])
+  const updateSessionUser = useCallback(
+    (changes: Partial<Pick<SessionUser, 'fullName' | 'email'>>) => {
+      setUser((previous) => {
+        if (!previous) return previous
+        const next = { ...previous, ...changes }
+        const stored = readStoredSession()
+        if (stored) localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...stored, user: next }))
+        return next
+      })
+    },
+    [],
+  )
   const value = useMemo<AuthState>(
-    () => ({ user, token, status, error, login, loginWithToken, logout }),
-    [user, token, status, error, login, loginWithToken, logout],
+    () => ({ user, token, status, error, login, loginWithToken, logout, updateSessionUser }),
+    [user, token, status, error, login, loginWithToken, logout, updateSessionUser],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

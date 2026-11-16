@@ -62,6 +62,8 @@ function purchase(receivedQuantity = 0) {
   };
 }
 
+const branchId = "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d";
+
 const tx = {
   purchase: { findUnique: jest.fn<AsyncMock>(), update: jest.fn<AsyncMock>() },
   purchaseDetail: {
@@ -69,12 +71,19 @@ const tx = {
     findMany: jest.fn<AsyncMock>(),
   },
   inventoryMovement: { create: jest.fn<AsyncMock>() },
+  branchInventory: {
+    findMany: jest.fn<AsyncMock>(),
+    update: jest.fn<AsyncMock>(),
+    create: jest.fn<AsyncMock>(),
+    upsert: jest.fn<AsyncMock>(),
+  },
 };
 const prisma = {
   $transaction:
     jest.fn<
       (operation: (client: typeof tx) => Promise<unknown>) => Promise<unknown>
     >(),
+  branch: { findMany: jest.fn<AsyncMock>() },
 };
 const audit = { createAuditLog: jest.fn<AsyncMock>() };
 const generalStock = { increase: jest.fn<AsyncMock>() };
@@ -89,6 +98,13 @@ describe("PurchasesService receipts by lot", () => {
     tx.purchase.findUnique.mockResolvedValue(purchase());
     tx.purchaseDetail.findMany.mockResolvedValue([
       { receivedQuantity: 48, requestedQuantity: 50 },
+    ]);
+    tx.branchInventory.findMany.mockResolvedValue([
+      {
+        id: "lot-id",
+        expirationDate: new Date("2027-01-31T00:00:00.000Z"),
+        minimumStock: 0,
+      },
     ]);
     service = new PurchasesService(
       prisma as never,
@@ -213,7 +229,7 @@ describe("PurchasesService receipts by lot", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it("rejects the same line twice with the same expiration date", async () => {
+  it("rejects the same line twice with the same expiration date and no branch", async () => {
     await expect(
       service.receive(
         purchaseId,
@@ -238,6 +254,37 @@ describe("PurchasesService receipts by lot", () => {
     });
   });
 
+  it("allows two lots with the same expiration date sent to different branches", async () => {
+    const branchId2 = "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e";
+    prisma.branch.findMany.mockResolvedValueOnce([
+      { id: branchId, active: true },
+      { id: branchId2, active: true },
+    ]);
+
+    await expect(
+      service.receive(
+        purchaseId,
+        {
+          items: [
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 3,
+              expirationDate: "2027-01-31",
+              branchId,
+            },
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 3,
+              expirationDate: "2027-01-31",
+              branchId: branchId2,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).resolves.toBeDefined();
+  });
+
   it("does not touch the general stock for a line received with zero units", async () => {
     await service.receive(
       purchaseId,
@@ -255,5 +302,256 @@ describe("PurchasesService receipts by lot", () => {
 
     expect(generalStock.increase).not.toHaveBeenCalled();
     expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts a valid active branch as destination", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([{ id: branchId, active: true }]);
+
+    await expect(
+      service.receive(
+        purchaseId,
+        {
+          items: [
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 10,
+              expirationDate: "2027-06-30",
+              branchId,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).resolves.toBeDefined();
+
+    expect(prisma.branch.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: [branchId] } } }),
+    );
+  });
+
+  it("throws NotFoundException when branchId does not exist", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([]);
+
+    await expect(
+      service.receive(
+        purchaseId,
+        {
+          items: [
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 10,
+              expirationDate: "2027-06-30",
+              branchId,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toMatchObject({ response: { code: "BRANCH_NOT_FOUND" } });
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("throws UnprocessableEntityException when branch is inactive", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([{ id: branchId, active: false }]);
+
+    await expect(
+      service.receive(
+        purchaseId,
+        {
+          items: [
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 10,
+              expirationDate: "2027-06-30",
+              branchId,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toMatchObject({ response: { code: "BRANCH_INACTIVE" } });
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a product that is not assigned to the destination branch", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([{ id: branchId, active: true }]);
+    tx.branchInventory.findMany.mockResolvedValueOnce([]);
+
+    await expect(
+      service.receive(
+        purchaseId,
+        {
+          items: [
+            {
+              purchaseDetailId: detailId,
+              receivedQuantity: 5,
+              expirationDate: "2027-06-30",
+              branchId,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toMatchObject({ response: { code: "PRODUCT_NOT_ASSIGNED" } });
+
+    expect(tx.branchInventory.upsert).not.toHaveBeenCalled();
+    expect(generalStock.increase).not.toHaveBeenCalled();
+  });
+
+  it("adds the lot to the destination branch instead of the general stock", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([{ id: branchId, active: true }]);
+
+    await service.receive(
+      purchaseId,
+      {
+        items: [
+          {
+            purchaseDetailId: detailId,
+            receivedQuantity: 7,
+            expirationDate: "2027-06-30",
+            branchId,
+          },
+        ],
+      },
+      admin,
+    );
+
+    expect(generalStock.increase).not.toHaveBeenCalled();
+    expect(tx.branchInventory.upsert).toHaveBeenCalledWith({
+      where: {
+        branchId_productId_expirationDate: {
+          branchId,
+          productId,
+          expirationDate: new Date("2027-06-30T00:00:00.000Z"),
+        },
+      },
+      create: {
+        branchId,
+        productId,
+        expirationDate: new Date("2027-06-30T00:00:00.000Z"),
+        quantity: 7,
+        minimumStock: 0,
+      },
+      update: { quantity: { increment: 7 } },
+    });
+  });
+
+  it("increments an existing branch lot with the same expiration date", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([{ id: branchId, active: true }]);
+    tx.branchInventory.findMany.mockResolvedValueOnce([
+      {
+        id: "existing-lot",
+        expirationDate: new Date("2027-06-30T00:00:00.000Z"),
+        minimumStock: 3,
+      },
+    ]);
+
+    await service.receive(
+      purchaseId,
+      {
+        items: [
+          {
+            purchaseDetailId: detailId,
+            receivedQuantity: 5,
+            expirationDate: "2027-06-30",
+            branchId,
+          },
+        ],
+      },
+      admin,
+    );
+
+    expect(tx.branchInventory.update).toHaveBeenCalledWith({
+      where: { id: "existing-lot" },
+      data: { quantity: { increment: 5 } },
+    });
+    expect(tx.branchInventory.upsert).not.toHaveBeenCalled();
+  });
+
+  it("records the destination branch on the purchase detail", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([{ id: branchId, active: true }]);
+
+    await service.receive(
+      purchaseId,
+      {
+        items: [
+          {
+            purchaseDetailId: detailId,
+            receivedQuantity: 4,
+            expirationDate: "2027-06-30",
+            branchId,
+          },
+        ],
+      },
+      admin,
+    );
+
+    expect(tx.purchaseDetail.update).toHaveBeenCalledWith({
+      where: { id: detailId },
+      data: { receivedQuantity: 4, received: false, branchId },
+    });
+  });
+
+  it("leaves the purchase detail branch empty when the lots go to different branches", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([
+      { id: branchId, active: true },
+      { id: "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e", active: true },
+    ]);
+
+    await service.receive(
+      purchaseId,
+      {
+        items: [
+          {
+            purchaseDetailId: detailId,
+            receivedQuantity: 3,
+            expirationDate: "2027-06-30",
+            branchId,
+          },
+          {
+            purchaseDetailId: detailId,
+            receivedQuantity: 2,
+            expirationDate: "2027-06-30",
+            branchId: "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+          },
+        ],
+      },
+      admin,
+    );
+
+    expect(tx.purchaseDetail.update).toHaveBeenCalledWith({
+      where: { id: detailId },
+      data: { receivedQuantity: 5, received: false },
+    });
+  });
+
+  it("keeps the branch already recorded on the purchase detail", async () => {
+    prisma.branch.findMany.mockResolvedValueOnce([{ id: branchId, active: true }]);
+    tx.purchase.findUnique.mockResolvedValue({
+      ...purchase(),
+      details: [{ ...purchase().details[0], branchId: "recorded-branch" }],
+    });
+
+    await service.receive(
+      purchaseId,
+      {
+        items: [
+          {
+            purchaseDetailId: detailId,
+            receivedQuantity: 2,
+            expirationDate: "2027-06-30",
+            branchId,
+          },
+        ],
+      },
+      admin,
+    );
+
+    expect(tx.purchaseDetail.update).toHaveBeenCalledWith({
+      where: { id: detailId },
+      data: { receivedQuantity: 2, received: false },
+    });
   });
 });
