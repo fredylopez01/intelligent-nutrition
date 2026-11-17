@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { http } from './http'
 import { branchesService } from './branches.service'
+import { http } from './http'
 
 vi.mock('./http', async (importOriginal) => {
   const original = await importOriginal<typeof import('./http')>()
-  return { ...original, http: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn(), delete: vi.fn() } }
+  return {
+    ...original,
+    http: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn(), delete: vi.fn() },
+  }
 })
 
 const get = vi.mocked(http.get)
@@ -37,7 +40,13 @@ describe('branchesService', () => {
   })
 
   it('creates a branch', async () => {
-    const branch = { id: 'branch-1', name: 'Sede Makro', address: 'Carrera 10', phone: '300', active: true }
+    const branch = {
+      id: 'branch-1',
+      name: 'Sede Makro',
+      address: 'Carrera 10',
+      phone: '300',
+      active: true,
+    }
     post.mockResolvedValue(branch)
 
     await expect(
@@ -55,7 +64,11 @@ describe('branchesService', () => {
 
     await branchesService.update('branch-1', { phone: '3009999999' }, 't')
 
-    expect(patch).toHaveBeenCalledWith('/branches/branch-1', { phone: '3009999999' }, { token: 't' })
+    expect(patch).toHaveBeenCalledWith(
+      '/branches/branch-1',
+      { phone: '3009999999' },
+      { token: 't' },
+    )
   })
 
   it('changes the status of a branch', async () => {
@@ -63,7 +76,11 @@ describe('branchesService', () => {
 
     await branchesService.updateStatus('branch-1', { active: false }, 't')
 
-    expect(patch).toHaveBeenCalledWith('/branches/branch-1/status', { active: false }, { token: 't' })
+    expect(patch).toHaveBeenCalledWith(
+      '/branches/branch-1/status',
+      { active: false },
+      { token: 't' },
+    )
   })
 
   it('replaces the schedule of a branch', async () => {

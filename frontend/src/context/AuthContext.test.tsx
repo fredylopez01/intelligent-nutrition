@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useAuth } from '../hooks/useAuth'
 import { authService } from '../services/auth.service'
@@ -36,12 +36,18 @@ function Probe() {
       <span data-testid="status">{auth.status}</span>
       <span data-testid="user">{auth.user?.fullName ?? '-'}</span>
       <span data-testid="error">{auth.error ?? '-'}</span>
-      <button onClick={() => void auth.login({ email: 'ana@test.com', password: 'x' }).catch(() => {})}>
+      <button
+        onClick={() => void auth.login({ email: 'ana@test.com', password: 'x' }).catch(() => {})}
+      >
         login
       </button>
-      <button onClick={() => void auth.loginWithToken('google-token').catch(() => {})}>token</button>
+      <button onClick={() => void auth.loginWithToken('google-token').catch(() => {})}>
+        token
+      </button>
       <button onClick={() => auth.logout()}>logout</button>
-      <button onClick={() => auth.updateSessionUser({ fullName: 'Ana Actualizada' })}>rename</button>
+      <button onClick={() => auth.updateSessionUser({ fullName: 'Ana Actualizada' })}>
+        rename
+      </button>
     </div>
   )
 }
@@ -60,7 +66,13 @@ function storeSession(token: string, user: SessionUser) {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  // Pin the flag so a local .env with VITE_MOCK_SESSION=true cannot change what is under test.
+  vi.stubEnv('VITE_MOCK_SESSION', 'false')
   localStorage.clear()
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 describe('AuthProvider', () => {
@@ -105,6 +117,24 @@ describe('AuthProvider', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')).toEqual({
       token: 'jwt',
       user: sessionUser,
+    })
+  })
+
+  it('signs in with the development mock session without calling the API', async () => {
+    vi.stubEnv('VITE_MOCK_SESSION', 'true')
+    const user = userEvent.setup()
+
+    renderProvider()
+    await user.click(screen.getByRole('button', { name: 'login' }))
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'), {
+      timeout: 3000,
+    })
+    expect(screen.getByTestId('user')).toHaveTextContent('Natalia Bernal')
+    expect(authService.login).not.toHaveBeenCalled()
+    expect(authService.me).not.toHaveBeenCalled()
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')).toMatchObject({
+      token: 'dev-mock-token',
     })
   })
 

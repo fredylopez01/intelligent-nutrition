@@ -43,7 +43,9 @@ describe('AuditLogsTable', () => {
     expect(row.getByText('Actualización')).toBeInTheDocument()
     expect(row.getByText('Usuario')).toBeInTheDocument()
     expect(row.getByText('Cambio de nombre registrado')).toBeInTheDocument()
-    expect(row.getByText(formatDateTime(log.createdAt))).toBeInTheDocument()
+    // Intl emits non-breaking spaces ("a. m."); Testing Library collapses them in the DOM text
+    // but not in a string matcher, so the expected value is normalized the same way.
+    expect(row.getByText(formatDateTime(log.createdAt).replace(/\s+/g, ' '))).toBeInTheDocument()
   })
 
   it('falls back when the log has no reason', () => {

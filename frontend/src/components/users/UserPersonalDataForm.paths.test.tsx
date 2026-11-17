@@ -2,8 +2,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { usersService } from '../../services/users.service'
 import { ApiError } from '../../services/http'
+import { usersService } from '../../services/users.service'
 import type { User } from '../../types/user'
 
 import { UserPersonalDataForm } from './UserPersonalDataForm'
@@ -109,9 +109,7 @@ describe('UserPersonalDataForm submit paths', () => {
     await user.type(screen.getByLabelText('Dirección'), 'Carrera 9 # 8-7')
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
-    expect(
-      await screen.findByText('Los datos se guardaron correctamente.'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Los datos se guardaron correctamente.')).toBeInTheDocument()
     expect(updateUser).toHaveBeenCalledWith(
       'user-1',
       { person: { address: 'Carrera 9 # 8-7' } },

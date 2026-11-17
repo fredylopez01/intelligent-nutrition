@@ -106,7 +106,11 @@ describe('usersService against the API', () => {
 
     await service.updateRole('user-1', { roleId: 'role-2' }, 'token')
 
-    expect(patch).toHaveBeenCalledWith('/users/user-1/role', { roleId: 'role-2' }, { token: 'token' })
+    expect(patch).toHaveBeenCalledWith(
+      '/users/user-1/role',
+      { roleId: 'role-2' },
+      { token: 'token' },
+    )
   })
 
   it('changes the status of a user', async () => {
@@ -117,7 +121,11 @@ describe('usersService against the API', () => {
     await expect(service.updateStatus('user-1', { active: false }, 'token')).resolves.toEqual(
       response,
     )
-    expect(patch).toHaveBeenCalledWith('/users/user-1/status', { active: false }, { token: 'token' })
+    expect(patch).toHaveBeenCalledWith(
+      '/users/user-1/status',
+      { active: false },
+      { token: 'token' },
+    )
   })
 
   it('lists the branches of a user', async () => {
@@ -135,9 +143,13 @@ describe('usersService against the API', () => {
 
     await service.assignBranch('user-1', { branchId: 'branch-1' }, 'token')
 
-    expect(post).toHaveBeenCalledWith('/users/user-1/branches', { branchId: 'branch-1' }, {
-      token: 'token',
-    })
+    expect(post).toHaveBeenCalledWith(
+      '/users/user-1/branches',
+      { branchId: 'branch-1' },
+      {
+        token: 'token',
+      },
+    )
   })
 
   it('deactivates a branch assignment', async () => {
@@ -167,7 +179,9 @@ describe('usersService with mocks enabled', () => {
   it('filters by status and paginates the mocked users', async () => {
     const service = await loadService(true)
 
-    const result = await withMockedTimers(() => service.list({ page: 1, limit: 10, active: false }))
+    const result = await withMockedTimers(() =>
+      service.list({ page: 1, limit: 10, active: false }, null),
+    )
 
     expect(result.data).toEqual(MOCK_USERS.filter((user) => !user.active))
     expect(result.meta.total).toBe(result.data.length)
@@ -176,8 +190,8 @@ describe('usersService with mocks enabled', () => {
   it('searches by name and by email ignoring the case', async () => {
     const service = await loadService(true)
 
-    const byName = await withMockedTimers(() => service.list({ search: '  NATALIA ' }))
-    const byEmail = await withMockedTimers(() => service.list({ search: 'natalia.bernal' }))
+    const byName = await withMockedTimers(() => service.list({ search: '  NATALIA ' }, null))
+    const byEmail = await withMockedTimers(() => service.list({ search: 'natalia.bernal' }, null))
 
     expect(byName.data.map((user) => user.id)).toEqual(['u-1'])
     expect(byEmail.data.map((user) => user.id)).toEqual(['u-1'])
@@ -187,7 +201,7 @@ describe('usersService with mocks enabled', () => {
     const service = await loadService(true)
 
     const leaders = await withMockedTimers(() =>
-      service.list({ roleId: 'role-branch-leader', page: 1, limit: 2 }),
+      service.list({ roleId: 'role-branch-leader', page: 1, limit: 2 }, null),
     )
 
     expect(leaders.data).toHaveLength(2)

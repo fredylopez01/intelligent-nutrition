@@ -1,12 +1,12 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useUsers } from '../../hooks/useUsers'
 import { useRoles } from '../../hooks/useRoles'
-import type { User, UsersListParams } from '../../types/user'
+import { useUsers } from '../../hooks/useUsers'
+import type { User } from '../../types/user'
 
 import { UsersPage } from './UsersPage'
 
@@ -45,21 +45,17 @@ const laura = buildUser('user-1', 'Laura', 'laura@intelligent.co')
 
 const refetch = vi.fn()
 
-function mockUseUsers(state: {
-  status: 'loading' | 'success' | 'error'
-  users?: User[]
-  meta?: any
-  emptyMessage?: string | null
-  error?: string | null
-}) {
+type UsersHookState = ReturnType<typeof useUsers>
+
+function mockUseUsers(state: Partial<UsersHookState> & Pick<UsersHookState, 'status'>) {
   vi.mocked(useUsers).mockReturnValue({
-    status: state.status,
-    users: state.users ?? [],
-    meta: state.meta ?? null,
-    emptyMessage: state.emptyMessage ?? null,
-    error: state.error ?? null,
+    users: [],
+    meta: null,
+    emptyMessage: null,
+    error: null,
     refetch,
-  } as any)
+    ...state,
+  })
 }
 
 function renderPage(path = '/usuarios') {
@@ -77,7 +73,9 @@ beforeEach(() => {
   vi.mocked(useRoles).mockReturnValue({
     roles: [{ id: 'role-assistant', name: 'BRANCH_ASSISTANT', active: true }],
     isLoading: false,
-  } as any)
+    error: null,
+    refetch: vi.fn(),
+  })
 })
 
 describe('UsersPage create and assign flows', () => {
