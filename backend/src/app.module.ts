@@ -34,6 +34,7 @@ import { RecipesModule } from "./modules/recipes/recipes.module.js";
 import { CatalogModule } from "./modules/catalog/catalog.module.js";
 import { OnlineOrdersModule } from "./modules/online-orders/online-orders.module.js";
 import { SupplyPurchasesModule } from "./modules/supply-purchases/supply-purchases.module.js";
+import { ChatModule } from "./modules/chat/chat.module.js";
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { SupplyPurchasesModule } from "./modules/supply-purchases/supply-purchas
     CatalogModule,
     OnlineOrdersModule,
     SupplyPurchasesModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
