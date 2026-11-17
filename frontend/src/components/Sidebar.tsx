@@ -19,6 +19,7 @@ type NavIconName =
   | 'branches'
   | 'reports'
   | 'audit'
+  | 'chatbot'
 
 interface NavItem {
   label: string
@@ -118,6 +119,11 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Auditoría', to: '/auditoria' },
     ],
   },
+  {
+    label: 'Chatbot',
+    to: '/chatbot',
+    icon: 'chatbot',
+  },
 ]
 
 const STANDALONE_AUDIT_ITEM: NavItem = {
@@ -209,6 +215,12 @@ function NavigationIcon({ name }: { name: NavIconName }) {
         <path d="M8 4h11v17H5V7l3-3Z" />
         <path d="M8 4v4H5m4 4h7m-7 4h7" />
         <path d="m3 13 2 2 3-3" />
+      </>
+    ),
+    chatbot: (
+      <>
+        <path d="M20 12a8 8 0 0 1-11.8 7L4 20l1-4.2A8 8 0 1 1 20 12Z" />
+        <path d="M8.5 12h.01M12 12h.01M15.5 12h.01" />
       </>
     ),
   }

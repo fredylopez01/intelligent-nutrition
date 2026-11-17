@@ -4,18 +4,19 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { ActivateAccountPage } from '../pages/activation/ActivateAccountPage'
 import { AuditLogsPage } from '../pages/audit-logs/AuditLogsPage'
 import { BranchesPage } from '../pages/branches/BranchesPage'
+import { CashShiftPage } from '../pages/cash-shifts/CashShiftPage'
 import { CategoriesPage } from '../pages/catalog/CategoriesPage'
 import { ProductDetailPage } from '../pages/catalog/ProductDetailPage'
 import { ProductsPage } from '../pages/catalog/ProductsPage'
 import { RecipesPage } from '../pages/catalog/RecipesPage'
 import { UnitsPage } from '../pages/catalog/UnitsPage'
+import { ChatbotPage } from '../pages/chatbot/ChatbotPage'
 import { ComingSoonPage } from '../pages/ComingSoonPage'
 import { CustomerDetailPage } from '../pages/customers/CustomerDetailPage'
 import { CustomersPage } from '../pages/customers/CustomersPage'
 import { DashboardPage } from '../pages/dashboard/DashboardPage'
 import { ForbiddenPage } from '../pages/ForbiddenPage'
 import { GoogleAuthCallbackPage } from '../pages/GoogleAuthCallbackPage'
-import { CashShiftPage } from '../pages/cash-shifts/CashShiftPage'
 import { ClosurePage } from '../pages/inventory/ClosurePage'
 import { ConsolidatedInventoryPage } from '../pages/inventory/ConsolidatedInventoryPage'
 import { InventoryPage } from '../pages/inventory/InventoryPage'
@@ -42,8 +43,8 @@ import { RestockPage } from '../pages/reports/RestockPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
 import { PurchasesPage } from '../pages/suppliers/PurchasesPage'
 import { SupplierDetailPage } from '../pages/suppliers/SupplierDetailPage'
-import { SupplyPurchasesPage } from '../pages/suppliers/SupplyPurchasesPage'
 import { SuppliersPage } from '../pages/suppliers/SuppliersPage'
+import { SupplyPurchasesPage } from '../pages/suppliers/SupplyPurchasesPage'
 import { UserDetailPage } from '../pages/users/UserDetailPage'
 import { UsersPage } from '../pages/users/UsersPage'
 import { setForbiddenHandler } from '../services/http'
@@ -280,6 +281,15 @@ export function AppRouter() {
         element={
           <ProtectedRoute allowedRoles={ROUTE_ROLES['/usuarios']}>
             <UserDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/chatbot"
+        element={
+          <ProtectedRoute allowedRoles={ROUTE_ROLES['/chatbot']}>
+            <ChatbotPage />
           </ProtectedRoute>
         }
       />

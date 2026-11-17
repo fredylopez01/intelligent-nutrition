@@ -4,6 +4,7 @@ import { Link, NavLink } from 'react-router-dom'
 import { CartProvider } from '../../context/CartContext'
 import { useBrandAssets } from '../../hooks/useBrandAssets'
 import { useCart } from '../../hooks/useCart'
+import { ChatWidget } from '../chat/ChatWidget'
 
 import { LandingFooter } from './LandingFooter'
 
@@ -55,6 +56,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
         </header>
         {children}
         <LandingFooter logo={logo} />
+        <ChatWidget variant="public" />
       </div>
     </CartProvider>
   )
