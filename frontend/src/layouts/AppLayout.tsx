@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ChatWidget } from '../components/chat/ChatWidget'
 import { NotificationsPanel } from '../components/notifications/NotificationsPanel'
 import { Sidebar } from '../components/Sidebar'
 import { ThemeMenu } from '../components/ThemeMenu'
@@ -167,6 +168,7 @@ export function AppLayout({
       </div>
 
       {aside && <aside className="app-layout__aside">{aside}</aside>}
+      <ChatWidget variant="internal" />
     </div>
   )
 }

@@ -63,6 +63,7 @@ describe('Sidebar menu by role', () => {
       'Usuarios',
       'Sedes',
       'Reportes',
+      'Chatbot',
     ])
   })
 
@@ -77,6 +78,7 @@ describe('Sidebar menu by role', () => {
     expect(labels).not.toContain('Sedes')
     expect(labels).not.toContain('Usuarios')
     expect(labels).not.toContain('Auditoría')
+    expect(labels).not.toContain('Chatbot')
   })
 
   it('only shows customers among the restricted modules to the branch assistant', () => {
