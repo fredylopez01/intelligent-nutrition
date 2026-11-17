@@ -22,6 +22,7 @@ const { PrismaService } =
   await import("../../database/prisma/prisma.service.js");
 const { ConfigModule } = await import("@nestjs/config");
 const { Reflector, APP_GUARD } = await import("@nestjs/core");
+const { ThrottlerModule } = await import("@nestjs/throttler");
 const { PassportModule } = await import("@nestjs/passport");
 const { JwtModule } = await import("@nestjs/jwt");
 const { JwtAuthGuard } = await import("../../common/guards/jwt-auth.guard.js");
@@ -57,6 +58,7 @@ const mockAuditService = {
 @NestModule({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
