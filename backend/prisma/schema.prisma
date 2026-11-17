@@ -90,6 +90,7 @@ model UserAccount {
   cashShifts           CashShift[]
   createdPromotions  Promotion[]
   createdRecipes     Recipe[]
+  chatConversations  ChatConversation[]
 
   @@map("user_account")
 }
@@ -264,7 +265,7 @@ model Product {
   generalStock    GeneralStock[]
   notifications   Notification[]
   onlineOrderItems OnlineOrderItem[]
-  derivedSupplies  Supply[]
+  derivedSupply    Supply?
   recipe           Recipe?
 
   @@index([categoryId])
@@ -727,7 +728,7 @@ model Supply {
   name            String   @unique @db.VarChar(150)
   unitOfMeasureId String   @map("unit_of_measure_id") @db.Uuid
   active          Boolean  @default(true)
-  sourceProductId     String?  @map("source_product_id") @db.Uuid
+  sourceProductId     String?  @unique @map("source_product_id") @db.Uuid
   productUnitQuantity Decimal? @map("product_unit_quantity") @db.Decimal(12, 3)
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
@@ -843,4 +844,59 @@ model CashShift {
   @@index([branchId, status])
   @@index([userId, status])
   @@map("cash_shift")
+}
+
+enum ChatChannel {
+  PUBLIC
+  INTERNAL
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+model ChatConversation {
+  id        String      @id @default(uuid()) @db.Uuid
+  channel   ChatChannel
+  userId    String?     @map("user_id") @db.Uuid
+  clientKey String      @map("client_key") @db.VarChar(64)
+  escalated Boolean     @default(false)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  user     UserAccount?  @relation(fields: [userId], references: [personId])
+  messages ChatMessage[]
+
+  @@index([userId])
+  @@index([channel, clientKey])
+  @@map("chat_conversation")
+}
+
+model ChatMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  role           ChatRole
+  content        String   @db.Text
+  inputTokens    Int?     @map("input_tokens")
+  outputTokens   Int?     @map("output_tokens")
+  costUsd        Decimal? @map("cost_usd") @db.Decimal(10, 6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([role, createdAt])
+  @@map("chat_message")
+}
+
+model ChatKnowledgeEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String   @db.VarChar(150)
+  content   String   @db.Text
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@map("chat_knowledge_entry")
 }

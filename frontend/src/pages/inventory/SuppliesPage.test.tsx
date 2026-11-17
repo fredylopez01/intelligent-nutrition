@@ -457,7 +457,7 @@ describe('SuppliesPage product to supply', () => {
     vi.mocked(productsService.list).mockResolvedValue(productsPage())
     updateLink.mockResolvedValue({
       id: OATS.supplyId,
-      name: 'Avena en hojuelas',
+      name: WHEY.name,
       unitOfMeasure: { id: 'unit-g', abbreviation: 'g' },
       active: true,
       sourceProduct: { id: WHEY.id, name: WHEY.name },
@@ -475,7 +475,20 @@ describe('SuppliesPage product to supply', () => {
     expect(await dialog.findByText('Elige el producto del catálogo.')).toBeInTheDocument()
 
     await user.click(await dialog.findByRole('button', { name: /Proteína Whey 2 lb/ }))
-    await user.type(dialog.getByLabelText('Cuánto rinde una unidad del producto (g)'), '900')
+    const yieldField = dialog.getByLabelText('Cuánto rinde una unidad del producto (g)')
+    expect(yieldField).toHaveValue('907')
+    expect(dialog.getByText('El insumo pasará a llamarse')).toBeInTheDocument()
+
+    await user.clear(yieldField)
+    await user.type(yieldField, '1800')
+    expect(
+      dialog.getByText(
+        'El producto dice 2 lb (≈ 907 g) y escribiste 1.800 g. Revisa el rendimiento.',
+      ),
+    ).toBeInTheDocument()
+    await user.clear(yieldField)
+    await user.type(yieldField, '900')
+    expect(dialog.queryByText(/Revisa el rendimiento/)).not.toBeInTheDocument()
     await user.click(dialog.getByRole('button', { name: 'Guardar vínculo' }))
 
     await waitFor(() =>
@@ -487,7 +500,7 @@ describe('SuppliesPage product to supply', () => {
     )
     expect(
       await screen.findByText(
-        'Avena en hojuelas quedó ligado a Proteína Whey 2 lb. Ya puedes convertir unidades en cualquier sede.',
+        'Avena en hojuelas ahora es Proteína Whey 2 lb. Ya puedes convertir unidades en cualquier sede.',
       ),
     ).toBeInTheDocument()
   })
@@ -604,10 +617,10 @@ describe('SuppliesPage product to supply', () => {
 
     await user.click(screen.getByRole('button', { name: 'Registrar insumo' }))
     const dialog = within(screen.getByRole('dialog', { name: 'Registrar insumo' }))
-    await user.type(dialog.getByLabelText('Nombre'), 'Proteína en polvo')
+    await user.click(dialog.getByLabelText(/Viene de un producto del catálogo/))
+    expect(dialog.queryByLabelText('Nombre')).not.toBeInTheDocument()
     await waitFor(() => expect(dialog.getByLabelText('Unidad de medida')).toBeEnabled())
     await user.selectOptions(dialog.getByLabelText('Unidad de medida'), 'unit-g')
-    await user.click(dialog.getByLabelText(/Viene de un producto del catálogo/))
     await user.click(dialog.getByRole('button', { name: 'Registrar insumo' }))
     expect(
       await dialog.findByText('Escribe cuánto rinde una unidad del producto.'),
@@ -615,19 +628,83 @@ describe('SuppliesPage product to supply', () => {
     expect(dialog.getByText('Elige el producto del catálogo.')).toBeInTheDocument()
 
     await user.click(await dialog.findByRole('button', { name: /Proteína Whey 2 lb/ }))
-    await user.type(dialog.getByLabelText('Cuánto rinde una unidad del producto (g)'), '907,2')
+    expect(dialog.getByText('Nombre del insumo')).toBeInTheDocument()
+    expect(dialog.getByLabelText('Cuánto rinde una unidad del producto (g)')).toHaveValue('907')
     await user.click(dialog.getByRole('button', { name: 'Registrar insumo' }))
 
     await waitFor(() =>
       expect(createSupply).toHaveBeenCalledWith(
-        {
-          name: 'Proteína en polvo',
-          unitOfMeasureId: 'unit-g',
-          sourceProductId: WHEY.id,
-          productUnitQuantity: 907.2,
-        },
+        { unitOfMeasureId: 'unit-g', sourceProductId: WHEY.id, productUnitQuantity: 907 },
         'test-token',
       ),
     )
+  })
+
+  it('explains that a product already feeds a supply', async () => {
+    vi.mocked(unitsService.list).mockResolvedValue({
+      data: [{ id: 'unit-g', name: 'Gramo', abbreviation: 'g', active: true }],
+      meta: { page: 1, limit: 100, total: 1, totalPages: 1 },
+    })
+    vi.mocked(productsService.list).mockResolvedValue(productsPage())
+    createSupply.mockRejectedValue(
+      new ApiError(
+        'Linked',
+        409,
+        { supplyId: 'supply-whey', supplyName: WHEY.name, supplyActive: false },
+        'PRODUCT_ALREADY_LINKED',
+      ),
+    )
+    const { user } = renderPage()
+    await screen.findByText('Leche entera')
+
+    await user.click(screen.getByRole('button', { name: 'Registrar insumo' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Registrar insumo' }))
+    await user.click(dialog.getByLabelText(/Viene de un producto del catálogo/))
+    await waitFor(() => expect(dialog.getByLabelText('Unidad de medida')).toBeEnabled())
+    await user.selectOptions(dialog.getByLabelText('Unidad de medida'), 'unit-g')
+    await user.click(await dialog.findByRole('button', { name: /Proteína Whey 2 lb/ }))
+    await user.click(dialog.getByRole('button', { name: 'Registrar insumo' }))
+
+    expect(
+      await dialog.findByText(
+        'Ese producto ya es el insumo «Proteína Whey 2 lb», que está inactivo. Actívalo en Inventario › Insumos.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('warns when the product content does not match the unit of the supply', async () => {
+    vi.mocked(unitsService.list).mockResolvedValue({
+      data: [{ id: 'unit-cap', name: 'Cápsula', abbreviation: 'cap', active: true }],
+      meta: { page: 1, limit: 100, total: 1, totalPages: 1 },
+    })
+    vi.mocked(productsService.list).mockResolvedValue(productsPage())
+    const { user } = renderPage()
+    await screen.findByText('Leche entera')
+
+    await user.click(screen.getByRole('button', { name: 'Registrar insumo' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Registrar insumo' }))
+    await user.click(dialog.getByLabelText(/Viene de un producto del catálogo/))
+    await waitFor(() => expect(dialog.getByLabelText('Unidad de medida')).toBeEnabled())
+    await user.selectOptions(dialog.getByLabelText('Unidad de medida'), 'unit-cap')
+    await user.click(await dialog.findByRole('button', { name: /Proteína Whey 2 lb/ }))
+
+    expect(
+      dialog.getByText('El producto dice 2 lb y el insumo se mide en cap. Revisa la unidad.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows only the yield when the supply carries the product name', async () => {
+    stock.mockResolvedValue(
+      stockPage([
+        row({
+          supplyId: 'supply-whey',
+          supply: { name: WHEY.name, unitOfMeasure: { id: 'unit-g', abbreviation: 'g' } },
+          sourceProduct: { id: WHEY.id, name: WHEY.name, unitQuantity: 907 },
+        }),
+      ]),
+    )
+    renderPage()
+
+    expect(await screen.findByText(/Del catálogo · 1 und = 907 g/)).toBeInTheDocument()
   })
 })

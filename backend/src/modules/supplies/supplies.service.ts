@@ -51,19 +51,17 @@ export class SuppliesService {
     currentUser: AuthenticatedUser,
     ipAddress?: string,
   ) {
-    const { name, unitOfMeasureId } = dto;
-    await this.assertSourceProduct(dto.sourceProductId);
-
-    const existing = await this.prisma.supply.findFirst({
-      where: { name: { equals: name, mode: "insensitive" } },
-      select: { id: true },
-    });
-    if (existing) {
-      throw new ConflictException({
-        code: "SUPPLY_NAME_ALREADY_EXISTS",
-        message: "A supply with this name already exists.",
+    const { unitOfMeasureId } = dto;
+    const product = await this.assertSourceProduct(dto.sourceProductId);
+    const name = product ? product.name : (dto.name ?? "").trim();
+    if (!name) {
+      throw new BadRequestException({
+        code: "SUPPLY_NAME_REQUIRED",
+        message: "The name is required when the supply does not come from a product.",
       });
     }
+
+    await this.assertNameAvailable(name);
 
     const unit = await this.prisma.unitMeasure.findUnique({
       where: { id: unitOfMeasureId },
@@ -134,11 +132,37 @@ export class SuppliesService {
     });
   }
 
-  private async assertSourceProduct(productId: string | undefined | null) {
-    if (!productId) return;
+  private async assertNameAvailable(name: string, supplyId?: string) {
+    const conflict = await this.prisma.supply.findFirst({
+      where: {
+        name: { equals: name, mode: "insensitive" },
+        ...(supplyId ? { id: { not: supplyId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (conflict) {
+      throw new ConflictException({
+        code: "SUPPLY_NAME_ALREADY_EXISTS",
+        message: "A supply with this name already exists.",
+        details: { name },
+      });
+    }
+  }
+
+  private async assertSourceProduct(
+    productId: string | undefined | null,
+    supplyId?: string,
+  ): Promise<{ id: string; name: string } | null> {
+    if (!productId) return null;
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      select: { name: true, active: true },
+      select: {
+        id: true,
+        name: true,
+        active: true,
+        recipe: { select: { id: true, name: true } },
+        derivedSupply: { select: { id: true, name: true, active: true } },
+      },
     });
     if (!product) {
       throw new NotFoundException({
@@ -152,6 +176,26 @@ export class SuppliesService {
         message: `Product "${product.name}" is inactive.`,
       });
     }
+    if (product.recipe) {
+      throw new UnprocessableEntityException({
+        code: "PRODUCT_IS_PREPARED",
+        message: `Product "${product.name}" is prepared with the recipe "${product.recipe.name}", so it cannot become a supply.`,
+        details: { productId, recipeId: product.recipe.id, recipeName: product.recipe.name },
+      });
+    }
+    if (product.derivedSupply && product.derivedSupply.id !== supplyId) {
+      throw new ConflictException({
+        code: "PRODUCT_ALREADY_LINKED",
+        message: `Product "${product.name}" is already the supply "${product.derivedSupply.name}".`,
+        details: {
+          productId,
+          supplyId: product.derivedSupply.id,
+          supplyName: product.derivedSupply.name,
+          supplyActive: product.derivedSupply.active,
+        },
+      });
+    }
+    return { id: product.id, name: product.name };
   }
 
   async findAll(query: ListSuppliesQueryDto) {
@@ -232,21 +276,25 @@ export class SuppliesService {
       throw new NotFoundException("Supply not found.");
     }
 
-    if (dto.name !== undefined && dto.name !== existing.name) {
-      const conflict = await this.prisma.supply.findFirst({
-        where: { name: { equals: dto.name, mode: "insensitive" }, id: { not: supplyId } },
-        select: { id: true },
+    const product =
+      typeof dto.sourceProductId === "string"
+        ? await this.assertSourceProduct(dto.sourceProductId, supplyId)
+        : null;
+    const linkedAfter =
+      dto.sourceProductId === null
+        ? false
+        : product !== null || existing.sourceProductId !== null;
+
+    if (dto.name !== undefined && linkedAfter && dto.name !== (product?.name ?? existing.name)) {
+      throw new UnprocessableEntityException({
+        code: "SUPPLY_NAME_FROM_PRODUCT",
+        message: "The name of a supply that comes from a product follows the product name.",
       });
-      if (conflict) {
-        throw new ConflictException({
-          code: "SUPPLY_NAME_ALREADY_EXISTS",
-          message: "A supply with this name already exists.",
-        });
-      }
     }
 
-    if (typeof dto.sourceProductId === "string") {
-      await this.assertSourceProduct(dto.sourceProductId);
+    const nextName = product?.name ?? dto.name;
+    if (nextName !== undefined && nextName !== existing.name) {
+      await this.assertNameAvailable(nextName, supplyId);
     }
     if (
       dto.productUnitQuantity !== undefined &&
@@ -279,7 +327,7 @@ export class SuppliesService {
       const updated = await tx.supply.update({
         where: { id: supplyId },
         data: {
-          ...(dto.name !== undefined ? { name: dto.name } : {}),
+          ...(nextName !== undefined ? { name: nextName } : {}),
           ...(dto.unitOfMeasureId !== undefined ? { unitOfMeasureId: dto.unitOfMeasureId } : {}),
           ...(dto.sourceProductId === null
             ? { sourceProductId: null, productUnitQuantity: null }

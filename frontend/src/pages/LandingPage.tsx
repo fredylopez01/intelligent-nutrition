@@ -4,11 +4,12 @@ import { Link, useLocation } from 'react-router-dom'
 import { LandingProducts } from '../components/landing/LandingProducts'
 import { LandingStores } from '../components/landing/LandingStores'
 import { PublicLayout } from '../components/landing/PublicLayout'
-import { MediaPlaceholder } from '../components/ui/MediaPlaceholder'
+import { CatalogImage } from '../components/catalog-public/CatalogImage'
 import { useBrandAssets } from '../hooks/useBrandAssets'
 import { usePublicBranches } from '../hooks/usePublicBranches'
 import { branchesHighlight, heroStockLabel } from '../utils/landing'
 
+const HERO_IMAGE_URL = 'https://cdn-dev.intelligentnutrition.shop/brading/landing-page-2.jpeg'
 const ORIGINAL = { title: '100% original', description: 'Producto con importador verificable' }
 const ADVICE = {
   title: 'Asesoría incluida',
@@ -54,7 +55,11 @@ export function LandingPage() {
         </div>
         <div className="landing__hero-media">
           <div className="landing__hero-image">
-            <MediaPlaceholder label="Foto principal: producto o sede" />
+            <CatalogImage
+              src={HERO_IMAGE_URL}
+              alt="Producto o sede"
+              placeholder="Foto principal: producto o sede"
+            />
           </div>
           <div className="landing__hero-card">
             <p className="landing__eyebrow">Inventario en vivo</p>

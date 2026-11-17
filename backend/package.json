@@ -26,6 +26,7 @@
     "postinstall": "prisma skills sync || exit 0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.9.0",
     "@aws-sdk/client-s3": "^3.1150.0",
     "@aws-sdk/s3-request-presigner": "^3.1150.0",
     "@femike/swagger-protect": "^9.0.3",
@@ -40,6 +41,7 @@
     "@nestjs/schedule": "^12.0.2",
     "@nestjs/serve-static": "^5.0.5",
     "@nestjs/swagger": "^11.4.8",
+    "@nestjs/throttler": "^6.8.0",
     "@prisma/adapter-pg": "7.6.0",
     "@prisma/client": "7.6.0",
     "argon2": "^0.45.1",
@@ -116,10 +118,46 @@
     ],
     "coverageThreshold": {
       "global": {
-        "statements": 77,
-        "branches": 69,
-        "functions": 62,
-        "lines": 78
+        "statements": 75,
+        "branches": 67,
+        "functions": 60,
+        "lines": 76
+      },
+      "./src/modules/auth/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/branches/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/general-stock/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/inventory/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/products/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/roles/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/sales/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/unit-measure/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/users/": {
+        "statements": 80,
+        "lines": 80
       }
     },
     "coverageDirectory": "../coverage",

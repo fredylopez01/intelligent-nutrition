@@ -25,6 +25,9 @@ const prismaMock = {
   unitMeasure: {
     findUnique: jest.fn<AsyncMock>(),
   },
+  product: {
+    findUnique: jest.fn<AsyncMock>(),
+  },
   branch: {
     findMany: jest.fn<AsyncMock>(),
   },
@@ -320,5 +323,169 @@ describe("SuppliesService.updateStatus", () => {
     await expect(
       service.updateStatus("non-existent", false, superadmin),
     ).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe("SuppliesService product link", () => {
+  let service: InstanceType<typeof SuppliesService>;
+  const jar = {
+    id: "product-1",
+    name: "Colágeno hidrolizado 300 g",
+    active: true,
+    recipe: null,
+    derivedSupply: null,
+  };
+
+  beforeEach(async () => {
+    jest.resetAllMocks();
+
+    prismaMock.$transaction.mockImplementation(executeTransaction);
+    auditMock.createAuditLog.mockResolvedValue(undefined);
+    prismaMock.branch.findMany.mockResolvedValue([]);
+
+    const module = await Test.createTestingModule({
+      providers: [
+        SuppliesService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(SuppliesService);
+  });
+
+  it("names the supply after the product and ignores the name sent", async () => {
+    prismaMock.product.findUnique.mockResolvedValueOnce(jar);
+    prismaMock.supply.findFirst.mockResolvedValueOnce(null);
+    prismaMock.unitMeasure.findUnique.mockResolvedValueOnce(unitActive);
+    prismaMock.supply.create.mockResolvedValueOnce({ ...supplyRow, name: jar.name });
+
+    await service.create(
+      {
+        name: "Maní",
+        unitOfMeasureId: "unit-1",
+        sourceProductId: jar.id,
+        productUnitQuantity: 300,
+      },
+      superadmin,
+    );
+
+    expect(prismaMock.supply.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          name: jar.name,
+          unitOfMeasureId: "unit-1",
+          sourceProductId: jar.id,
+          productUnitQuantity: 300,
+        },
+      }),
+    );
+  });
+
+  it("asks for a name when the supply does not come from a product", async () => {
+    await expect(
+      service.create({ unitOfMeasureId: "unit-1" }, superadmin),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { code: "SUPPLY_NAME_REQUIRED" },
+    });
+  });
+
+  it("does not let a second supply come from the same product", async () => {
+    prismaMock.product.findUnique.mockResolvedValueOnce({
+      ...jar,
+      derivedSupply: { id: "supply-9", name: jar.name, active: false },
+    });
+
+    await expect(
+      service.create(
+        { unitOfMeasureId: "unit-1", sourceProductId: jar.id, productUnitQuantity: 300 },
+        superadmin,
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: {
+        code: "PRODUCT_ALREADY_LINKED",
+        details: { supplyId: "supply-9", supplyName: jar.name, supplyActive: false },
+      },
+    });
+    expect(prismaMock.supply.create).not.toHaveBeenCalled();
+  });
+
+  it("does not turn a prepared product into a supply", async () => {
+    prismaMock.product.findUnique.mockResolvedValueOnce({
+      ...jar,
+      recipe: { id: "recipe-1", name: "Batido" },
+    });
+
+    await expect(
+      service.create(
+        { unitOfMeasureId: "unit-1", sourceProductId: jar.id, productUnitQuantity: 300 },
+        superadmin,
+      ),
+    ).rejects.toMatchObject({
+      status: 422,
+      response: { code: "PRODUCT_IS_PREPARED" },
+    });
+  });
+
+  it("keeps the product name on a linked supply", async () => {
+    prismaMock.supply.findUnique.mockResolvedValueOnce({
+      ...supplyRow,
+      name: jar.name,
+      sourceProductId: jar.id,
+    });
+
+    await expect(
+      service.update("supply-1", { name: "Maní" }, superadmin),
+    ).rejects.toMatchObject({
+      status: 422,
+      response: { code: "SUPPLY_NAME_FROM_PRODUCT" },
+    });
+    expect(prismaMock.supply.update).not.toHaveBeenCalled();
+  });
+
+  it("renames the supply when it is linked to another product", async () => {
+    prismaMock.supply.findUnique.mockResolvedValueOnce({
+      ...supplyRow,
+      name: "Proteína en polvo",
+      sourceProductId: null,
+    });
+    prismaMock.product.findUnique.mockResolvedValueOnce(jar);
+    prismaMock.supply.findFirst.mockResolvedValueOnce(null);
+    prismaMock.supply.update.mockResolvedValueOnce({ ...supplyRow, name: jar.name });
+
+    await service.update(
+      "supply-1",
+      { sourceProductId: jar.id, productUnitQuantity: 300 },
+      superadmin,
+    );
+
+    expect(prismaMock.supply.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { name: jar.name, sourceProductId: jar.id, productUnitQuantity: 300 },
+      }),
+    );
+  });
+
+  it("keeps its own supply when the product is linked again", async () => {
+    prismaMock.supply.findUnique.mockResolvedValueOnce({
+      ...supplyRow,
+      name: jar.name,
+      sourceProductId: jar.id,
+    });
+    prismaMock.product.findUnique.mockResolvedValueOnce({
+      ...jar,
+      derivedSupply: { id: "supply-1", name: jar.name, active: true },
+    });
+    prismaMock.supply.update.mockResolvedValueOnce({ ...supplyRow, name: jar.name });
+
+    await service.update(
+      "supply-1",
+      { sourceProductId: jar.id, productUnitQuantity: 250 },
+      superadmin,
+    );
+
+    expect(prismaMock.supply.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.supply.update).toHaveBeenCalled();
   });
 });

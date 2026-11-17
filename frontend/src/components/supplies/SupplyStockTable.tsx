@@ -80,8 +80,10 @@ export function SupplyStockTable({
                   <span className="inventory-table__name">{row.supply.name}</span>
                   {row.sourceProduct && (
                     <span className="supplies-table__source">
-                      De {row.sourceProduct.name} · 1 und ={' '}
-                      {formatSupplyQuantity(row.sourceProduct.unitQuantity, unit)}
+                      {row.sourceProduct.name === row.supply.name
+                        ? 'Del catálogo'
+                        : `De ${row.sourceProduct.name}`}{' '}
+                      · 1 und = {formatSupplyQuantity(row.sourceProduct.unitQuantity, unit)}
                     </span>
                   )}
                   <span className="inventory-table__reference supplies-table__inline">

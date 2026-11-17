@@ -22,6 +22,7 @@ export const ROUTE_ROLES: Record<string, RoleName[]> = {
   '/proveedores/compras-insumos': ['SUPERADMIN', 'BRANCH_LEADER'],
   '/usuarios': ['SUPERADMIN', 'DEV'],
   '/auditoria': ['SUPERADMIN', 'DEV'],
+  '/chatbot': ['SUPERADMIN'],
   '/caja/turno': ['SUPERADMIN', 'BRANCH_LEADER', 'BRANCH_ASSISTANT'],
   '/promociones': ['SUPERADMIN'],
   '/reportes': ['SUPERADMIN', 'BRANCH_LEADER'],

@@ -36,7 +36,7 @@ export interface SuppliesListResponse {
 }
 
 export interface CreateSupplyPayload {
-  name: string
+  name?: string
   unitOfMeasureId: string
   sourceProductId?: string
   productUnitQuantity?: number

@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useRef, useState } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 
 import { useAuth } from '../../hooks/useAuth'
 import { suppliesService } from '../../services/supplies.service'
@@ -8,14 +8,15 @@ import type { Supply, SupplySourceProduct, SupplyStockRow } from '../../types/su
 import {
   parseUnitQuantity,
   resolveSupplyError,
+  suggestProductYield,
   supplyLinkSchema,
   type SupplyLinkValues,
 } from '../../utils/supplies'
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
-import { TextField } from '../ui/TextField'
 
 import { SupplyProductPicker } from './SupplyProductPicker'
+import { SupplyYieldField } from './SupplyYieldField'
 
 import '../categories/CategoryForm.css'
 import './Supplies.css'
@@ -36,9 +37,13 @@ export function SupplyLinkForm({ row, onSaved, onCancel }: SupplyLinkFormProps) 
   const [productError, setProductError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isRemoving, setIsRemoving] = useState(false)
+  const autoYield = useRef('')
   const {
     register,
     handleSubmit,
+    control,
+    getValues,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<SupplyLinkValues>({
     resolver: zodResolver(supplyLinkSchema),
@@ -46,7 +51,23 @@ export function SupplyLinkForm({ row, onSaved, onCancel }: SupplyLinkFormProps) 
       productUnitQuantity: initial ? String(initial.unitQuantity) : '',
     },
   })
+  const yieldText = useWatch({ control, name: 'productUnitQuantity' })
   const busy = isSubmitting || isRemoving
+  const renamed = product && product.name !== row.supply.name ? product.name : null
+
+  const selectProduct = (next: SupplySourceProduct | null) => {
+    setProduct(next)
+    setProductError(null)
+    setSubmitError(null)
+    if (!next || next.id === initial?.id) return
+    const suggestion = suggestProductYield(next.name, unit)
+    const current = getValues('productUnitQuantity').trim()
+    const untouched =
+      !current || current === autoYield.current || current === String(initial?.unitQuantity ?? '')
+    if (suggestion?.kind !== 'match' || !untouched) return
+    autoYield.current = String(suggestion.quantity)
+    setValue('productUnitQuantity', autoYield.current, { shouldValidate: Boolean(current) })
+  }
 
   const onSubmit = async (values: SupplyLinkValues) => {
     if (!product) {
@@ -96,27 +117,30 @@ export function SupplyLinkForm({ row, onSaved, onCancel }: SupplyLinkFormProps) 
       {submitError && <Alert tone="error">{submitError}</Alert>}
       <p className="category-form__note">
         Al ligar el insumo, cada unidad del producto que se abra en una sede suma la cantidad que
-        indiques. El vínculo aplica en todas las sedes.
+        indiques, y el insumo toma el nombre del producto. Cada producto alimenta un solo insumo.
       </p>
       <SupplyProductPicker
         id="supply-link-product"
         selected={product}
-        onSelect={(next) => {
-          setProduct(next)
-          setProductError(null)
-        }}
+        onSelect={selectProduct}
         disabled={busy}
         error={productError ?? undefined}
       />
-      <TextField
+      {renamed && (
+        <div className="supply-form__derived-name">
+          <span>El insumo pasará a llamarse</span>
+          <strong>{renamed}</strong>
+          <small>Desde ahora sigue el nombre del producto en el catálogo.</small>
+        </div>
+      )}
+      <SupplyYieldField
         id="supply-link-quantity"
-        label={`Cuánto rinde una unidad del producto (${unit})`}
-        inputMode="decimal"
-        autoComplete="off"
-        placeholder="Ej. 30"
-        hint="Ej. un tarro de proteína de 900 g rinde 900 si el insumo se mide en gramos."
+        unit={unit}
+        productName={product?.name}
+        value={yieldText}
+        disabled={busy}
         error={errors.productUnitQuantity?.message}
-        {...register('productUnitQuantity')}
+        registration={register('productUnitQuantity')}
       />
       <div className="category-form__actions supply-link__actions">
         {initial && (

@@ -14,7 +14,8 @@ export class UpdateSupplyDto {
   @ApiPropertyOptional({
     minLength: 2,
     maxLength: 150,
-    description: "Unique supply name.",
+    description:
+      "Unique supply name. Not editable while the supply comes from a product: it follows the product name.",
   })
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
@@ -34,7 +35,7 @@ export class UpdateSupplyDto {
     format: "uuid",
     nullable: true,
     description:
-      "Catalog product this supply comes from. Send null to remove the link.",
+      "Catalog product this supply comes from. Each product feeds a single supply, and the supply takes its name. Send null to remove the link.",
   })
   @ValidateIf((_object, value) => value !== undefined && value !== null)
   @IsUUID("4")

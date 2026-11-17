@@ -1,12 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 
 import { useAuth } from '../../hooks/useAuth'
 import { useRecipeFormOptions } from '../../hooks/useRecipeFormOptions'
 import { recipesService } from '../../services/recipes.service'
 import type { Recipe, UpdateRecipePayload } from '../../types/recipe'
-import type { SupplySourceProduct } from '../../types/supply'
+import type { Supply, SupplySourceProduct } from '../../types/supply'
 import {
   RECIPE_DESCRIPTION_MAX_LENGTH,
   buildRecipeChanges,
@@ -21,6 +22,8 @@ import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
 import { TextAreaField } from '../ui/TextAreaField'
 import { TextField } from '../ui/TextField'
+
+import { RecipeCatalogIngredient } from './RecipeCatalogIngredient'
 
 import '../categories/CategoryForm.css'
 import './Recipes.css'
@@ -49,6 +52,9 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
       : null,
   )
   const [productError, setProductError] = useState<string | null>(null)
+  const [extraSupplies, setExtraSupplies] = useState<Supply[]>([])
+  const [catalogOpen, setCatalogOpen] = useState(false)
+  const [catalogNotice, setCatalogNotice] = useState<string | null>(null)
   const {
     register,
     handleSubmit,
@@ -65,7 +71,9 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
   const { fields, append, remove } = useFieldArray({ control, name: 'ingredients' })
   const description = useWatch({ control, name: 'description' })
 
-  const knownSupplies = new Map(options.supplies.map((supply) => [supply.id, supply]))
+  const knownSupplies = new Map(
+    [...options.supplies, ...extraSupplies].map((supply) => [supply.id, supply]),
+  )
   for (const ingredient of recipe?.ingredients ?? []) {
     if (!knownSupplies.has(ingredient.supply.id)) {
       knownSupplies.set(ingredient.supply.id, {
@@ -90,6 +98,30 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
     const currentUnit = getValues(`ingredients.${index}.unitOfMeasureId`)
     if (next && (!currentUnit || currentUnit === previous?.unitOfMeasure.id)) {
       setValue(`ingredients.${index}.unitOfMeasureId`, next.unitOfMeasure.id)
+    }
+  }
+
+  const addCatalogSupply = (supply: Supply) => {
+    setCatalogOpen(false)
+    const lines = getValues('ingredients')
+    if (lines.some((line) => line.supplyId === supply.id)) {
+      setCatalogNotice(`${supply.name} ya está en la receta.`)
+      return
+    }
+    if (!knownSupplies.has(supply.id)) {
+      flushSync(() => setExtraSupplies((current) => [...current, supply]))
+    }
+    setCatalogNotice(`${supply.name} quedó como ingrediente. Escribe la cantidad que se gasta.`)
+    const emptyIndex = lines.findIndex((line) => !line.supplyId)
+    if (emptyIndex === -1) {
+      append({ supplyId: supply.id, quantity: '', unitOfMeasureId: supply.unitOfMeasure.id })
+      return
+    }
+    setValue(`ingredients.${emptyIndex}.supplyId`, supply.id, { shouldValidate: true })
+    if (!lines[emptyIndex].unitOfMeasureId) {
+      setValue(`ingredients.${emptyIndex}.unitOfMeasureId`, supply.unitOfMeasure.id, {
+        shouldValidate: true,
+      })
     }
   }
 
@@ -202,7 +234,8 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
       <fieldset className="recipe-form__ingredients">
         <legend className="recipe-form__legend">Ingredientes</legend>
         <p className="recipe-form__hint">
-          Cada ingrediente es un insumo con la cantidad que se gasta al preparar una unidad.
+          Cada ingrediente es un insumo con la cantidad que se gasta al preparar una unidad. Si usas
+          parte de un producto que se vende, como un tarro de proteína, elígelo del catálogo.
         </p>
 
         {options.status === 'error' && (
@@ -309,15 +342,38 @@ export function RecipeForm({ recipe, onSaved, onCancel }: RecipeFormProps) {
             {ingredientsError}
           </span>
         )}
-        <div>
-          <Button
-            variant="outline"
-            onClick={() => append(EMPTY_INGREDIENT)}
-            disabled={isSubmitting || options.status !== 'success'}
-          >
-            Agregar ingrediente
-          </Button>
-        </div>
+        {catalogNotice && !catalogOpen && <Alert tone="info">{catalogNotice}</Alert>}
+        {catalogOpen ? (
+          <RecipeCatalogIngredient
+            supplies={[...knownSupplies.values()]}
+            units={options.units}
+            onUse={addCatalogSupply}
+            onCancel={() => setCatalogOpen(false)}
+          />
+        ) : (
+          <div className="recipe-form__line-actions">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCatalogNotice(null)
+                append(EMPTY_INGREDIENT)
+              }}
+              disabled={isSubmitting || options.status !== 'success'}
+            >
+              Agregar ingrediente
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCatalogNotice(null)
+                setCatalogOpen(true)
+              }}
+              disabled={isSubmitting || options.status !== 'success'}
+            >
+              Usar un producto del catálogo
+            </Button>
+          </div>
+        )}
       </fieldset>
 
       <div className="category-form__actions">

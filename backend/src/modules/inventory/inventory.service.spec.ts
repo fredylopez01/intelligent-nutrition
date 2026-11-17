@@ -17,12 +17,12 @@ import { GeneralStockService } from "../general-stock/general-stock.service.js";
 type AsyncMock = (...args: unknown[]) => Promise<unknown>;
 type TransactionCallback = (client: typeof transactionMock) => Promise<unknown>;
 
-const branchId    = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const productId   = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const userId      = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const branchId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const productId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const userId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const inventoryId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-const categoryId  = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-const updatedAt   = new Date("2026-10-16T12:00:00.000Z");
+const categoryId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const updatedAt = new Date("2026-10-16T12:00:00.000Z");
 
 const transactionMock = {
   branch: {
@@ -46,6 +46,15 @@ const transactionMock = {
 };
 
 const prismaMock = {
+  branch: {
+    findUnique: jest.fn<AsyncMock>(),
+  },
+  branchInventory: {
+    groupBy: jest.fn<AsyncMock>(),
+  },
+  product: {
+    findMany: jest.fn<AsyncMock>(),
+  },
   $transaction: jest.fn<(operation: TransactionCallback) => Promise<unknown>>(),
 };
 
@@ -132,8 +141,20 @@ describe("InventoryService.updateMinimumStock", () => {
         InventoryService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: AuditService, useValue: auditMock },
-        { provide: LowStockService, useValue: { levels: async () => new Map(), notifyCrossings: async () => 0 } },
-        { provide: GeneralStockService, useValue: { consume: async () => undefined, increase: async () => undefined } },
+        {
+          provide: LowStockService,
+          useValue: {
+            levels: async () => new Map(),
+            notifyCrossings: async () => 0,
+          },
+        },
+        {
+          provide: GeneralStockService,
+          useValue: {
+            consume: async () => undefined,
+            increase: async () => undefined,
+          },
+        },
       ],
     }).compile();
     service = testingModule.get(InventoryService);
@@ -281,13 +302,12 @@ describe("InventoryService.assignProductToBranch", () => {
     updatedAt: new Date("2026-10-16T00:00:00.000Z"),
   };
 
-  const validDto = (): AssignProductDto =>
-    ({
-      productId,
-      quantity: 10,
-      minimumStock: 5,
-      expirationDate: expirationDateStr,
-    }) as AssignProductDto;
+  const validDto = (): AssignProductDto => ({
+    productId,
+    quantity: 10,
+    minimumStock: 5,
+    expirationDate: expirationDateStr,
+  });
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -304,7 +324,9 @@ describe("InventoryService.assignProductToBranch", () => {
     transactionMock.branchInventory.findUnique.mockResolvedValue(null);
     transactionMock.branchInventory.findFirst.mockResolvedValue(null);
     transactionMock.branchInventory.create.mockResolvedValue(inventoryRecord);
-    transactionMock.branchInventory.findMany.mockResolvedValue([inventoryRecord]);
+    transactionMock.branchInventory.findMany.mockResolvedValue([
+      inventoryRecord,
+    ]);
     transactionMock.inventoryMovement.create.mockResolvedValue({});
     auditMock.createAuditLog.mockResolvedValue({});
 
@@ -313,8 +335,20 @@ describe("InventoryService.assignProductToBranch", () => {
         InventoryService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: AuditService, useValue: auditMock },
-        { provide: LowStockService, useValue: { levels: async () => new Map(), notifyCrossings: async () => 0 } },
-        { provide: GeneralStockService, useValue: { consume: async () => undefined, increase: async () => undefined } },
+        {
+          provide: LowStockService,
+          useValue: {
+            levels: async () => new Map(),
+            notifyCrossings: async () => 0,
+          },
+        },
+        {
+          provide: GeneralStockService,
+          useValue: {
+            consume: async () => undefined,
+            increase: async () => undefined,
+          },
+        },
       ],
     }).compile();
     service = testingModule.get(InventoryService);
@@ -493,7 +527,7 @@ describe("InventoryService.assignProductToBranch", () => {
     });
 
     it("does not create an inventory movement when quantity is zero", async () => {
-      const dto = { ...validDto(), quantity: 0 } as AssignProductDto;
+      const dto = { ...validDto(), quantity: 0 };
       transactionMock.branchInventory.create.mockResolvedValue({
         ...inventoryRecord,
         quantity: 0,
@@ -611,6 +645,269 @@ describe("InventoryService.assignProductToBranch", () => {
           unknownField: true,
         }),
       ).rejects.toThrow();
+    });
+  });
+});
+
+describe("InventoryService.findAllByBranch", () => {
+  let service: InstanceType<typeof InventoryService>;
+
+  const price = { toFixed: () => "10.50" };
+
+  const productRow = (overrides: Record<string, unknown> = {}) => ({
+    id: productId,
+    name: "Proteína Whey",
+    referenceCode: "PROT-001",
+    active: true,
+    price,
+    category: { id: categoryId, name: "Proteínas" },
+    unitOfMeasure: { abreviation: "lb" },
+    ...overrides,
+  });
+
+  const groupedRow = (overrides: Record<string, unknown> = {}) => ({
+    productId,
+    _sum: { quantity: 7 },
+    _max: { minimumStock: 5 },
+    ...overrides,
+  });
+
+  const branchUser = (roleName: string, branches: unknown[] = []) =>
+    ({
+      id: userId,
+      active: true,
+      role: { name: roleName },
+      branches,
+    }) as any;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    prismaMock.branch.findUnique.mockResolvedValue({ id: branchId });
+    prismaMock.branchInventory.groupBy.mockResolvedValue([groupedRow()]);
+    prismaMock.product.findMany.mockResolvedValue([productRow()]);
+
+    const module = await Test.createTestingModule({
+      providers: [
+        InventoryService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+        {
+          provide: LowStockService,
+          useValue: {
+            levels: async () => new Map(),
+            notifyCrossings: async () => 0,
+          },
+        },
+        {
+          provide: GeneralStockService,
+          useValue: {
+            consume: async () => undefined,
+            increase: async () => undefined,
+          },
+        },
+      ],
+    }).compile();
+    service = module.get(InventoryService);
+  });
+
+  it("returns an empty page when the branch has no inventory", async () => {
+    prismaMock.branchInventory.groupBy.mockResolvedValue([]);
+
+    const result: any = await service.findAllByBranch(
+      branchId,
+      {
+        page: 1,
+        limit: 10,
+      } as any,
+      currentUser,
+    );
+
+    expect(result).toEqual({
+      data: [],
+      meta: { page: 1, limit: 10, total: 0, totalPages: 0 },
+    });
+    expect(prismaMock.product.findMany).not.toHaveBeenCalled();
+  });
+
+  it("maps the grouped rows and exposes the thresholds to a SUPERADMIN", async () => {
+    const result: any = await service.findAllByBranch(
+      branchId,
+      {
+        page: 1,
+        limit: 10,
+      } as any,
+      currentUser,
+    );
+
+    expect(result.data[0]).toEqual({
+      product: {
+        id: productId,
+        name: "Proteína Whey",
+        referenceCode: "PROT-001",
+        category: { id: categoryId, name: "Proteínas" },
+        unitOfMeasure: { abbreviation: "lb" },
+        price: "10.50",
+        active: true,
+      },
+      totalQuantity: 7,
+      minimumStock: 5,
+      lowStock: false,
+    });
+    expect(prismaMock.branchInventory.groupBy).toHaveBeenCalledWith({
+      by: ["productId"],
+      where: { branchId },
+      _sum: { quantity: true },
+      _max: { minimumStock: true },
+    });
+  });
+
+  it("hides the thresholds from a branch assistant", async () => {
+    const result: any = await service.findAllByBranch(
+      branchId,
+      { page: 1, limit: 10 } as any,
+      branchUser("BRANCH_ASSISTANT", [{ id: branchId }]),
+    );
+
+    expect(result.data[0]).not.toHaveProperty("minimumStock");
+    expect(result.data[0]).not.toHaveProperty("lowStock");
+    expect(result.data[0].totalQuantity).toBe(7);
+  });
+
+  it("filters the rows below the minimum stock", async () => {
+    prismaMock.branchInventory.groupBy.mockResolvedValue([
+      groupedRow({
+        productId,
+        _sum: { quantity: 2 },
+        _max: { minimumStock: 5 },
+      }),
+    ]);
+    prismaMock.product.findMany.mockResolvedValue([productRow()]);
+
+    const result: any = await service.findAllByBranch(
+      branchId,
+      { page: 1, limit: 10, lowStock: true } as any,
+      currentUser,
+    );
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].lowStock).toBe(true);
+  });
+
+  it("sorts by quantity ascending", async () => {
+    prismaMock.branchInventory.groupBy.mockResolvedValue([
+      groupedRow({ productId: "p1", _sum: { quantity: 9 } }),
+      groupedRow({ productId: "p2", _sum: { quantity: 2 } }),
+    ]);
+    prismaMock.product.findMany.mockResolvedValue([
+      productRow({ id: "p1", referenceCode: "B" }),
+      productRow({ id: "p2", referenceCode: "A" }),
+    ]);
+
+    const result: any = await service.findAllByBranch(
+      branchId,
+      { page: 1, limit: 10, sortBy: "quantity", sortOrder: "asc" } as any,
+      currentUser,
+    );
+
+    expect(result.data.map((row: any) => row.totalQuantity)).toEqual([2, 9]);
+  });
+
+  it("sorts by reference code descending", async () => {
+    prismaMock.branchInventory.groupBy.mockResolvedValue([
+      groupedRow({ productId: "p1" }),
+      groupedRow({ productId: "p2" }),
+    ]);
+    prismaMock.product.findMany.mockResolvedValue([
+      productRow({ id: "p1", referenceCode: "A" }),
+      productRow({ id: "p2", referenceCode: "B" }),
+    ]);
+
+    const result: any = await service.findAllByBranch(
+      branchId,
+      { page: 1, limit: 10, sortBy: "referenceCode", sortOrder: "desc" } as any,
+      currentUser,
+    );
+
+    expect(result.data.map((row: any) => row.product.referenceCode)).toEqual([
+      "B",
+      "A",
+    ]);
+  });
+
+  it("paginates the grouped rows", async () => {
+    prismaMock.branchInventory.groupBy.mockResolvedValue([
+      groupedRow({ productId: "p1" }),
+      groupedRow({ productId: "p2" }),
+      groupedRow({ productId: "p3" }),
+    ]);
+    prismaMock.product.findMany.mockResolvedValue([
+      productRow({ id: "p1", name: "A" }),
+      productRow({ id: "p2", name: "B" }),
+      productRow({ id: "p3", name: "C" }),
+    ]);
+
+    const result: any = await service.findAllByBranch(
+      branchId,
+      { page: 2, limit: 2, sortBy: "name", sortOrder: "asc" } as any,
+      currentUser,
+    );
+
+    expect(result.data).toHaveLength(1);
+    expect(result.meta).toEqual({ page: 2, limit: 2, total: 3, totalPages: 2 });
+  });
+
+  it("rejects a branch that does not exist", async () => {
+    prismaMock.branch.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.findAllByBranch(
+        branchId,
+        { page: 1, limit: 10 } as any,
+        currentUser,
+      ),
+    ).rejects.toMatchObject({
+      status: 404,
+      response: { code: "BRANCH_NOT_FOUND" },
+    });
+    expect(prismaMock.branchInventory.groupBy).not.toHaveBeenCalled();
+  });
+
+  it("rejects a search term shorter than two characters", async () => {
+    await expect(
+      service.findAllByBranch(
+        branchId,
+        { page: 1, limit: 10, search: "p" } as any,
+        currentUser,
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { code: "SEARCH_TOO_SHORT" },
+    });
+  });
+
+  it("rejects a branch outside the user scope", async () => {
+    await expect(
+      service.findAllByBranch(
+        branchId,
+        { page: 1, limit: 10 } as any,
+        branchUser("BRANCH_LEADER", [{ id: "another-branch" }]),
+      ),
+    ).rejects.toMatchObject({
+      status: 403,
+      response: { code: "BRANCH_OUT_OF_SCOPE" },
+    });
+  });
+
+  it("rejects a role without inventory permissions", async () => {
+    await expect(
+      service.findAllByBranch(
+        branchId,
+        { page: 1, limit: 10 } as any,
+        branchUser("DEV"),
+      ),
+    ).rejects.toMatchObject({
+      status: 403,
+      response: { code: "FORBIDDEN" },
     });
   });
 });

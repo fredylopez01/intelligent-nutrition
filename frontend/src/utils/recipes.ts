@@ -149,6 +149,10 @@ export function resolveRecipeError(error: unknown, fallback: string): string {
       return 'La receta ya estaba en ese estado. Recarga la lista.'
     case 'NOT_FOUND':
       return 'La receta ya no existe. Recarga la lista.'
+    case 'PRODUCT_IS_SUPPLY_SOURCE': {
+      const details = error.details as { supplyName?: string } | undefined
+      return `Ese producto se vende por lotes y es el origen ${details?.supplyName ? `del insumo «${details.supplyName}»` : 'de un insumo'}, así que no puede prepararse con una receta. Elige un producto preparado.`
+    }
     case 'PRODUCT_ALREADY_HAS_RECIPE':
       return 'Ese producto ya se prepara con otra receta. Elige otro producto o quítalo de la otra receta.'
     case 'PRODUCT_INACTIVE':

@@ -16,10 +16,12 @@ import { GoogleStrategy } from "./strategies/google.strategy.js";
 import { GoogleAuthGuard } from "./guards/google-auth.guard.js";
 import { SwaggerDocumentationController } from "../../swagger/swagger-documentation.controller.js";
 import { SwaggerDocumentationGuard } from "../../swagger/swagger-documentation.guard.js";
+import { ThrottlerModule } from "@nestjs/throttler";
 
 @Module({
   imports: [
     ConfigModule,
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
     PrismaModule,
     PassportModule,
     JwtModule.registerAsync({

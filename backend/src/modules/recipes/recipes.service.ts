@@ -212,6 +212,7 @@ export class RecipesService {
         name: true,
         active: true,
         recipe: { select: { id: true, name: true } },
+        derivedSupply: { select: { id: true, name: true } },
       },
     });
     if (!product) {
@@ -233,6 +234,17 @@ export class RecipesService {
         code: "PRODUCT_ALREADY_HAS_RECIPE",
         message: `Product "${product.name}" is already prepared with the recipe "${product.recipe.name}".`,
         details: { productId, recipeId: product.recipe.id },
+      });
+    }
+    if (product.derivedSupply) {
+      throw new UnprocessableEntityException({
+        code: "PRODUCT_IS_SUPPLY_SOURCE",
+        message: `Product "${product.name}" is sold by lots and feeds the supply "${product.derivedSupply.name}", so it cannot be prepared with a recipe.`,
+        details: {
+          productId,
+          supplyId: product.derivedSupply.id,
+          supplyName: product.derivedSupply.name,
+        },
       });
     }
   }

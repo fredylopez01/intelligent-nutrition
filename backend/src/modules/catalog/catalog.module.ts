@@ -7,5 +7,6 @@ import { CatalogService } from "./catalog.service.js";
   imports: [PrismaModule],
   controllers: [CatalogController],
   providers: [CatalogService],
+  exports: [CatalogService],
 })
 export class CatalogModule {}
