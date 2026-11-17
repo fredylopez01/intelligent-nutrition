@@ -13,17 +13,19 @@ import {
 } from "class-validator";
 
 export class CreateSupplyDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     minLength: 2,
     maxLength: 150,
     example: "Leche entera",
-    description: "Unique supply name, case insensitive.",
+    description:
+      "Unique supply name, case insensitive. Required without sourceProductId; with a product the supply takes the product name and this field is ignored.",
   })
+  @ValidateIf((dto: CreateSupplyDto) => !dto.sourceProductId)
   @IsString()
   @IsNotEmpty()
   @MinLength(2)
   @MaxLength(150)
-  name!: string;
+  name?: string;
 
   @ApiProperty({
     format: "uuid",

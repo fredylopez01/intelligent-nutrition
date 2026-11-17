@@ -27,9 +27,14 @@ describe("Product to supply conversion (e2e)", () => {
     unit: "",
     gram: "",
     product: "",
+    jar: "",
+    prepared: "",
+    recipe: "",
     supply: "",
     plainSupply: "",
+    createdSupply: "",
   };
+  let superadminId = "";
   const server = () => request(app.getHttpServer());
   const convert = (body: object, bearer = token) =>
     server()
@@ -101,6 +106,28 @@ describe("Product to supply conversion (e2e)", () => {
         },
       })
     ).id;
+    ids.jar = (
+      await prisma.product.create({
+        data: {
+          name: `${runId} Colágeno 300 g`,
+          referenceCode: `CNJ-${runId}`,
+          categoryId: ids.category,
+          unitOfMeasureId: ids.unit,
+          price: "80000.00",
+        },
+      })
+    ).id;
+    ids.prepared = (
+      await prisma.product.create({
+        data: {
+          name: `${runId} Batido preparado`,
+          referenceCode: `CNP-${runId}`,
+          categoryId: ids.category,
+          unitOfMeasureId: ids.unit,
+          price: "12000.00",
+        },
+      })
+    ).id;
     await prisma.branchInventory.createMany({
       data: [
         {
@@ -160,8 +187,10 @@ describe("Product to supply conversion (e2e)", () => {
       });
       personIds.push(person.id);
       const signed = await jwt.signAsync({ sub: person.id });
-      if (roleName === "SUPERADMIN") token = signed;
-      else {
+      if (roleName === "SUPERADMIN") {
+        token = signed;
+        superadminId = person.id;
+      } else {
         leaderToken = signed;
         await prisma.userBranch.create({
           data: {
@@ -172,11 +201,35 @@ describe("Product to supply conversion (e2e)", () => {
         });
       }
     }
+    ids.recipe = (
+      await prisma.recipe.create({
+        data: {
+          name: `${runId} Receta batido`,
+          productId: ids.prepared,
+          createdById: superadminId,
+          ingredients: {
+            create: [
+              {
+                supplyId: ids.plainSupply,
+                quantity: 200,
+                unitOfMeasureId: ids.gram,
+              },
+            ],
+          },
+        },
+      })
+    ).id;
   }, 60000);
 
   afterAll(async () => {
     if (!prisma) return;
-    const supplyIds = [ids.supply, ids.plainSupply];
+    const supplyIds = [ids.supply, ids.plainSupply, ids.createdSupply].filter(
+      Boolean,
+    );
+    const productIds = [ids.product, ids.jar, ids.prepared];
+    await prisma.recipe.deleteMany({
+      where: { name: { startsWith: runId } },
+    });
     await prisma.supplyStockMovement.deleteMany({
       where: { supplyId: { in: supplyIds } },
     });
@@ -188,13 +241,13 @@ describe("Product to supply conversion (e2e)", () => {
     });
     await prisma.notification.deleteMany({ where: { productId: ids.product } });
     await prisma.auditLog.deleteMany({
-      where: { entityId: { in: supplyIds } },
+      where: { entityId: { in: [...supplyIds, ...productIds] } },
     });
     await prisma.supply.deleteMany({ where: { id: { in: supplyIds } } });
     await prisma.branchInventory.deleteMany({
       where: { productId: ids.product },
     });
-    await prisma.product.deleteMany({ where: { id: ids.product } });
+    await prisma.product.deleteMany({ where: { id: { in: productIds } } });
     await prisma.category.deleteMany({ where: { id: ids.category } });
     await prisma.unitMeasure.deleteMany({
       where: { id: { in: [ids.unit, ids.gram] } },
@@ -213,7 +266,7 @@ describe("Product to supply conversion (e2e)", () => {
     await app.close();
   }, 60000);
 
-  it("links a supply to a product with the quantity per unit", async () => {
+  it("links a supply to a product, which gives it its name", async () => {
     const response = await server()
       .patch(`/api/v1/supplies/${ids.supply}`)
       .set("Authorization", `Bearer ${token}`)
@@ -221,6 +274,7 @@ describe("Product to supply conversion (e2e)", () => {
 
     expect(response.status).toBe(200);
     expect((response.body as { data: unknown }).data).toMatchObject({
+      name: `${runId} Whey 2 lb`,
       productUnitQuantity: 907,
       sourceProduct: { id: ids.product, name: `${runId} Whey 2 lb` },
     });
@@ -252,7 +306,7 @@ describe("Product to supply conversion (e2e)", () => {
     });
     expect(exits.map((exit) => exit.quantity).sort()).toEqual([1, 1]);
     expect(exits[0].observation).toBe(
-      `Conversión a insumo ${runId} Proteína porcionada · Batidos de la tarde`,
+      `Conversión a insumo ${runId} Whey 2 lb · Batidos de la tarde`,
     );
     const entry = await prisma.supplyStockMovement.findFirst({
       where: { supplyId: ids.supply, movementType: "ENTRY" },
@@ -297,5 +351,92 @@ describe("Product to supply conversion (e2e)", () => {
       sourceProduct: null,
       productUnitQuantity: null,
     });
+  });
+
+  it("creates a supply from a product with the product name", async () => {
+    const response = await server()
+      .post("/api/v1/supplies")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        unitOfMeasureId: ids.gram,
+        sourceProductId: ids.jar,
+        productUnitQuantity: 300,
+      });
+
+    expect(response.status).toBe(201);
+    const data = (response.body as { data: { id: string } }).data;
+    ids.createdSupply = data.id;
+    expect(data).toMatchObject({
+      name: `${runId} Colágeno 300 g`,
+      productUnitQuantity: 300,
+      sourceProduct: { id: ids.jar },
+    });
+  });
+
+  it("feeds a single supply from each product", async () => {
+    const response = await server()
+      .patch(`/api/v1/supplies/${ids.plainSupply}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ sourceProductId: ids.jar, productUnitQuantity: 300 });
+
+    expect(response.status).toBe(409);
+    expect(errorCode(response)).toBe("PRODUCT_ALREADY_LINKED");
+    expect(
+      (response.body as { error: { details: unknown } }).error.details,
+    ).toMatchObject({
+      supplyId: ids.createdSupply,
+      supplyName: `${runId} Colágeno 300 g`,
+    });
+  });
+
+  it("keeps the supply name in step with the product", async () => {
+    const rename = await server()
+      .patch(`/api/v1/supplies/${ids.createdSupply}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Maní" });
+    expect(rename.status).toBe(422);
+    expect(errorCode(rename)).toBe("SUPPLY_NAME_FROM_PRODUCT");
+
+    const product = await server()
+      .patch(`/api/v1/products/${ids.jar}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: `${runId} Colágeno hidrolizado 300 g` });
+    expect(product.status).toBe(200);
+
+    const supply = await prisma.supply.findUnique({
+      where: { id: ids.createdSupply },
+      select: { name: true },
+    });
+    expect(supply?.name).toBe(`${runId} Colágeno hidrolizado 300 g`);
+  });
+
+  it("keeps prepared products and supply sources apart", async () => {
+    const supply = await server()
+      .post("/api/v1/supplies")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        unitOfMeasureId: ids.gram,
+        sourceProductId: ids.prepared,
+        productUnitQuantity: 400,
+      });
+    expect(supply.status).toBe(422);
+    expect(errorCode(supply)).toBe("PRODUCT_IS_PREPARED");
+
+    const recipe = await server()
+      .post("/api/v1/recipes")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        name: `${runId} Receta tarro`,
+        productId: ids.jar,
+        ingredients: [
+          {
+            supplyId: ids.plainSupply,
+            quantity: 100,
+            unitOfMeasureId: ids.gram,
+          },
+        ],
+      });
+    expect(recipe.status).toBe(422);
+    expect(errorCode(recipe)).toBe("PRODUCT_IS_SUPPLY_SOURCE");
   });
 });

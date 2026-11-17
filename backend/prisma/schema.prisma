@@ -265,7 +265,7 @@ model Product {
   generalStock    GeneralStock[]
   notifications   Notification[]
   onlineOrderItems OnlineOrderItem[]
-  derivedSupplies  Supply[]
+  derivedSupply    Supply?
   recipe           Recipe?
 
   @@index([categoryId])
@@ -728,7 +728,7 @@ model Supply {
   name            String   @unique @db.VarChar(150)
   unitOfMeasureId String   @map("unit_of_measure_id") @db.Uuid
   active          Boolean  @default(true)
-  sourceProductId     String?  @map("source_product_id") @db.Uuid
+  sourceProductId     String?  @unique @map("source_product_id") @db.Uuid
   productUnitQuantity Decimal? @map("product_unit_quantity") @db.Decimal(12, 3)
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamp(6)

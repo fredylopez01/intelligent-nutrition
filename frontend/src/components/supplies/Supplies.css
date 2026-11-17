@@ -163,6 +163,49 @@
   border-left: 2px solid var(--color-border-soft);
 }
 
+.supply-form__derived-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: 10px;
+  background: var(--color-surface-field);
+}
+
+.supply-form__derived-name span {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.supply-form__derived-name strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.supply-form__derived-name small {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.supply-yield {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.supply-yield__warning {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: var(--color-warning-soft);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .supply-conversion__facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

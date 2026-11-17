@@ -331,6 +331,7 @@ export class ProductsService {
           categoryId: true,
           unitOfMeasureId: true,
           price: true,
+          derivedSupply: { select: { id: true } },
         },
       });
 
@@ -427,6 +428,14 @@ export class ProductsService {
           data,
         });
 
+        if (changed.name && existingProduct.derivedSupply) {
+          await this.syncSupplyName(
+            transaction,
+            existingProduct.derivedSupply.id,
+            newData.name,
+          );
+        }
+
         const oldDelta: Record<string, unknown> = {};
         const newDelta: Record<string, unknown> = {};
         for (const key of Object.keys(changed) as Array<keyof typeof changed>) {
@@ -488,6 +497,26 @@ export class ProductsService {
         updatedAt: finalProduct.updatedAt,
       };
     });
+  }
+
+  private async syncSupplyName(
+    transaction: Prisma.TransactionClient,
+    supplyId: string,
+    name: string,
+  ) {
+    const conflict = await transaction.supply.findFirst({
+      where: { name: { equals: name, mode: "insensitive" }, id: { not: supplyId } },
+      select: { id: true },
+    });
+    if (conflict) {
+      throw new ConflictException({
+        code: "SUPPLY_NAME_ALREADY_EXISTS",
+        message:
+          "This product feeds a supply, and another supply already uses the new name.",
+        details: { name },
+      });
+    }
+    await transaction.supply.update({ where: { id: supplyId }, data: { name } });
   }
 
   async updateStatus(
