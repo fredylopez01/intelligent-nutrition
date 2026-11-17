@@ -73,6 +73,8 @@ const prismaMock = {
     create: jest.fn<AsyncMock>(),
     findUnique: jest.fn<AsyncMock>(),
     findUniqueOrThrow: jest.fn<AsyncMock>(),
+    findMany: jest.fn<AsyncMock>(),
+    count: jest.fn<AsyncMock>(),
     update: jest.fn<AsyncMock>(),
   },
   category: {
@@ -103,9 +105,8 @@ jest.unstable_mockModule("../../database/prisma/prisma.service.js", () => ({
 
 const { Test } = await import("@nestjs/testing");
 const { ProductsService } = await import("./products.service.js");
-const { PrismaService } = await import(
-  "../../database/prisma/prisma.service.js"
-);
+const { PrismaService } =
+  await import("../../database/prisma/prisma.service.js");
 const { AuditService } = await import("../audit/audit.service.js");
 
 const productId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -219,7 +220,11 @@ describe("ProductsService > create", () => {
     const product = buildProduct();
     prismaMock.product.create.mockResolvedValue(product);
 
-    const result: unknown = await service.create(validDto, currentUser, "127.0.0.1");
+    const result: unknown = await service.create(
+      validDto,
+      currentUser,
+      "127.0.0.1",
+    );
 
     expect(result).toEqual({
       id: productId,
@@ -276,7 +281,9 @@ describe("ProductsService > create", () => {
 
   it("stores null when description is omitted", async () => {
     const { description: _desc, ...dtoWithoutDescription } = validDto;
-    prismaMock.product.create.mockResolvedValue(buildProduct({ description: null }));
+    prismaMock.product.create.mockResolvedValue(
+      buildProduct({ description: null }),
+    );
 
     await service.create(dtoWithoutDescription, currentUser);
 
@@ -308,9 +315,7 @@ describe("ProductsService > create", () => {
   it("rejects a duplicate referenceCode", async () => {
     prismaMock.product.findFirst.mockResolvedValue({ id: "other-product-id" });
 
-    await expect(
-      service.create(validDto, currentUser),
-    ).rejects.toMatchObject({
+    await expect(service.create(validDto, currentUser)).rejects.toMatchObject({
       status: 409,
       response: { code: "PRODUCT_REFERENCE_CODE_ALREADY_EXISTS" },
     });
@@ -331,9 +336,7 @@ describe("ProductsService > create", () => {
   it("returns 404 when the category does not exist", async () => {
     prismaMock.category.findUnique.mockResolvedValue(null);
 
-    await expect(
-      service.create(validDto, currentUser),
-    ).rejects.toMatchObject({
+    await expect(service.create(validDto, currentUser)).rejects.toMatchObject({
       status: 404,
       response: { code: "CATEGORY_NOT_FOUND" },
     });
@@ -345,9 +348,7 @@ describe("ProductsService > create", () => {
       buildCategory({ active: false }),
     );
 
-    await expect(
-      service.create(validDto, currentUser),
-    ).rejects.toMatchObject({
+    await expect(service.create(validDto, currentUser)).rejects.toMatchObject({
       status: 422,
       response: { code: "CATEGORY_INACTIVE" },
     });
@@ -357,9 +358,7 @@ describe("ProductsService > create", () => {
   it("returns 404 when the unit of measure does not exist", async () => {
     prismaMock.unitMeasure.findUnique.mockResolvedValue(null);
 
-    await expect(
-      service.create(validDto, currentUser),
-    ).rejects.toMatchObject({
+    await expect(service.create(validDto, currentUser)).rejects.toMatchObject({
       status: 404,
       response: { code: "UNIT_NOT_FOUND" },
     });
@@ -371,9 +370,7 @@ describe("ProductsService > create", () => {
       buildUnit({ active: false }),
     );
 
-    await expect(
-      service.create(validDto, currentUser),
-    ).rejects.toMatchObject({
+    await expect(service.create(validDto, currentUser)).rejects.toMatchObject({
       status: 422,
       response: { code: "UNIT_INACTIVE" },
     });
@@ -383,9 +380,7 @@ describe("ProductsService > create", () => {
   it("maps a P2002 unique constraint violation to PRODUCT_REFERENCE_CODE_ALREADY_EXISTS", async () => {
     prismaMock.product.create.mockRejectedValue({ code: "P2002" });
 
-    await expect(
-      service.create(validDto, currentUser),
-    ).rejects.toMatchObject({
+    await expect(service.create(validDto, currentUser)).rejects.toMatchObject({
       status: 409,
       response: { code: "PRODUCT_REFERENCE_CODE_ALREADY_EXISTS" },
     });
@@ -395,26 +390,26 @@ describe("ProductsService > create", () => {
   it("does not hide unexpected database errors", async () => {
     prismaMock.product.create.mockRejectedValue(new Error("connection lost"));
 
-    await expect(
-      service.create(validDto, currentUser),
-    ).rejects.toThrow("connection lost");
+    await expect(service.create(validDto, currentUser)).rejects.toThrow(
+      "connection lost",
+    );
   });
 
   it("does not audit when the product insert fails", async () => {
     prismaMock.product.create.mockRejectedValue(new Error("insert failed"));
 
-    await expect(
-      service.create(validDto, currentUser),
-    ).rejects.toThrow("insert failed");
+    await expect(service.create(validDto, currentUser)).rejects.toThrow(
+      "insert failed",
+    );
     expect(auditMock.createAuditLog).not.toHaveBeenCalled();
   });
 
   it("fails the creation when the audit log cannot be written", async () => {
     auditMock.createAuditLog.mockRejectedValue(new Error("audit down"));
 
-    await expect(
-      service.create(validDto, currentUser),
-    ).rejects.toThrow("audit down");
+    await expect(service.create(validDto, currentUser)).rejects.toThrow(
+      "audit down",
+    );
   });
 
   it("creates and audits with the transaction client", async () => {
@@ -507,7 +502,12 @@ describe("ProductsService > update", () => {
   });
 
   it("updates the name and audits the change", async () => {
-    await service.update(productId, { name: "Proteína Premium" }, currentUser, "127.0.0.1");
+    await service.update(
+      productId,
+      { name: "Proteína Premium" },
+      currentUser,
+      "127.0.0.1",
+    );
 
     expect(prismaMock.product.update).toHaveBeenCalledWith({
       where: { id: productId },
@@ -740,7 +740,9 @@ describe("ProductsService > update", () => {
 
     expect(transactionClient.product.findUnique).toHaveBeenCalledTimes(1);
     expect(transactionClient.product.update).toHaveBeenCalledTimes(1);
-    expect(transactionClient.product.findUniqueOrThrow).toHaveBeenCalledTimes(1);
+    expect(transactionClient.product.findUniqueOrThrow).toHaveBeenCalledTimes(
+      1,
+    );
     expect(prismaMock.product.findUnique).not.toHaveBeenCalled();
     expect(prismaMock.product.update).not.toHaveBeenCalled();
     expect(auditMock.createAuditLog).toHaveBeenCalledWith(
@@ -754,7 +756,9 @@ describe("ProductsService > update", () => {
   });
 
   it("does not hide unexpected database errors", async () => {
-    prismaMock.product.findUnique.mockRejectedValue(new Error("connection lost"));
+    prismaMock.product.findUnique.mockRejectedValue(
+      new Error("connection lost"),
+    );
 
     await expect(
       service.update(productId, { name: "Nuevo" }, currentUser),
@@ -767,5 +771,293 @@ describe("ProductsService > update", () => {
     await expect(
       service.update(productId, { name: "Nuevo" }, currentUser),
     ).rejects.toThrow("audit down");
+  });
+});
+
+describe("ProductsService > findAll", () => {
+  let service: InstanceType<typeof ProductsService>;
+
+  const listRow = (overrides: Record<string, unknown> = {}) => ({
+    id: productId,
+    name: "Proteína Whey",
+    referenceCode: "PROT-001",
+    description: "Proteína de suero de alta calidad",
+    category: { id: categoryId, name: "Proteínas" },
+    unitOfMeasure: { id: unitId, name: "Libra", abreviation: "lb" },
+    price: new MockDecimal("10.50"),
+    active: true,
+    createdAt,
+    updatedAt,
+    images: [],
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    prismaMock.$transaction.mockImplementation((operation) =>
+      Array.isArray(operation) ? Promise.all(operation) : operation(prismaMock),
+    );
+    prismaMock.product.count.mockResolvedValue(0);
+    prismaMock.product.findMany.mockResolvedValue([]);
+
+    const module = await Test.createTestingModule({
+      providers: [
+        ProductsService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(ProductsService);
+  });
+
+  it("maps the rows and returns the pagination metadata", async () => {
+    prismaMock.product.count.mockResolvedValue(3);
+    prismaMock.product.findMany.mockResolvedValue([
+      listRow(),
+      listRow({
+        id: "other",
+        name: "Creatina",
+        images: [{ url: "https://cdn.example/p.png" }],
+      }),
+    ]);
+
+    const result: any = await service.findAll({ page: 2, limit: 2 } as any);
+
+    expect(result.meta).toEqual({ page: 2, limit: 2, total: 3, totalPages: 2 });
+    expect(result.data[0]).toMatchObject({
+      id: productId,
+      name: "Proteína Whey",
+      price: "10.50",
+      unitOfMeasure: { id: unitId, name: "Libra", abbreviation: "lb" },
+      primaryImageUrl: null,
+    });
+    expect(result.data[1].primaryImageUrl).toBe("https://cdn.example/p.png");
+    expect(prismaMock.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 2, take: 2 }),
+    );
+  });
+
+  it("reports zero pages when there are no products", async () => {
+    const result: any = await service.findAll({ page: 1, limit: 10 } as any);
+
+    expect(result.meta.totalPages).toBe(0);
+  });
+
+  it("filters by active, category and unit of measure", async () => {
+    await service.findAll({
+      page: 1,
+      limit: 10,
+      active: false,
+      categoryId,
+      unitOfMeasureId: unitId,
+    } as any);
+
+    expect(prismaMock.product.count).toHaveBeenCalledWith({
+      where: { active: false, categoryId, unitOfMeasureId: unitId },
+    });
+  });
+
+  it("normalizes the search term before querying", async () => {
+    await service.findAll({ page: 1, limit: 10, search: "  Proteína " } as any);
+
+    expect(prismaMock.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { searchText: { contains: "proteina" } },
+      }),
+    );
+  });
+
+  it("rejects a search term shorter than two characters", async () => {
+    await expect(
+      service.findAll({ page: 1, limit: 10, search: "p" } as any),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { code: "SEARCH_TOO_SHORT" },
+    });
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("applies the requested sort", async () => {
+    await service.findAll({
+      page: 1,
+      limit: 10,
+      sortBy: "price",
+      sortOrder: "desc",
+    } as any);
+
+    expect(prismaMock.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { price: "desc" } }),
+    );
+  });
+});
+
+describe("ProductsService > findOne", () => {
+  let service: InstanceType<typeof ProductsService>;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module = await Test.createTestingModule({
+      providers: [
+        ProductsService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(ProductsService);
+  });
+
+  it("returns the product with its images", async () => {
+    prismaMock.product.findUnique.mockResolvedValue({
+      id: productId,
+      name: "Proteína Whey",
+      referenceCode: "PROT-001",
+      description: "Proteína de suero de alta calidad",
+      price: new MockDecimal("10.50"),
+      active: true,
+      createdAt,
+      updatedAt,
+      category: { id: categoryId, name: "Proteínas" },
+      unitOfMeasure: { id: unitId, name: "Libra", abreviation: "lb" },
+      images: [
+        {
+          id: "img-1",
+          url: "https://cdn.example/p.png",
+          fileName: "p.png",
+          mimeType: "image/png",
+          sizeBytes: 100,
+          isPrimary: true,
+          sortOrder: 0,
+          createdAt,
+        },
+      ],
+    });
+
+    const result: any = await service.findOne(productId);
+
+    expect(result.data).toMatchObject({
+      id: productId,
+      name: "Proteína Whey",
+      price: "10.50",
+      category: { id: categoryId, name: "Proteínas" },
+      unitOfMeasure: { id: unitId, name: "Libra", abbreviation: "lb" },
+      active: true,
+    });
+    expect(result.data.images).toHaveLength(1);
+    expect(result.data.images[0]).toMatchObject({
+      url: "https://cdn.example/p.png",
+      isPrimary: true,
+    });
+    expect(prismaMock.product.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: productId } }),
+    );
+  });
+
+  it("returns not found for a missing product", async () => {
+    prismaMock.product.findUnique.mockResolvedValue(null);
+
+    await expect(service.findOne(productId)).rejects.toMatchObject({
+      status: 404,
+      response: { code: "PRODUCT_NOT_FOUND" },
+    });
+  });
+});
+
+describe("ProductsService > updateStatus", () => {
+  let service: InstanceType<typeof ProductsService>;
+
+  const existing = {
+    id: productId,
+    name: "Proteína Whey",
+    referenceCode: "PROT-001",
+    active: true,
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    prismaMock.$transaction.mockImplementation((operation) =>
+      Array.isArray(operation) ? Promise.all(operation) : operation(prismaMock),
+    );
+    prismaMock.product.update.mockResolvedValue({});
+    auditMock.createAuditLog.mockResolvedValue({});
+
+    const module = await Test.createTestingModule({
+      providers: [
+        ProductsService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(ProductsService);
+  });
+
+  it("deactivates the product and records the audit log", async () => {
+    prismaMock.product.findUnique.mockResolvedValue(existing);
+
+    const result: any = await service.updateStatus(
+      productId,
+      false,
+      currentUser,
+      "127.0.0.1",
+    );
+
+    expect(result).toEqual({ message: "Product status updated successfully." });
+    expect(prismaMock.product.update).toHaveBeenCalledWith({
+      where: { id: productId },
+      data: { active: false },
+    });
+    expect(auditMock.createAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "DEACTIVATE",
+        entity: "PRODUCT",
+        entityId: productId,
+        oldData: { active: true },
+        newData: { active: false },
+        ipAddress: "127.0.0.1",
+      }),
+      prismaMock,
+    );
+  });
+
+  it("activates the product and records the audit log", async () => {
+    prismaMock.product.findUnique.mockResolvedValue({
+      ...existing,
+      active: false,
+    });
+
+    await service.updateStatus(productId, true, currentUser);
+
+    expect(auditMock.createAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "ACTIVATE",
+        oldData: { active: false },
+        newData: { active: true },
+      }),
+      prismaMock,
+    );
+  });
+
+  it("returns not found for a missing product", async () => {
+    prismaMock.product.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.updateStatus(productId, false, currentUser),
+    ).rejects.toMatchObject({
+      status: 404,
+      response: { code: "PRODUCT_NOT_FOUND" },
+    });
+    expect(prismaMock.product.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a status change to the current state", async () => {
+    prismaMock.product.findUnique.mockResolvedValue(existing);
+
+    await expect(
+      service.updateStatus(productId, true, currentUser),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "ALREADY_IN_STATE" },
+    });
+    expect(prismaMock.product.update).not.toHaveBeenCalled();
   });
 });

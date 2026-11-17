@@ -15,6 +15,8 @@ const prismaMock = {
   unitMeasure: {
     findUnique: jest.fn<AsyncMock>(),
     findFirst: jest.fn<AsyncMock>(),
+    findMany: jest.fn<AsyncMock>(),
+    count: jest.fn<AsyncMock>(),
     create: jest.fn<AsyncMock>(),
     update: jest.fn<AsyncMock>(),
   },
@@ -444,5 +446,239 @@ describe("UnitMeasureService > create", () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(prismaMock.unitMeasure.create).not.toHaveBeenCalled();
     expect(auditMock.createAuditLog).not.toHaveBeenCalled();
+  });
+});
+
+describe("UnitMeasureService > findAll", () => {
+  let service: InstanceType<typeof UnitMeasureService>;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    prismaMock.$transaction.mockImplementation((operation) =>
+      Array.isArray(operation) ? Promise.all(operation) : operation(prismaMock),
+    );
+    prismaMock.unitMeasure.count.mockResolvedValue(0);
+    prismaMock.unitMeasure.findMany.mockResolvedValue([]);
+
+    const module = await Test.createTestingModule({
+      providers: [
+        UnitMeasureService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(UnitMeasureService);
+  });
+
+  it("returns the page and the pagination metadata", async () => {
+    const rows = [
+      buildUnit(),
+      buildUnit({ id: otherId, name: "Gramo", abreviation: "g" }),
+    ];
+    prismaMock.unitMeasure.count.mockResolvedValue(5);
+    prismaMock.unitMeasure.findMany.mockResolvedValue(rows);
+
+    const result: any = await service.findAll({ page: 2, limit: 2 });
+
+    expect(result).toEqual({
+      data: rows,
+      meta: { page: 2, limit: 2, total: 5, totalPages: 3 },
+    });
+    expect(prismaMock.unitMeasure.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 2, take: 2, orderBy: { name: "asc" } }),
+    );
+  });
+
+  it("reports zero pages when there are no units", async () => {
+    const result: any = await service.findAll({ page: 1, limit: 10 });
+
+    expect(result.meta.totalPages).toBe(0);
+  });
+
+  it("filters by active when the flag is provided", async () => {
+    await service.findAll({ page: 1, limit: 10, active: false });
+
+    expect(prismaMock.unitMeasure.count).toHaveBeenCalledWith({
+      where: { active: false },
+    });
+  });
+
+  it("filters by name when a search term is provided", async () => {
+    await service.findAll({ page: 1, limit: 10, search: "gramo" });
+
+    expect(prismaMock.unitMeasure.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { name: { contains: "gramo", mode: "insensitive" } },
+      }),
+    );
+  });
+
+  it("combines the active filter with the search term", async () => {
+    await service.findAll({
+      page: 1,
+      limit: 10,
+      active: true,
+      search: "gramo",
+    });
+
+    expect(prismaMock.unitMeasure.count).toHaveBeenCalledWith({
+      where: {
+        active: true,
+        name: { contains: "gramo", mode: "insensitive" },
+      },
+    });
+  });
+
+  it("rejects a search term shorter than two characters", async () => {
+    await expect(
+      service.findAll({ page: 1, limit: 10, search: "g" } as any),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { code: "SEARCH_TOO_SHORT" },
+    });
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("UnitMeasureService > findOne", () => {
+  let service: InstanceType<typeof UnitMeasureService>;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module = await Test.createTestingModule({
+      providers: [
+        UnitMeasureService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(UnitMeasureService);
+  });
+
+  it("returns the requested unit", async () => {
+    const unit = buildUnit();
+    prismaMock.unitMeasure.findUnique.mockResolvedValue(unit);
+
+    const result: unknown = await service.findOne(unitId);
+
+    expect(result).toBe(unit);
+    expect(prismaMock.unitMeasure.findUnique).toHaveBeenCalledWith({
+      where: { id: unitId },
+    });
+  });
+
+  it("returns not found for a missing unit", async () => {
+    prismaMock.unitMeasure.findUnique.mockResolvedValue(null);
+
+    await expect(service.findOne(otherId)).rejects.toMatchObject({
+      status: 404,
+      message: "Unit measure not found",
+    });
+  });
+});
+
+describe("UnitMeasureService > updateStatus", () => {
+  let service: InstanceType<typeof UnitMeasureService>;
+
+  const existingUnit = {
+    name: "Kilogramo",
+    abreviation: "kg",
+    active: true,
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    prismaMock.$transaction.mockImplementation((operation) =>
+      Array.isArray(operation) ? Promise.all(operation) : operation(prismaMock),
+    );
+    prismaMock.unitMeasure.update.mockResolvedValue(
+      buildUnit({ active: false }),
+    );
+    auditMock.createAuditLog.mockResolvedValue({});
+
+    const module = await Test.createTestingModule({
+      providers: [
+        UnitMeasureService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: auditMock },
+      ],
+    }).compile();
+    service = module.get(UnitMeasureService);
+  });
+
+  it("deactivates the unit and records the audit log", async () => {
+    prismaMock.unitMeasure.findUnique.mockResolvedValue(existingUnit);
+
+    const result: unknown = await service.updateStatus(
+      unitId,
+      false,
+      currentUser,
+      "127.0.0.1",
+    );
+
+    expect(result).toEqual({
+      message: "Unit measure status updated successfully.",
+    });
+    expect(prismaMock.unitMeasure.update).toHaveBeenCalledWith({
+      where: { id: unitId, active: true },
+      data: { active: false },
+    });
+    expect(auditMock.createAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "DEACTIVATE",
+        entity: "UNIT_MEASURE",
+        entityId: unitId,
+        oldData: { active: true },
+        newData: { active: false },
+        ipAddress: "127.0.0.1",
+      }),
+      prismaMock,
+    );
+  });
+
+  it("activates the unit and records the audit log", async () => {
+    prismaMock.unitMeasure.findUnique.mockResolvedValue({
+      ...existingUnit,
+      active: false,
+    });
+
+    await service.updateStatus(unitId, true, currentUser);
+
+    expect(auditMock.createAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "ACTIVATE",
+        oldData: { active: false },
+        newData: { active: true },
+      }),
+      prismaMock,
+    );
+  });
+
+  it("returns not found for a missing unit", async () => {
+    prismaMock.unitMeasure.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.updateStatus(unitId, false, currentUser),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: "Unit measure not found",
+    });
+    expect(auditMock.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects a status change to the current state", async () => {
+    prismaMock.unitMeasure.findUnique.mockResolvedValue({
+      ...existingUnit,
+      active: false,
+    });
+
+    await expect(
+      service.updateStatus(unitId, false, currentUser),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "ALREADY_IN_STATE" },
+    });
+    expect(prismaMock.unitMeasure.update).not.toHaveBeenCalled();
   });
 });

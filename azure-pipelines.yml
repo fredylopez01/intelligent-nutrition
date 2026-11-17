@@ -119,8 +119,8 @@ stages:
             displayName: Install frontend dependencies
             workingDirectory: frontend
 
-          - script: npm test
-            displayName: Frontend component tests
+          - script: npm run test:cov
+            displayName: Frontend component tests with coverage
             workingDirectory: frontend
             env:
               NODE_ENV: test
@@ -142,8 +142,15 @@ stages:
               targetPath: backend/coverage
               artifact: backend-coverage
 
-          - script: mkdir -p frontend/playwright-report
-            displayName: Create Playwright report folder (publish fails if missing)
+          - task: PublishPipelineArtifact@1
+            displayName: Publish frontend coverage report
+            condition: always()
+            inputs:
+              targetPath: frontend/coverage
+              artifact: frontend-coverage
+
+          - script: mkdir -p frontend/playwright-report frontend/test-results
+            displayName: Create Playwright report folders (publish fails if missing)
             condition: always()
 
           - task: PublishPipelineArtifact@1
@@ -159,6 +166,15 @@ stages:
             inputs:
               targetPath: frontend/test-results
               artifact: playwright-test-results
+
+          - task: PublishTestResults@2
+            displayName: Publish frontend E2E test results
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: 'frontend/test-results/junit.xml'
+              failTaskOnFailedTests: true
+              testRunTitle: Frontend E2E
 
   - stage: Sync
     displayName: Sync GitHub mirror

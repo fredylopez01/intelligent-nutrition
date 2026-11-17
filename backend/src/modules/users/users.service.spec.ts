@@ -579,4 +579,83 @@ describe("UsersService contract", () => {
       NotFoundException,
     );
   });
+
+  it("returns the own profile through findUserById", async () => {
+    const result = await service.getOwnProfile("person-uuid-1");
+
+    expect(result).toBeDefined();
+    expect(prismaMock.userAccount.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { personId: "person-uuid-1" } }),
+    );
+  });
+
+  it("rejects a profile photo that does not come from the storage", async () => {
+    storageMock.buildPublicUrl.mockReturnValue("https://cdn.example/users/");
+
+    await expect(
+      service.updateOwnProfile(currentAdmin, {
+        firstName: "Juan",
+        profilePhotoUrl: "https://evil.example/photo.png",
+      } as any),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(personsMock.updateProfile).not.toHaveBeenCalled();
+  });
+
+  it("updates the own profile when every field is valid", async () => {
+    storageMock.buildPublicUrl.mockReturnValue("https://cdn.example/users/");
+    const updateSpy = jest
+      .spyOn(service, "update")
+      .mockResolvedValue({ message: "ok" } as any);
+
+    const result = await service.updateOwnProfile(currentAdmin, {
+      firstName: "Juan",
+      lastName: "Perez",
+      profilePhotoUrl: "https://cdn.example/users/admin-person-id/a.png",
+    });
+
+    expect(result).toEqual({ message: "ok" });
+    expect(updateSpy).toHaveBeenCalledWith(
+      "admin-person-id",
+      expect.objectContaining({
+        person: expect.objectContaining({
+          firstName: "Juan",
+          lastName: "Perez",
+        }),
+      }),
+      currentAdmin,
+      undefined,
+    );
+    updateSpy.mockRestore();
+  });
+
+  it("returns a signed upload target for the profile photo", async () => {
+    storageMock.generateUploadUrl.mockResolvedValue(
+      "https://s3.example/presigned",
+    );
+    storageMock.buildPublicUrl.mockReturnValue(
+      "https://cdn.example/users/admin-person-id/x.png",
+    );
+
+    const result: any = await service.createProfilePhotoUploadUrl(
+      "admin-person-id",
+      { mimeType: "image/png", sizeBytes: 2048 },
+    );
+
+    expect(result.uploadUrl).toBe("https://s3.example/presigned");
+    expect(result.storageKey).toMatch(
+      /^users\/admin-person-id\/[0-9a-f-]+\.png$/,
+    );
+    expect(result.publicUrl).toBe(
+      "https://cdn.example/users/admin-person-id/x.png",
+    );
+    expect(result.expiresIn).toBeGreaterThan(0);
+    expect(storageMock.generateUploadUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storageKey: result.storageKey,
+        mimeType: "image/png",
+        sizeBytes: 2048,
+      }),
+    );
+  });
 });

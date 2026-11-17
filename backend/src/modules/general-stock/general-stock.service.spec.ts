@@ -287,6 +287,184 @@ describe("GeneralStockService", () => {
         expect(prisma.$transaction).not.toHaveBeenCalled();
       },
     );
+
+    it("rejects restocking an inactive product", async () => {
+      tx.product.findUnique.mockResolvedValue({
+        ...activeProduct,
+        active: false,
+      });
+
+      await expect(
+        service.restock(
+          productId,
+          {
+            quantity: 5,
+            movementType: RestockMovementType.ADJUSTMENT_ENTRY,
+            reason: "Inventory recount adjustment",
+          },
+          currentUser,
+        ),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: "PRODUCT_INACTIVE" },
+      });
+
+      expect(tx.generalStock.findMany).not.toHaveBeenCalled();
+      expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+      expect(audit.createAuditLog).not.toHaveBeenCalled();
+    });
+
+    it("creates a far-future lot when every existing lot is expired", async () => {
+      const farFuture = new Date(Date.UTC(9999, 11, 31));
+      tx.generalStock.findMany
+        .mockReset()
+        .mockResolvedValueOnce([
+          {
+            id: "old",
+            quantity: 5,
+            expirationDate: new Date("2026-01-01T00:00:00.000Z"),
+          },
+        ])
+        .mockResolvedValueOnce([
+          { id: "new", quantity: 12, expirationDate: farFuture },
+        ]);
+
+      await service.restock(
+        productId,
+        {
+          quantity: 12,
+          movementType: RestockMovementType.ADJUSTMENT_ENTRY,
+          reason: "Inventory recount adjustment",
+        },
+        currentUser,
+      );
+
+      expect(tx.generalStock.upsert).toHaveBeenCalledWith({
+        where: {
+          productId_expirationDate: { productId, expirationDate: farFuture },
+        },
+        create: { productId, expirationDate: farFuture, quantity: 12 },
+        update: { quantity: { increment: 12 } },
+      });
+      expect(tx.inventoryMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ expirationDate: farFuture }),
+        }),
+      );
+    });
+
+    it("rejects taking more units than the general stock holds", async () => {
+      tx.generalStock.findMany
+        .mockReset()
+        .mockResolvedValueOnce([{ id: "lot-1", quantity: 3, expirationDate }])
+        .mockResolvedValueOnce([]);
+
+      await expect(
+        service.restock(
+          productId,
+          {
+            quantity: 5,
+            movementType: RestockMovementType.ADJUSTMENT_EXIT,
+            reason: "Inventory recount adjustment",
+          },
+          currentUser,
+        ),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: {
+          code: "INSUFFICIENT_GENERAL_STOCK",
+          details: { requested: 5, available: 3 },
+        },
+      });
+
+      expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+      expect(audit.createAuditLog).not.toHaveBeenCalled();
+    });
+
+    it("takes units from a single lot and stamps its expiration date", async () => {
+      tx.generalStock.findMany
+        .mockReset()
+        .mockResolvedValueOnce([{ id: "lot-1", quantity: 10, expirationDate }])
+        .mockResolvedValueOnce([{ id: "lot-1", quantity: 4, expirationDate }]);
+
+      await service.restock(
+        productId,
+        {
+          quantity: 6,
+          movementType: RestockMovementType.ADJUSTMENT_EXIT,
+          reason: "Inventory recount adjustment",
+        },
+        currentUser,
+      );
+
+      expect(tx.generalStock.update).toHaveBeenCalledWith({
+        where: { id: "lot-1" },
+        data: { quantity: { decrement: 6 } },
+      });
+      expect(tx.inventoryMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            movementType: "ADJUSTMENT_EXIT",
+            expirationDate,
+          }),
+        }),
+      );
+    });
+
+    it("leaves the movement without expiration date when it spans several lots", async () => {
+      const secondDate = new Date("2027-03-15T00:00:00.000Z");
+      tx.generalStock.findMany
+        .mockReset()
+        .mockResolvedValueOnce([
+          { id: "lot-1", quantity: 2, expirationDate },
+          { id: "lot-2", quantity: 5, expirationDate: secondDate },
+        ])
+        .mockResolvedValueOnce([]);
+
+      await service.restock(
+        productId,
+        {
+          quantity: 4,
+          movementType: RestockMovementType.ADJUSTMENT_EXIT,
+          reason: "Inventory recount adjustment",
+        },
+        currentUser,
+      );
+
+      expect(tx.generalStock.update).toHaveBeenCalledTimes(2);
+      expect(tx.inventoryMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ expirationDate: null }),
+        }),
+      );
+    });
+
+    it("skips lots without units", async () => {
+      const secondDate = new Date("2027-03-15T00:00:00.000Z");
+      tx.generalStock.findMany
+        .mockReset()
+        .mockResolvedValueOnce([
+          { id: "empty", quantity: 0, expirationDate },
+          { id: "lot-2", quantity: 5, expirationDate: secondDate },
+        ])
+        .mockResolvedValueOnce([]);
+
+      await service.restock(
+        productId,
+        {
+          quantity: 2,
+          movementType: RestockMovementType.ADJUSTMENT_EXIT,
+          reason: "Inventory recount adjustment",
+        },
+        currentUser,
+      );
+
+      expect(tx.generalStock.update).toHaveBeenCalledTimes(1);
+      expect(tx.generalStock.update).toHaveBeenCalledWith({
+        where: { id: "lot-2" },
+        data: { quantity: { decrement: 2 } },
+      });
+    });
   });
 });
 
