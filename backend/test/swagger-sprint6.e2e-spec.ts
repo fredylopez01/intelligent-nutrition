@@ -44,9 +44,18 @@ const SPRINT_6_OPERATIONS: [string, string, string][] = [
   ["Cash shifts", "get", "/api/v1/cash-shifts"],
   ["Cash shifts", "get", "/api/v1/cash-shifts/active"],
   ["Cash shifts", "get", "/api/v1/cash-shifts/{shiftId}"],
+  ["Chat", "get", "/api/v1/chat/status"],
+  ["Chat", "post", "/api/v1/chat"],
+  ["Chat", "get", "/api/v1/chat/knowledge"],
+  ["Chat", "post", "/api/v1/chat/knowledge"],
+  ["Chat", "patch", "/api/v1/chat/knowledge/{entryId}"],
+  ["Chat", "delete", "/api/v1/chat/knowledge/{entryId}"],
 ];
 
 const SCHEMA_PROPERTIES: Record<string, string[]> = {
+  SendChatMessageDto: ["message", "conversationId"],
+  CreateChatKnowledgeEntryDto: ["title", "content", "active"],
+  UpdateChatKnowledgeEntryDto: ["title", "content", "active"],
   CreatePromotionDto: ["name", "discountPercentage", "startDate", "endDate"],
   UpdatePromotionDto: ["name", "discountPercentage", "startDate", "endDate"],
   UpdatePromotionStatusDto: ["active"],
