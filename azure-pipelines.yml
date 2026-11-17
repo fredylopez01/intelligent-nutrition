@@ -108,8 +108,29 @@ stages:
               DATABASE_URL: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?schema=public
 
           # El spec de storage necesita un S3 real que este job no tiene.
-          - script: npm run test:e2e -- --testPathIgnorePatterns "product-images-storage"
-            displayName: Backend integration tests
+          - script: npm run test:e2e -- --testPathIgnorePatterns "product-images-storage" --shard=1/4
+            displayName: Backend integration tests (shard 1/4)
+            workingDirectory: backend
+            env:
+              DATABASE_URL: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?schema=public
+              DATABASE_URL_TEST: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/intelligent_nutrition_test?schema=public
+
+          - script: npm run test:e2e -- --testPathIgnorePatterns "product-images-storage" --shard=2/4
+            displayName: Backend integration tests (shard 2/4)
+            workingDirectory: backend
+            env:
+              DATABASE_URL: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?schema=public
+              DATABASE_URL_TEST: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/intelligent_nutrition_test?schema=public
+
+          - script: npm run test:e2e -- --testPathIgnorePatterns "product-images-storage" --shard=3/4
+            displayName: Backend integration tests (shard 3/4)
+            workingDirectory: backend
+            env:
+              DATABASE_URL: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?schema=public
+              DATABASE_URL_TEST: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/intelligent_nutrition_test?schema=public
+
+          - script: npm run test:e2e -- --testPathIgnorePatterns "product-images-storage" --shard=4/4
+            displayName: Backend integration tests (shard 4/4)
             workingDirectory: backend
             env:
               DATABASE_URL: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?schema=public
@@ -135,6 +156,10 @@ stages:
             env:
               NODE_ENV: test
 
+          - script: mkdir -p backend/coverage frontend/coverage frontend/playwright-report frontend/test-results
+            displayName: Create report folders (publish fails if missing)
+            condition: always()
+
           - task: PublishPipelineArtifact@1
             displayName: Publish coverage report
             condition: always()
@@ -148,10 +173,6 @@ stages:
             inputs:
               targetPath: frontend/coverage
               artifact: frontend-coverage
-
-          - script: mkdir -p frontend/playwright-report frontend/test-results
-            displayName: Create Playwright report folders (publish fails if missing)
-            condition: always()
 
           - task: PublishPipelineArtifact@1
             displayName: Publish Playwright report
