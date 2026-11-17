@@ -19,6 +19,10 @@ const SWAGGER_LOGIN_PAGE = "/login-api/index.html";
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  if (process.env.TRUST_PROXY === "true") {
+    app.set("trust proxy", 1);
+  }
+
   configureApp(app);
 
   const swaggerGuard = app.get(SwaggerDocumentationGuard);

@@ -30,6 +30,7 @@ import { ResetPasswordDto } from "./dto/reset-password.dto.js";
 import { ChangePasswordDto } from "./dto/change-password.dto.js";
 import { GoogleAuthGuard } from "./guards/google-auth.guard.js";
 import type { GoogleOAuthUser } from "./strategies/google.strategy.js";
+import { ThrottlerGuard } from "@nestjs/throttler";
 
 function getGoogleErrorCode(error: unknown) {
   if (!(error instanceof HttpException)) {
@@ -59,6 +60,7 @@ export class AuthController {
   @Post("login")
   @Public()
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({
     summary: "Log in with email and password",
     description:
@@ -72,6 +74,10 @@ export class AuthController {
   @ApiResponse({
     status: 401,
     description: "Wrong email or password (INVALID_CREDENTIALS).",
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Too many login attempts from this IP address.",
   })
   @ApiResponse({
     status: 403,

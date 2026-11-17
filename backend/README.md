@@ -229,6 +229,12 @@ requiere iniciar sesión con las credenciales de un usuario activo cuyo rol sea
 el dominio base del servidor que aparece en Swagger y, si se omite, usa
 `http://localhost:3000`.
 
+El endpoint `POST /api/v1/auth/login` permite hasta 5 intentos por minuto y por
+IP; los intentos adicionales reciben HTTP 429. El contador vive en memoria, así
+que en despliegues con varias instancias se necesita almacenamiento compartido.
+Este límite reduce abusos del login, pero no sustituye un CDN/WAF para ataques
+de denegación de servicio a nivel de red.
+
 **Ver logs:**
 
 ```bash
@@ -525,8 +531,13 @@ docker compose -f docker-compose.yml -f docker-compose.test.yml --profile test u
 | `RESEND_FROM_EMAIL` | `noreply@tudominio.com`        | —                                   |
 | `FRONTEND_URL`      | URL del frontend en producción | —                                   |
 | `PORT`              | `3000`                         | Render lo asigna internamente       |
+| `TRUST_PROXY`       | `true`                         | Solo si el backend está detrás de un proxy confiable |
 
 > **Importante:** En Render, usa la **Internal Database URL** (no la External). Así la comunicación backend↔BD viaja por la red privada de Render, sin latencia adicional.
+>
+> `TRUST_PROXY=true` confía en un solo proxy para leer la IP real y que el límite
+> de login se aplique por cliente. Actívalo solo si el backend no acepta tráfico
+> que evite ese proxy.
 
 ### Paso 3: Health Check
 
