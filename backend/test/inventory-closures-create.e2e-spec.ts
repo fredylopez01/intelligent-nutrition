@@ -324,6 +324,9 @@ describe("POST /api/v1/branches/:branchId/inventory-closures (e2e)", () => {
       await prisma.inventoryClosureDetail.deleteMany({
         where: { closureId: { in: closureIds } },
       });
+      await prisma.inventoryClosureSupplyDetail.deleteMany({
+        where: { closureId: { in: closureIds } },
+      });
       await prisma.auditLog.deleteMany({
         where: {
           OR: [{ userId: { in: personIds } }, { entityId: { in: closureIds } }],
