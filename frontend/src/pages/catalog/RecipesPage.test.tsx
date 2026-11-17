@@ -34,7 +34,7 @@ vi.mock('../../services/recipes.service', () => ({
 }))
 
 vi.mock('../../services/supplies.service', () => ({
-  suppliesService: { list: vi.fn() },
+  suppliesService: { list: vi.fn(), create: vi.fn() },
 }))
 
 vi.mock('../../services/products.service', () => ({
@@ -344,6 +344,114 @@ describe('RecipesPage form', () => {
         'test-token',
       ),
     )
+  })
+
+  it('uses the supply that a catalog product already feeds', async () => {
+    const wheyJar = {
+      id: 'product-whey',
+      name: 'Proteína Whey 2 lb',
+      referenceCode: 'PRO-2LB',
+      category: { id: 'cat-protein', name: 'Proteínas' },
+    }
+    vi.mocked(suppliesService.list).mockResolvedValue(
+      page([{ ...WHEY, sourceProduct: { id: wheyJar.id, name: wheyJar.name } }, MILK]),
+    )
+    vi.mocked(productsService.list).mockResolvedValue({
+      data: [wheyJar],
+      meta: { page: 1, limit: 6, total: 1, totalPages: 1 },
+    } as never)
+    const { user, dialog } = await openCreate()
+
+    await user.click(dialog.getByRole('button', { name: 'Usar un producto del catálogo' }))
+    await user.click(await dialog.findByRole('button', { name: /Proteína Whey 2 lb/ }))
+
+    expect(dialog.getByLabelText('Insumo')).toHaveValue(WHEY.id)
+    expect(dialog.getByLabelText('Unidad')).toHaveValue(GRAMS.id)
+    expect(
+      dialog.getByText(
+        'Proteína en polvo quedó como ingrediente. Escribe la cantidad que se gasta.',
+      ),
+    ).toBeInTheDocument()
+    expect(suppliesService.create).not.toHaveBeenCalled()
+  })
+
+  it('turns a catalog product into a supply and adds it to the recipe', async () => {
+    vi.mocked(productsService.list).mockResolvedValue({
+      data: [
+        {
+          id: 'product-collagen',
+          name: 'Colágeno hidrolizado 300 g',
+          referenceCode: 'COL-300',
+          category: { id: 'cat-collagen', name: 'Colágenos' },
+        },
+      ],
+      meta: { page: 1, limit: 6, total: 1, totalPages: 1 },
+    } as never)
+    vi.mocked(suppliesService.create).mockResolvedValue({
+      id: 'supply-collagen',
+      name: 'Colágeno hidrolizado 300 g',
+      unitOfMeasure: { id: GRAMS.id, name: 'Gramo', abbreviation: 'g' },
+      active: true,
+      sourceProduct: { id: 'product-collagen', name: 'Colágeno hidrolizado 300 g' },
+      productUnitQuantity: 300,
+      createdAt: '2026-11-16T10:00:00.000Z',
+    })
+    createRecipe.mockResolvedValue(buildRecipe({ name: 'Shot de colágeno' }))
+    const { user, dialog } = await openCreate()
+
+    await user.type(dialog.getByLabelText('Nombre'), 'Shot de colágeno')
+    await user.click(dialog.getByRole('button', { name: 'Usar un producto del catálogo' }))
+    await user.click(await dialog.findByRole('button', { name: /Colágeno hidrolizado 300 g/ }))
+    expect(dialog.getByLabelText('Unidad del insumo')).toHaveValue(GRAMS.id)
+    expect(dialog.getByLabelText('Cuánto rinde una unidad del producto (g)')).toHaveValue('300')
+    await user.click(dialog.getByRole('button', { name: 'Usar como ingrediente' }))
+
+    await waitFor(() => expect(dialog.getByLabelText('Insumo')).toHaveValue('supply-collagen'))
+    expect(suppliesService.create).toHaveBeenCalledWith(
+      { unitOfMeasureId: GRAMS.id, sourceProductId: 'product-collagen', productUnitQuantity: 300 },
+      'test-token',
+    )
+    await user.type(dialog.getByLabelText('Cantidad'), '10')
+    await user.click(dialog.getByRole('button', { name: 'Registrar receta' }))
+
+    await waitFor(() =>
+      expect(createRecipe).toHaveBeenCalledWith(
+        {
+          name: 'Shot de colágeno',
+          ingredients: [{ supplyId: 'supply-collagen', quantity: 10, unitOfMeasureId: GRAMS.id }],
+        },
+        'test-token',
+      ),
+    )
+  })
+
+  it('explains why a lot product cannot be prepared with a recipe', async () => {
+    createRecipe.mockRejectedValue(
+      new ApiError('Source', 422, { supplyName: 'Proteína Whey 2 lb' }, 'PRODUCT_IS_SUPPLY_SOURCE'),
+    )
+    vi.mocked(productsService.list).mockResolvedValue({
+      data: [
+        {
+          id: 'product-whey',
+          name: 'Proteína Whey 2 lb',
+          referenceCode: 'PRO-2LB',
+          category: { id: 'cat-protein', name: 'Proteínas' },
+        },
+      ],
+      meta: { page: 1, limit: 6, total: 1, totalPages: 1 },
+    } as never)
+    const { user, dialog } = await openCreate()
+
+    await user.type(dialog.getByLabelText('Nombre'), 'Batido')
+    await user.selectOptions(dialog.getByLabelText('Insumo'), MILK.id)
+    await user.type(dialog.getByLabelText('Cantidad'), '200')
+    await user.click(dialog.getByLabelText(/Se vende en el POS/))
+    await user.click(await dialog.findByRole('button', { name: /Proteína Whey 2 lb/ }))
+    await user.click(dialog.getByRole('button', { name: 'Registrar receta' }))
+
+    expect(
+      await dialog.findByText(/es el origen del insumo «Proteína Whey 2 lb»/),
+    ).toBeInTheDocument()
   })
 
   it('removes the product of a recipe that was sold in the POS', async () => {

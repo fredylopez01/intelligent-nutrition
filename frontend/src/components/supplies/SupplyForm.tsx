@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 
 import { useAuth } from '../../hooks/useAuth'
@@ -10,6 +10,7 @@ import type { UnitOfMeasure } from '../../types/unit'
 import {
   parseUnitQuantity,
   resolveSupplyError,
+  suggestProductYield,
   supplySchema,
   type SupplyFormValues,
 } from '../../utils/supplies'
@@ -19,6 +20,7 @@ import { SelectField } from '../ui/SelectField'
 import { TextField } from '../ui/TextField'
 
 import { SupplyProductPicker } from './SupplyProductPicker'
+import { SupplyYieldField } from './SupplyYieldField'
 
 import '../categories/CategoryForm.css'
 import './Supplies.css'
@@ -41,10 +43,13 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
   const [units, setUnits] = useState<UnitsResult | null>(null)
   const [product, setProduct] = useState<SupplySourceProduct | null>(null)
   const [productError, setProductError] = useState<string | null>(null)
+  const autoYield = useRef('')
   const {
     register,
     handleSubmit,
     setError,
+    setValue,
+    getValues,
     control,
     formState: { errors, isSubmitting },
   } = useForm<SupplyFormValues>({
@@ -53,6 +58,7 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
   })
   const linked = useWatch({ control, name: 'linked' })
   const unitId = useWatch({ control, name: 'unitOfMeasureId' })
+  const yieldText = useWatch({ control, name: 'productUnitQuantity' })
 
   useEffect(() => {
     let cancelled = false
@@ -70,6 +76,19 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
   }, [reloadToken, token])
   const currentUnits = units?.key === reloadToken ? units : null
   const unitAbbreviation = currentUnits?.units.find((unit) => unit.id === unitId)?.abbreviation
+  const abbreviationOf = (id: string) =>
+    currentUnits?.units.find((unit) => unit.id === id)?.abbreviation
+
+  const prefillYield = (productName: string | undefined, unit: string | undefined) => {
+    if (!productName) return
+    const suggestion = suggestProductYield(productName, unit)
+    const current = getValues('productUnitQuantity').trim()
+    if (suggestion?.kind !== 'match' || (current && current !== autoYield.current)) return
+    const text = String(suggestion.quantity)
+    autoYield.current = text
+    setValue('productUnitQuantity', text, { shouldValidate: Boolean(current) })
+  }
+  const unitField = register('unitOfMeasureId')
 
   const onSubmit = async (values: SupplyFormValues) => {
     if (values.linked && !product) {
@@ -82,11 +101,10 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
       onSaved(
         await suppliesService.create(
           {
-            name: values.name.trim(),
             unitOfMeasureId: values.unitOfMeasureId,
             ...(values.linked && product && quantity !== null
               ? { sourceProductId: product.id, productUnitQuantity: quantity }
-              : {}),
+              : { name: values.name.trim() }),
           },
           token,
         ),
@@ -96,7 +114,7 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
         error,
         'No fue posible registrar el insumo. Intenta de nuevo.',
       )
-      if (message === 'Ya existe un insumo con ese nombre.') {
+      if (message === 'Ya existe un insumo con ese nombre.' && !values.linked) {
         setError('name', { message })
         return
       }
@@ -114,14 +132,46 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
       noValidate
     >
       {submitError && <Alert tone="error">{submitError}</Alert>}
-      <TextField
-        id="supply-name"
-        label="Nombre"
-        placeholder="Ej. Leche entera"
-        autoComplete="off"
-        error={errors.name?.message}
-        {...register('name')}
-      />
+      <label className="supply-form__link-toggle" htmlFor="supply-linked">
+        <input id="supply-linked" type="checkbox" disabled={isSubmitting} {...register('linked')} />
+        <strong>Viene de un producto del catálogo</strong>
+        <small>
+          Úsalo cuando una receta necesita parte de un producto que se vende, como una porción de
+          proteína. El insumo toma el nombre del producto.
+        </small>
+      </label>
+      {linked ? (
+        <div className="supply-form__link">
+          <SupplyProductPicker
+            id="supply-product-search"
+            selected={product}
+            onSelect={(next) => {
+              setProduct(next)
+              setProductError(null)
+              setSubmitError(null)
+              prefillYield(next?.name, unitAbbreviation)
+            }}
+            disabled={isSubmitting}
+            error={productError ?? undefined}
+          />
+          {product && (
+            <div className="supply-form__derived-name">
+              <span>Nombre del insumo</span>
+              <strong>{product.name}</strong>
+              <small>Se toma del producto y cambia si lo renombran en el catálogo.</small>
+            </div>
+          )}
+        </div>
+      ) : (
+        <TextField
+          id="supply-name"
+          label="Nombre"
+          placeholder="Ej. Leche entera"
+          autoComplete="off"
+          error={errors.name?.message}
+          {...register('name')}
+        />
+      )}
       {currentUnits?.error ? (
         <div className="supply-form__units-error">
           <Alert tone="error">No fue posible cargar las unidades de medida.</Alert>
@@ -141,40 +191,23 @@ export function SupplyForm({ onSaved, onCancel }: SupplyFormProps) {
           disabled={!currentUnits || isSubmitting}
           hint="El stock y los movimientos se cuentan en esta unidad."
           error={errors.unitOfMeasureId?.message}
-          {...register('unitOfMeasureId')}
+          {...unitField}
+          onChange={(event) => {
+            void unitField.onChange(event)
+            if (linked) prefillYield(product?.name, abbreviationOf(event.target.value))
+          }}
         />
       )}
-      <label className="supply-form__link-toggle" htmlFor="supply-linked">
-        <input id="supply-linked" type="checkbox" disabled={isSubmitting} {...register('linked')} />
-        <strong>Viene de un producto del catálogo</strong>
-        <small>
-          Úsalo cuando una receta necesita parte de un producto que se vende, como una porción de
-          proteína.
-        </small>
-      </label>
       {linked && (
-        <div className="supply-form__link">
-          <SupplyProductPicker
-            id="supply-product-search"
-            selected={product}
-            onSelect={(next) => {
-              setProduct(next)
-              setProductError(null)
-            }}
-            disabled={isSubmitting}
-            error={productError ?? undefined}
-          />
-          <TextField
-            id="supply-product-quantity"
-            label={`Cuánto rinde una unidad del producto${unitAbbreviation ? ` (${unitAbbreviation})` : ''}`}
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="Ej. 900"
-            hint="Ej. un tarro de proteína de 900 g rinde 900 si el insumo se mide en gramos."
-            error={errors.productUnitQuantity?.message}
-            {...register('productUnitQuantity')}
-          />
-        </div>
+        <SupplyYieldField
+          id="supply-product-quantity"
+          unit={unitAbbreviation}
+          productName={product?.name}
+          value={yieldText}
+          disabled={isSubmitting}
+          error={errors.productUnitQuantity?.message}
+          registration={register('productUnitQuantity')}
+        />
       )}
       <p className="category-form__note">
         El insumo queda disponible en todas las sedes con stock 0. Registra una entrada para sumar

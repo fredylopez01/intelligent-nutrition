@@ -119,12 +119,19 @@ export function SuppliesPage() {
   }
 
   const handleLinked = (supply: Supply) => {
+    const previousName = linking?.supply.name
     setLinking(null)
-    setFeedback(
-      supply.sourceProduct
-        ? `${supply.name} quedó ligado a ${supply.sourceProduct.name}. Ya puedes convertir unidades en cualquier sede.`
-        : `${supply.name} ya no está ligado a un producto del catálogo.`,
-    )
+    if (!supply.sourceProduct) {
+      setFeedback(`${supply.name} ya no está ligado a un producto del catálogo.`)
+    } else if (previousName && previousName !== supply.name) {
+      setFeedback(
+        `${previousName} ahora es ${supply.name}. Ya puedes convertir unidades en cualquier sede.`,
+      )
+    } else {
+      setFeedback(
+        `${supply.name} quedó ligado al catálogo. Ya puedes convertir unidades en cualquier sede.`,
+      )
+    }
     refetch()
   }
 

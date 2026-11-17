@@ -39,6 +39,7 @@ interface ExistingProductStub {
   categoryId: string;
   unitOfMeasureId: string;
   price: MockDecimal;
+  derivedSupply?: { id: string } | null;
 }
 
 // Shape returned by product.findUniqueOrThrow at the end of update's transaction
@@ -80,6 +81,10 @@ const prismaMock = {
   },
   unitMeasure: {
     findUnique: jest.fn<AsyncMock>(),
+  },
+  supply: {
+    findFirst: jest.fn<AsyncMock>(),
+    update: jest.fn<AsyncMock>(),
   },
   $transaction:
     jest.fn<
@@ -492,6 +497,42 @@ describe("ProductsService > update", () => {
       response: { code: "NO_FIELDS_TO_UPDATE" },
     });
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("renames the supply that comes from the product", async () => {
+    prismaMock.product.findUnique.mockResolvedValue(
+      buildExistingProduct({ derivedSupply: { id: "supply-1" } }),
+    );
+    prismaMock.supply.findFirst.mockResolvedValue(null);
+
+    await service.update(productId, { name: "Proteína Premium" }, currentUser);
+
+    expect(prismaMock.supply.update).toHaveBeenCalledWith({
+      where: { id: "supply-1" },
+      data: { name: "Proteína Premium" },
+    });
+  });
+
+  it("rejects a name another supply already uses when the product feeds a supply", async () => {
+    prismaMock.product.findUnique.mockResolvedValue(
+      buildExistingProduct({ derivedSupply: { id: "supply-1" } }),
+    );
+    prismaMock.supply.findFirst.mockResolvedValue({ id: "supply-2" });
+
+    await expect(
+      service.update(productId, { name: "Leche entera" }, currentUser),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SUPPLY_NAME_ALREADY_EXISTS" },
+    });
+    expect(prismaMock.supply.update).not.toHaveBeenCalled();
+  });
+
+  it("does not touch supplies when the product feeds none", async () => {
+    await service.update(productId, { name: "Proteína Premium" }, currentUser);
+
+    expect(prismaMock.supply.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.supply.update).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the product does not exist", async () => {
