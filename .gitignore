@@ -25,7 +25,9 @@ test-results/
 playwright-report/
 blob-report/
 **/trace.zip
-**/*.spec.ts-snapshots/
+# Screenshots que el CI de Ubuntu necesita; los *-win32 son locales y no se commitean.
+**/*.spec.ts-snapshots/*
+!**/*.spec.ts-snapshots/*-linux.png
 
 # IDE
 .vscode/

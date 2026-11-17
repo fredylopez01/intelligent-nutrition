@@ -478,4 +478,168 @@ describe("AuthService", () => {
       ).rejects.toThrow(ConflictException);
     });
   });
+
+  describe("loginWithGoogle", () => {
+    const googleUser = {
+      personId: mockUser.personId,
+      active: true,
+      person: { active: true },
+      role: { id: "role-uuid-1", name: "SUPERADMIN", active: true },
+    };
+
+    it("returns an access token and records the login", async () => {
+      prisma.userAccount.findFirst.mockResolvedValue(googleUser);
+      prisma.userAccount.update.mockResolvedValue(googleUser);
+
+      const result = await service.loginWithGoogle("  JUAN@TEST.COM ");
+
+      expect(result).toEqual({
+        accessToken: "mock-jwt-token",
+        tokenType: "Bearer",
+      });
+      expect(prisma.userAccount.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { person: { is: { email: "juan@test.com" } } },
+        }),
+      );
+      expect(prisma.userAccount.update).toHaveBeenCalledWith({
+        where: { personId: mockUser.personId },
+        data: { lastLoginAt: expect.any(Date) },
+      });
+    });
+
+    it("rejects an email that is not registered", async () => {
+      prisma.userAccount.findFirst.mockResolvedValue(null);
+
+      await expect(service.loginWithGoogle("missing@test.com")).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("rejects an inactive account", async () => {
+      prisma.userAccount.findFirst.mockResolvedValue({
+        ...googleUser,
+        active: false,
+      });
+
+      await expect(service.loginWithGoogle("juan@test.com")).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it("rejects an inactive person", async () => {
+      prisma.userAccount.findFirst.mockResolvedValue({
+        ...googleUser,
+        person: { active: false },
+      });
+
+      await expect(service.loginWithGoogle("juan@test.com")).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it("rejects an inactive role", async () => {
+      prisma.userAccount.findFirst.mockResolvedValue({
+        ...googleUser,
+        role: { ...googleUser.role, active: false },
+      });
+
+      await expect(service.loginWithGoogle("juan@test.com")).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+  });
+
+  describe("changePassword", () => {
+    it("stores the new hash and clears the reset token", async () => {
+      prisma.userAccount.findUnique.mockResolvedValue({
+        password: "$argon2id$current",
+        mustChangePassword: false,
+      });
+      (argon2.verify as any).mockResolvedValue(true);
+      (argon2.hash as any).mockResolvedValue("new-hash");
+      prisma.userAccount.update.mockResolvedValue({});
+
+      const result = await service.changePassword(mockUser.personId, {
+        currentPassword: "OldPassword123!",
+        newPassword: "NewPassword123!",
+      });
+
+      expect(result).toEqual({ message: "Password changed successfully." });
+      expect(argon2.hash).toHaveBeenCalledWith("NewPassword123!");
+      expect(prisma.userAccount.update).toHaveBeenCalledWith({
+        where: { personId: mockUser.personId },
+        data: {
+          password: "new-hash",
+          passwordResetToken: null,
+          passwordResetTokenExpiresAt: null,
+        },
+      });
+    });
+
+    it("rejects when the new password equals the current one", async () => {
+      await expect(
+        service.changePassword(mockUser.personId, {
+          currentPassword: "Same123!",
+          newPassword: "Same123!",
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.userAccount.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("rejects when the account does not exist", async () => {
+      prisma.userAccount.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.changePassword("missing", {
+          currentPassword: "Old123!",
+          newPassword: "New123!",
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("rejects when the account is not activated", async () => {
+      prisma.userAccount.findUnique.mockResolvedValue({
+        password: null,
+        mustChangePassword: true,
+      });
+
+      await expect(
+        service.changePassword(mockUser.personId, {
+          currentPassword: "Old123!",
+          newPassword: "New123!",
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("rejects when the current password is wrong", async () => {
+      prisma.userAccount.findUnique.mockResolvedValue({
+        password: "$argon2id$current",
+        mustChangePassword: false,
+      });
+      (argon2.verify as any).mockResolvedValue(false);
+
+      await expect(
+        service.changePassword(mockUser.personId, {
+          currentPassword: "Wrong123!",
+          newPassword: "New123!",
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it("treats a malformed stored hash as invalid credentials", async () => {
+      prisma.userAccount.findUnique.mockResolvedValue({
+        password: "not-a-hash",
+        mustChangePassword: false,
+      });
+      (argon2.verify as any).mockRejectedValue(new Error("invalid hash"));
+
+      await expect(
+        service.changePassword(mockUser.personId, {
+          currentPassword: "Old123!",
+          newPassword: "New123!",
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+  });
 });

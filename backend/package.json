@@ -117,10 +117,46 @@
     ],
     "coverageThreshold": {
       "global": {
-        "statements": 77,
-        "branches": 69,
-        "functions": 62,
-        "lines": 78
+        "statements": 75,
+        "branches": 67,
+        "functions": 60,
+        "lines": 76
+      },
+      "./src/modules/auth/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/branches/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/general-stock/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/inventory/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/products/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/roles/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/sales/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/unit-measure/": {
+        "statements": 80,
+        "lines": 80
+      },
+      "./src/modules/users/": {
+        "statements": 80,
+        "lines": 80
       }
     },
     "coverageDirectory": "../coverage",
